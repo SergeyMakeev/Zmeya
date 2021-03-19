@@ -25,13 +25,14 @@
 #include <assert.h>
 #include <limits>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 // This macro is only needed if you want to create serializable data
 // (deserialization doesn't need this)
-//#define ZMEYA_ENABLE_SERIALIZE_SUPPORT (1)
+//#define ZMEYA_ENABLE_SERIALIZE_SUPPORT
 
 #define ZMEYA_ASSERT(cond) assert(cond)
 #define ZMEYA_NODISCARD [[nodiscard]]
@@ -39,14 +40,78 @@
 
 namespace Zmeya
 {
+
+#define ZMEYA_MURMURHASH_MAGIC64A 0xc6a4a7935bd1e995LLU
+
+inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t seed)
+{
+    const uint64_t m = ZMEYA_MURMURHASH_MAGIC64A;
+    const int r = 47;
+
+    uint64_t h = seed ^ (len * m);
+
+    const uint64_t* data = (const uint64_t*)key;
+    const uint64_t* end = data + (len / 8);
+
+    while (data != end)
+    {
+        uint64_t k = *data++;
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h ^= k;
+        h *= m;
+    }
+
+    const unsigned char* data2 = (const unsigned char*)data;
+
+    switch (len & 7)
+    {
+    case 7:
+        h ^= (uint64_t)((uint64_t)data2[6] << (uint64_t)48);
+    case 6:
+        h ^= (uint64_t)((uint64_t)data2[5] << (uint64_t)40);
+    case 5:
+        h ^= (uint64_t)((uint64_t)data2[4] << (uint64_t)32);
+    case 4:
+        h ^= (uint64_t)((uint64_t)data2[3] << (uint64_t)24);
+    case 3:
+        h ^= (uint64_t)((uint64_t)data2[2] << (uint64_t)16);
+    case 2:
+        h ^= (uint64_t)((uint64_t)data2[1] << (uint64_t)8);
+    case 1:
+        h ^= (uint64_t)((uint64_t)data2[0]);
+        h *= m;
+    };
+
+    h ^= h >> r;
+    h *= m;
+    h ^= h >> r;
+
+    return h;
+}
+
+#undef ZMEYA_MURMURHASH_MAGIC64A
+
+// TODO - description
 namespace AppInterop
 {
-// hasher for HashSet/HashMap
+
+// hashers
 template <typename T> ZMEYA_NODISCARD inline size_t hasher(const T& v) { return std::hash<T>{}(v); }
 
-ZMEYA_NODISCARD void* aligned_alloc(size_t size, size_t alignment) { return _mm_malloc(size, alignment); }
+ZMEYA_NODISCARD inline size_t hashString(const char* str)
+{
+    size_t len = std::strlen(str);
+    uint64_t hash = Zmeya::murmur_hash_process64a(str, uint32_t(len), 13061979);
+    return size_t(hash);
+}
 
-void aligned_free(void* p) { _mm_free(p); }
+ZMEYA_NODISCARD inline void* aligned_alloc(size_t size, size_t alignment) { return _mm_malloc(size, alignment); }
+
+inline void aligned_free(void* p) { _mm_free(p); }
 } // namespace AppInterop
 
 // absolute offset/difference type
@@ -73,14 +138,14 @@ template <typename T> class Pointer
 {
     roffset_t relativeOffset;
 
-    bool isEqual(const Pointer& other) const { return get() == other.get(); }
+    bool isEqual(const Pointer& other) const noexcept { return get() == other.get(); }
 
   public:
-    Pointer() = default;
+    Pointer() noexcept = default;
 
     Pointer& operator=(const Pointer& other) = delete;
 
-    ZMEYA_NODISCARD const T* get() const
+    ZMEYA_NODISCARD T* get() const noexcept
     {
         // -1 = this
         // 0 = nullptr (can't point to 1-st byte of this pointer)
@@ -90,7 +155,7 @@ template <typename T> class Pointer
         // null
         //
         offset_t addr = (relativeOffset == 0) ? offset_t(0) : toAbsolute(offset_t(this) + 1, relativeOffset);
-        return reinterpret_cast<const T*>(addr);
+        return reinterpret_cast<T*>(addr);
     }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
@@ -98,17 +163,46 @@ template <typename T> class Pointer
 #endif
 
     // Note: implicit conversion operator
-    operator const T*() const { return get(); }
+    operator const T*() const noexcept { return get(); }
+    operator T*() noexcept { return get(); }
 
-    ZMEYA_NODISCARD const T* operator->() const { return get(); }
+    ZMEYA_NODISCARD T* operator->() const noexcept { return get(); }
 
-    ZMEYA_NODISCARD const T& operator*() const { return *(get()); }
+    ZMEYA_NODISCARD T& operator*() const noexcept { return *(get()); }
 
-    operator bool() const { return relativeOffset != 0; }
+    operator bool() const noexcept { return relativeOffset != 0; }
+    ZMEYA_NODISCARD bool operator==(const Pointer& other) const noexcept { return isEqual(); }
+    ZMEYA_NODISCARD bool operator!=(const Pointer& other) const noexcept { return !isEqual(); }
 
-    ZMEYA_NODISCARD bool operator==(const Pointer& other) const { return isEqual(); }
+    friend class Blob;
+};
 
-    ZMEYA_NODISCARD bool operator!=(const Pointer& other) const { return !isEqual(); }
+/*
+    String
+*/
+class String
+{
+    Pointer<char> data;
+
+    bool isEqual(const char* s2) const noexcept
+    {
+        const char* s1 = c_str();
+        return (std::strcmp(s1, s2) == 0);
+    }
+
+  public:
+    String() noexcept = default;
+
+    String& operator=(const String& other) = delete;
+
+    ZMEYA_NODISCARD const char* c_str() const noexcept { return data.get(); }
+
+    ZMEYA_NODISCARD bool empty() const noexcept { return data.get() != nullptr; }
+    ZMEYA_NODISCARD bool operator==(const String& other) const noexcept { return isEqual(other.c_str()); }
+    ZMEYA_NODISCARD bool operator!=(const String& other) const noexcept { return !isEqual(other.c_str()); }
+
+    ZMEYA_NODISCARD bool operator==(const char* other) const noexcept { return isEqual(other); }
+    ZMEYA_NODISCARD bool operator!=(const char* other) const noexcept { return !isEqual(other); }
 
     friend class Blob;
 };
@@ -122,28 +216,28 @@ template <typename T> class Array
     uint32_t numElements;
 
   private:
-    ZMEYA_NODISCARD const T* getConstData() const
+    ZMEYA_NODISCARD const T* getConstData() const noexcept
     {
         offset_t addr = toAbsolute(offset_t(this), relativeOffset);
         return reinterpret_cast<const T*>(addr);
     }
 
-    ZMEYA_NODISCARD T* getData() const { return const_cast<T*>(getConstData()); }
+    ZMEYA_NODISCARD T* getData() const noexcept { return const_cast<T*>(getConstData()); }
 
   public:
-    Array() = default;
+    Array() noexcept = default;
 
     Array& operator=(const Array& other) = delete;
 
-    ZMEYA_NODISCARD size_t size() const { return size_t(numElements); }
+    ZMEYA_NODISCARD size_t size() const noexcept { return size_t(numElements); }
 
-    ZMEYA_NODISCARD T& operator[](const size_t index)
+    ZMEYA_NODISCARD T& operator[](const size_t index) noexcept
     {
         T* data = getData();
         return data[index];
     }
 
-    ZMEYA_NODISCARD const T& operator[](const size_t index) const
+    ZMEYA_NODISCARD const T& operator[](const size_t index) const noexcept
     {
         const T* data = getConstData();
         return data[index];
@@ -156,21 +250,68 @@ template <typename T> class Array
         return data[index];
     }
 
-    ZMEYA_NODISCARD const T* begin() const
+    ZMEYA_NODISCARD T* data() noexcept { return getData(); }
+    ZMEYA_NODISCARD const T* data() const noexcept { return getConstData(); }
+
+    ZMEYA_NODISCARD const T* begin() const noexcept
     {
         const T* data = getConstData();
         return data;
     };
 
-    ZMEYA_NODISCARD const T* end() const
+    ZMEYA_NODISCARD const T* end() const noexcept
     {
         const T* data = getConstData();
         return data + size();
     };
 
-    ZMEYA_NODISCARD bool empty() const { return size() == 0; }
+    ZMEYA_NODISCARD bool empty() const noexcept { return size() == 0; }
 
     friend class Blob;
+};
+
+/*
+
+ Hash adapters
+
+*/
+
+// TODO - rename + update description
+
+// hashset default adapter
+template <typename Item> struct HashSetAdapter
+{
+    static size_t hash(const Item& item) { return AppInterop::hasher(item); }
+    static bool eq(const Item& a, const Item& b) { return a == b; }
+};
+
+// hashmap default adapter
+template <typename Item> struct HashMapAdapter
+{
+    static size_t hash(const Item& item) { return AppInterop::hasher(item.first); }
+    static bool eq(const Item& a, const Item& b) { return a.first == b.first; }
+};
+
+// custom String <- const char*
+struct HashSetAdapterCStr
+{
+    static size_t hash(const char* const& key) { return AppInterop::hashString(key); }
+    static bool eq(const String& a, const char* const& b) { return a == b; }
+};
+
+// hashset std::string
+struct HashSetAdapterStdString
+{
+    static size_t hash(const std::string& key) { return AppInterop::hashString(key.c_str()); }
+    static bool eq(const std::string& a, const std::string& b) { return a == b; }
+};
+
+// hashmap std::string
+template <typename Value> struct HashMapAdapterStdString
+{
+    typedef std::pair<const std::string, Value> Item;
+    static size_t hash(const Item& item) { return AppInterop::hashString(item.first.c_str()); }
+    static bool eq(const Item& a, const Item& b) { return a.first == b.first; }
 };
 
 /*
@@ -185,44 +326,50 @@ template <typename Key> class HashSet
         uint32_t beginIndex;
         uint32_t endIndex;
     };
-    // Note: the number of buckets and the number of elements is the same
     Array<Bucket> buckets;
-    Pointer<Item> data;
+    Array<Item> items;
 
-  public:
-    HashSet() = default;
-
-    HashSet& operator=(const HashSet& other) = delete;
-
-    ZMEYA_NODISCARD size_t size() const { return buckets.size(); }
-
-    ZMEYA_NODISCARD bool empty() const { return buckets.empty(); }
-
-    ZMEYA_NODISCARD const Item* begin() const { return data.get(); }
-
-    ZMEYA_NODISCARD const Item* end() const { return data.get() + buckets.size(); }
-
-    ZMEYA_NODISCARD bool contains(const Key& key) const
+    template <typename Key2, typename Adapter> ZMEYA_NODISCARD bool containsImpl(const Key2& key) const noexcept
     {
-        size_t numKeys = size();
-        if (numKeys == 0)
+        size_t numBuckets = buckets.size();
+        if (numBuckets == 0)
         {
             return false;
         }
-        size_t hashMod = (numKeys - 1);
-        size_t hash = AppInterop::hasher(key);
-        size_t bucketIndex = hash & hashMod;
+        size_t hashMod = numBuckets;
+        size_t hash = Adapter::hash(key);
+        size_t bucketIndex = hash % hashMod;
         const Bucket& bucket = buckets[bucketIndex];
-        const Item* items = data.get();
         for (size_t i = bucket.beginIndex; i < bucket.endIndex; i++)
         {
-            if (items[i] == key)
+            if (Adapter::eq(items[i], key))
             {
                 return true;
             }
         }
         return false;
     }
+
+  public:
+    HashSet() noexcept = default;
+
+    HashSet& operator=(const HashSet& other) = delete;
+
+    ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
+
+    ZMEYA_NODISCARD bool empty() const noexcept { return items.empty(); }
+
+    ZMEYA_NODISCARD const Item* begin() const noexcept { return items.begin(); }
+
+    ZMEYA_NODISCARD const Item* end() const noexcept { return items.end(); }
+
+    ZMEYA_NODISCARD bool contains(const char* key) const noexcept
+    {
+        static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
+        return containsImpl<const char*, HashSetAdapterCStr>(key);
+    }
+
+    ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return containsImpl<Key, HashSetAdapter<Key>>(key); }
     friend class Blob;
 };
 
@@ -234,9 +381,9 @@ template <typename T1, typename T2> struct Pair
     T1 first;
     T2 second;
 
-    Pair() = default;
+    Pair() noexcept = default;
 
-    Pair(const T1& t1, const T2& t2)
+    Pair(const T1& t1, const T2& t2) noexcept
         : first(t1)
         , second(t2)
     {
@@ -254,62 +401,66 @@ template <typename Key, typename Value> class HashMap
         uint32_t beginIndex;
         uint32_t endIndex;
     };
-    // Note: the number of buckets and the number of elements is the same
     Array<Bucket> buckets;
-    Pointer<Item> data;
+    Array<Item> items;
 
-    ZMEYA_NODISCARD const Value* findImpl(const Key& key) const
+    template <typename Adapter, typename Key2> ZMEYA_NODISCARD const Value* findImpl(const Key2& key) const noexcept
     {
-        size_t numKeys = size();
-        if (numKeys == 0)
+        size_t numBuckets = buckets.size();
+        if (numBuckets == 0)
         {
-            return nullptr;
+            return false;
         }
-        size_t hashMod = (numKeys - 1);
-        size_t hash = AppInterop::hasher(key);
-        size_t bucketIndex = hash & hashMod;
+        size_t hashMod = numBuckets;
+        size_t hash = Adapter::hash(key);
+        size_t bucketIndex = hash % hashMod;
         const Bucket& bucket = buckets[bucketIndex];
-        const Item* items = data.get();
         for (size_t i = bucket.beginIndex; i < bucket.endIndex; i++)
         {
-            if (items[i].first == key)
+            const Item& item = items[i];
+            if (Adapter::eq(item.first, key))
             {
-                return &items[i].second;
+                return &item.second;
             }
         }
         return nullptr;
     }
 
   public:
-    HashMap() = default;
+    HashMap() noexcept = default;
 
     HashMap& operator=(const HashMap& other) = delete;
 
-    ZMEYA_NODISCARD size_t size() const { return buckets.size(); }
+    ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
 
-    ZMEYA_NODISCARD bool empty() const { return buckets.empty(); }
+    ZMEYA_NODISCARD bool empty() const noexcept { return items.empty(); }
 
-    ZMEYA_NODISCARD const Item* begin() const { return data.get(); }
+    ZMEYA_NODISCARD const Item* begin() const noexcept { return items.begin(); }
 
-    ZMEYA_NODISCARD const Item* end() const { return data.get() + buckets.size(); }
+    ZMEYA_NODISCARD const Item* end() const noexcept { return items.end(); }
 
-    ZMEYA_NODISCARD bool contains(const Key& key) const { return find(key) != nullptr; }
+    ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return find(key) != nullptr; }
 
-    ZMEYA_NODISCARD Value* find(const Key& key)
+    ZMEYA_NODISCARD Value* find(const Key& key) noexcept
     {
-        const Value* res = findImpl(key);
+        typedef HashSetAdapter<Key> Adapter;
+
+        const Value* res = findImpl<Adapter>(key);
         return res ? const_cast<Value*>(res) : nullptr;
     }
-
-    ZMEYA_NODISCARD const Value* find(const Key& key) const
+    ZMEYA_NODISCARD const Value* find(const Key& key) const noexcept
     {
-        const Value* res = findImpl(key);
+        typedef HashSetAdapter<Key> Adapter;
+
+        const Value* res = findImpl<Adapter>(key);
         return res;
     }
 
-    ZMEYA_NODISCARD const Value& find(const Key& key, const Value& valueIfNotFound) const
+    ZMEYA_NODISCARD const Value& find(const Key& key, const Value& valueIfNotFound) const noexcept
     {
-        const Value* res = findImpl(key);
+        typedef HashSetAdapter<Key> Adapter;
+
+        const Value* res = findImpl<Adapter>(key);
         if (res)
         {
             return *res;
@@ -317,43 +468,75 @@ template <typename Key, typename Value> class HashMap
         return valueIfNotFound;
     }
 
-
-    friend class Blob;
-};
-
-/*
-    String
-*/
-class String
-{
-    Pointer<char> data;
-
-    bool isEqual(const String& other) const
+    ZMEYA_NODISCARD bool contains(const char* key) const noexcept
     {
-        const char* s1 = c_str();
-        const char* s2 = other.c_str();
-        return (std::strcmp(s1, s2) == 0);
+        static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
+        return find(key) != nullptr;
     }
 
-  public:
-    String() = default;
+    ZMEYA_NODISCARD Value* find(const char* key) noexcept
+    {
+        static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
+        typedef HashSetAdapterCStr Adapter;
 
-    String& operator=(const String& other) = delete;
+        const Value* res = findImpl<Adapter>(key);
+        return res ? const_cast<Value*>(res) : nullptr;
+    }
+    ZMEYA_NODISCARD const Value* find(const char* key) const noexcept
+    {
+        static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
+        typedef HashSetAdapterCStr Adapter;
 
-    ZMEYA_NODISCARD const char* c_str() const { return data.get(); }
+        const Value* res = findImpl<Adapter>(key);
+        return res;
+    }
 
-    ZMEYA_NODISCARD bool empty() const { return data.get() != nullptr; }
+    ZMEYA_NODISCARD const Value& find(const char* key, const Value& valueIfNotFound) const noexcept
+    {
+        static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
+        typedef HashSetAdapterCStr Adapter;
 
-    ZMEYA_NODISCARD bool operator==(const String& other) const { return isEqual(other); }
+        const Value* res = findImpl<Adapter>(key);
+        if (res)
+        {
+            return *res;
+        }
+        return valueIfNotFound;
+    }
 
-    ZMEYA_NODISCARD bool operator!=(const String& other) const { return !isEqual(other); }
+    ZMEYA_NODISCARD const char* find(const Key& key, const char* valueIfNotFound) const noexcept
+    {
+        static_assert(std::is_same<Value, String>::value, "To use this function, the value type must be Zmeya::String");
+        typedef HashSetAdapter<Key> Adapter;
+
+        const Value* res = findImpl<Adapter>(key);
+        if (res)
+        {
+            return res->c_str();
+        }
+        return valueIfNotFound;
+    }
+
+    ZMEYA_NODISCARD const char* find(const char* key, const char* valueIfNotFound) const noexcept
+    {
+        static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
+        static_assert(std::is_same<Value, String>::value, "To use this function, the value type must be Zmeya::String");
+        typedef HashSetAdapterCStr Adapter;
+
+        const Value* res = findImpl<Adapter>(key);
+        if (res)
+        {
+            return res->c_str();
+        }
+        return valueIfNotFound;
+    }
 
     friend class Blob;
 };
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
 
-ZMEYA_NODISCARD inline diff_t diff(offset_t a, offset_t b)
+ZMEYA_NODISCARD inline diff_t diff(offset_t a, offset_t b) noexcept
 {
     diff_t res = a - b;
     return res;
@@ -508,7 +691,7 @@ class Blob : public std::enable_shared_from_this<Blob>
         return &data[absoluteOffset];
     }
 
-    template <typename T> ZMEYA_NODISCARD BlobPtr<T> getBlobPtr(T* p) const
+    template <typename T> ZMEYA_NODISCARD BlobPtr<T> getBlobPtr(const T* p) const
     {
         ZMEYA_ASSERT(containsPointer(p));
         offset_t absoluteOffset = diff_a(offset_t(p), offset_t(data.data()));
@@ -534,7 +717,7 @@ class Blob : public std::enable_shared_from_this<Blob>
         data.reserve(initialSize);
     }
 
-    bool containsPointer(void* p) const { return (!data.empty() && (p >= &data.front() && p <= &data.back())); }
+    bool containsPointer(const void* p) const { return (!data.empty() && (p >= &data.front() && p <= &data.back())); }
 
     template <typename T, typename... _Valty> BlobPtr<T> emplace_back(_Valty&&... _Val)
     {
@@ -571,6 +754,128 @@ class Blob : public std::enable_shared_from_this<Blob>
         return BlobPtr<T>(weak_from_this(), absoluteOffset);
     }
 
+    template <typename T> T& getDirectMemoryAccess(size_t absoluteOffset)
+    {
+        return *const_cast<T*>(reinterpret_cast<const T*>(get(absoluteOffset)));
+    }
+
+    // resize array (using custom constructor for new elements)
+    template <typename T> size_t resizeArray(Array<T>& _dst, size_t numElements, const T& emptyElement)
+    {
+        constexpr size_t alignOfT = std::alignment_of<T>::value;
+        constexpr size_t sizeOfT = sizeof(T);
+        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
+
+        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
+        // An array can be assigned/resized only once (non empty array detected)
+        ZMEYA_ASSERT(dst->relativeOffset == 0 && dst->numElements == 0);
+        BlobPtr<T> firstElement = emplace_back<T>(emptyElement);
+        dst->relativeOffset = toRelativeOffset(diff(firstElement.getAbsoluteOffset(), dst.getAbsoluteOffset()));
+        for (size_t i = 1; i < numElements; i++)
+        {
+            emplace_back<T>(emptyElement);
+        }
+        ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
+        dst->numElements = uint32_t(numElements);
+        return firstElement.getAbsoluteOffset();
+    }
+
+    // assign array from range
+    template <typename T, typename Iter, typename ConvertorFunc>
+    size_t assignArray(Array<T>& _dst, const Iter begin, const Iter end, int64_t size, ConvertorFunc convertorFunc)
+    {
+        size_t numElements = (size >= 0) ? size_t(size) : std::distance(begin, end);
+        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
+        resizeArray(_dst, numElements);
+
+        BlobPtr<T> firstElement = getBlobPtr(dst->data());
+        size_t absoluteOffset = firstElement.getAbsoluteOffset();
+        size_t currentIndex = 0;
+        for (Iter cur = begin; cur != end; ++cur)
+        {
+            size_t currentItemAbsoluteOffset = absoluteOffset + sizeof(T) * currentIndex;
+            convertorFunc(this, currentItemAbsoluteOffset, *cur);
+            currentIndex++;
+        }
+        return absoluteOffset;
+    }
+
+    // assign to hash container
+    template <typename SrcItem, typename HashItem, typename HashItemAdapter, typename HashType, typename Iter, typename ConvertorFunc>
+    void assignHash(HashType& _dst, Iter begin, Iter end, int64_t size, ConvertorFunc convertorFunc)
+    {
+        constexpr size_t alignOfT = std::alignment_of<HashItem>::value;
+        constexpr size_t sizeOfT = sizeof(HashItem);
+        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
+
+        size_t numBuckets = (size >= 0) ? size_t(size) : std::distance(begin, end);
+        if (numBuckets == 0)
+        {
+            return;
+        }
+        ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
+        size_t hashMod = numBuckets;
+
+        // create temporary copy of linearized hash buckets
+        typedef std::vector<SrcItem, BlobAllocator<SrcItem, std::alignment_of<SrcItem>::value>> HashBucket;
+        std::vector<HashBucket, BlobAllocator<HashBucket, std::alignment_of<HashBucket>::value>> hashBuckets;
+        hashBuckets.resize(numBuckets);
+
+        // num unique elements
+        size_t numElements = 0;
+        for (Iter cur = begin; cur != end; ++cur)
+        {
+            const auto& current = *cur;
+            size_t hash = HashItemAdapter::hash(current);
+            size_t bucketIndex = hash % hashMod;
+            HashBucket& hashBucket = hashBuckets[bucketIndex];
+            size_t numElementsInBucket = hashBucket.size();
+            bool isExist = false;
+            for (size_t elementIndex = 0; elementIndex < numElementsInBucket; elementIndex++)
+            {
+                if (HashItemAdapter::eq(hashBucket[elementIndex], current))
+                {
+                    isExist = true;
+                    break;
+                }
+            }
+            if (!isExist)
+            {
+                hashBucket.emplace_back(*cur);
+                numElements++;
+            }
+        }
+
+        ZMEYA_ASSERT(numElements > 0);
+
+        BlobPtr<HashType> dst = getBlobPtr(&_dst);
+
+        // allocate buckets & items
+        resizeArray(dst->buckets, numBuckets);
+        size_t absoluteOffset = resizeArray(dst->items, numElements, HashItem());
+
+        // copy linearized items (fill data)
+        size_t beginIndex = 0;
+        size_t currentIndex = 0;
+        for (size_t bucketIndex = 0; bucketIndex < hashBuckets.size(); bucketIndex++)
+        {
+            const HashBucket& hashBucket = hashBuckets[bucketIndex];
+            size_t numElementsInBucket = hashBucket.size();
+            for (size_t elementIndex = 0; elementIndex < numElementsInBucket; elementIndex++)
+            {
+                size_t currentItemAbsoluteOffset = absoluteOffset + sizeof(HashItem) * currentIndex;
+                convertorFunc(this, currentItemAbsoluteOffset, hashBucket[elementIndex]);
+                currentIndex++;
+            }
+            ZMEYA_ASSERT(currentIndex < size_t(std::numeric_limits<uint32_t>::max()));
+
+            typename HashType::Bucket& bucket = dst->buckets[bucketIndex];
+            bucket.beginIndex = uint32_t(beginIndex);
+            bucket.endIndex = uint32_t(currentIndex);
+            beginIndex = currentIndex;
+        }
+    }
+
     // assign pointer
     template <typename T> static void assign(Pointer<T>& dst, nullptr_t) { dst.relativeOffset = 0; }
 
@@ -591,27 +896,12 @@ class Blob : public std::enable_shared_from_this<Blob>
         assign(dst, src);
     }
 
-    // assign array from range
-    template <typename T> void assign(Array<T>& _dst, const T* begin, const T* end)
+    // assign pointer from reference
+    template <typename T> void assign(Pointer<T>& dst, const T& src)
     {
-        constexpr size_t alignOfT = std::alignment_of<T>::value;
-        constexpr size_t sizeOfT = sizeof(T);
-        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
-
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        ZMEYA_ASSERT(dst->relativeOffset == 0 && dst->numElements == 0 &&
-                     "An array can be assigned/resized only once (non empty array "
-                     "detected)");
-        size_t numElements = std::distance(begin, end);
-        BlobPtr<T> firstElement = emplace_back<T>(begin[0]);
-        dst->relativeOffset = toRelativeOffset(diff(firstElement.getAbsoluteOffset(), dst.getAbsoluteOffset()));
-        ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
-        dst->numElements = uint32_t(numElements);
-        for (size_t i = 1; i < numElements; i++)
-        {
-            emplace_back<T>(begin[i]);
-        }
+        assign(dst, &src);
     }
+
 
     // assign array from std::vector
     template <typename T, typename TAllocator> void assign(Array<T>& dst, const std::vector<T, TAllocator>& src)
@@ -620,9 +910,23 @@ class Blob : public std::enable_shared_from_this<Blob>
         {
             return;
         }
-        const T* begin = src.data();
-        const T* end = begin + src.size();
-        assign(dst, begin, end);
+        assignArray(dst, src.begin(), src.end(), src.size(), [](Blob* blob, size_t dstAbsoluteOffset, const T& src) {
+            T& dst = blob->getDirectMemoryAccess<T>(dstAbsoluteOffset);
+            dst = src;
+        });
+    }
+
+    // specialization for vector of strings
+    template <typename T, typename TAllocator> void assign(Array<String>& dst, const std::vector<T, TAllocator>& src)
+    {
+        if (src.empty())
+        {
+            return;
+        }
+        assignArray(dst, src.begin(), src.end(), src.size(), [](Blob* blob, size_t dstAbsoluteOffset, const T& src) {
+            String& dst = blob->getDirectMemoryAccess<String>(dstAbsoluteOffset);
+            blob->assign(dst, src);
+        });
     }
 
     // assign array from std::initializer_list
@@ -632,7 +936,23 @@ class Blob : public std::enable_shared_from_this<Blob>
         {
             return;
         }
-        assign(dst, list.begin(), list.end());
+        assignArray(dst, list.begin(), list.end(), list.size(), [](Blob* blob, size_t dstAbsoluteOffset, const T& src) {
+            T& dst = blob->getDirectMemoryAccess<T>(dstAbsoluteOffset);
+            dst = src;
+        });
+    }
+
+    // specialization for std::initializer_list<std::string>
+    void assign(Array<String>& dst, std::initializer_list<const char*> list)
+    {
+        if (list.size() == 0)
+        {
+            return;
+        }
+        assignArray(dst, list.begin(), list.end(), list.size(), [](Blob* blob, size_t dstAbsoluteOffset, const char* const& src) {
+            String& dst = blob->getDirectMemoryAccess<String>(dstAbsoluteOffset);
+            blob->assign(dst, src);
+        });
     }
 
     // assign array from std::array
@@ -642,30 +962,23 @@ class Blob : public std::enable_shared_from_this<Blob>
         {
             return;
         }
-        const T* begin = src.data();
-        const T* end = begin + NumElements;
-        assign(dst, begin, end);
+        assignArray(dst, src.begin(), src.end(), src.size(), [](Blob* blob, size_t dstAbsoluteOffset, const T& src) {
+            T& dst = blob->getDirectMemoryAccess<T>(dstAbsoluteOffset);
+            dst = src;
+        });
     }
 
-    // resize array (with custom constructor)
-    template <typename T> void resizeArray(Array<T>& _dst, size_t numElements, const T& emptyElement)
+    // specialization for array of strings
+    template <typename T, size_t NumElements> void assign(Array<String>& dst, const std::array<T, NumElements>& src)
     {
-        constexpr size_t alignOfT = std::alignment_of<T>::value;
-        constexpr size_t sizeOfT = sizeof(T);
-        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
-
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        ZMEYA_ASSERT(dst->relativeOffset == 0 && dst->numElements == 0 &&
-                     "An array can be assigned/resized only once (non empty array "
-                     "detected)");
-        BlobPtr<T> firstElement = emplace_back<T>(emptyElement);
-        dst->relativeOffset = toRelativeOffset(diff(firstElement.getAbsoluteOffset(), dst.getAbsoluteOffset()));
-        ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
-        dst->numElements = uint32_t(numElements);
-        for (size_t i = 1; i < numElements; i++)
+        if (src.empty())
         {
-            emplace_back<T>(emptyElement);
+            return;
         }
+        assignArray(dst, src.begin(), src.end(), src.size(), [](Blob* blob, size_t dstAbsoluteOffset, const T& src) {
+            String& dst = blob->getDirectMemoryAccess<String>(dstAbsoluteOffset);
+            blob->assign(dst, src);
+        });
     }
 
     // resize array (with default constructor)
@@ -673,155 +986,181 @@ class Blob : public std::enable_shared_from_this<Blob>
 
     // assign hash set from std::unordered_set
     template <typename Key, typename Hasher, typename KeyEq, typename TAllocator>
-    void assign(HashSet<Key>& _dst, const std::unordered_set<Key, Hasher, KeyEq, TAllocator>& other)
+    void assign(HashSet<Key>& dst, const std::unordered_set<Key, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef Key Item;
-        typedef HashSet<Key> THashSet;
+        typedef Key SrcItem;
+        typedef Key HashItem;
+        typedef HashSet<Key> HashType;
+        typedef HashSetAdapter<Key> HashItemAdapter;
 
-        constexpr size_t alignOfT = std::alignment_of<Item>::value;
-        constexpr size_t sizeOfT = sizeof(Item);
-        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
-
-        BlobPtr<THashSet> dst = getBlobPtr(&_dst);
-
-        size_t numElements = other.size();
-        ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
-        size_t hashMod = (numElements - 1);
-
-        // linearize buckets into temporary buffer
-        typedef std::vector<Item, BlobAllocator<Item, std::alignment_of<Item>::value>> TBucket;
-        std::vector<TBucket, BlobAllocator<TBucket, std::alignment_of<TBucket>::value>> linearizedBuckets;
-
-        linearizedBuckets.resize(numElements);
-        for (const auto& key : other)
-        {
-            size_t hash = AppInterop::hasher(key);
-            size_t bucketIndex = hash & hashMod;
-            TBucket& linearizedBucket = linearizedBuckets[bucketIndex];
-            linearizedBucket.emplace_back(key);
-        }
-
-        // allocate buckets
-        resizeArray(dst->buckets, numElements);
-
-        // copy linearized elements
-        offset_t dataAbsoluteOffset = 0;
-        size_t beginIndex = 0;
-        for (size_t bucketIndex = 0; bucketIndex < linearizedBuckets.size(); bucketIndex++)
-        {
-            const TBucket& linearizedBucket = linearizedBuckets[bucketIndex];
-            size_t numElementsInBucket = linearizedBucket.size();
-            for (size_t i = 0; i < numElementsInBucket; i++)
-            {
-                BlobPtr<Item> element = emplace_back<Item>(linearizedBucket[i]);
-                if (dataAbsoluteOffset == 0)
-                {
-                    dataAbsoluteOffset = element.getAbsoluteOffset();
-                }
-            }
-
-            size_t endIndex = beginIndex + numElementsInBucket;
-            ZMEYA_ASSERT(endIndex < size_t(std::numeric_limits<uint32_t>::max()));
-
-            typename THashSet::Bucket& bucket = dst->buckets[bucketIndex];
-            bucket.beginIndex = uint32_t(beginIndex);
-            bucket.endIndex = uint32_t(endIndex);
-
-            beginIndex = endIndex;
-        }
-        assign(dst->data, dataAbsoluteOffset);
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, src.begin(), src.end(), src.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           dst = src;
+                                                       });
     }
 
     // assign hash set from std::unordered_set (specialization for string key)
     template <typename Hasher, typename KeyEq, typename TAllocator>
-    void assign(HashSet<String>& _dst, const std::unordered_set<std::string, Hasher, KeyEq, TAllocator>& other)
+    void assign(HashSet<String>& dst, const std::unordered_set<std::string, Hasher, KeyEq, TAllocator>& src)
     {
-        // TODO
+        typedef std::string SrcItem;
+        typedef String HashItem;
+        typedef HashSet<String> HashType;
+        typedef HashSetAdapterStdString HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, src.begin(), src.end(), src.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           blob->assign(dst, src);
+                                                       });
     }
 
     // assign hash set from std::initializer_list
     template <typename Key> void assign(HashSet<Key>& dst, std::initializer_list<Key> list)
     {
-        // TODO: make it more optimal without temporary copy?
-        std::unordered_set<Key, std::hash<Key>, std::equal_to<Key>, BlobAllocator<Key, std::alignment_of<Key>::value>> tmp(list);
-        assign(dst, tmp);
+        typedef Key SrcItem;
+        typedef Key HashItem;
+        typedef HashSet<Key> HashType;
+        typedef HashSetAdapter<Key> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, list.begin(), list.end(), list.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           dst = src;
+                                                       });
     }
 
     // assign hash map from std::unordered_map
     template <typename Key, typename Value, typename Hasher, typename KeyEq, typename TAllocator>
-    void assign(HashMap<Key, Value>& _dst, const std::unordered_map<Key, Value, Hasher, KeyEq, TAllocator>& other)
+    void assign(HashMap<Key, Value>& dst, const std::unordered_map<Key, Value, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef Pair<Key, Value> Item;
-        typedef HashMap<Key, Value> THashMap;
+        typedef std::pair<const Key, Value> SrcItem;
+        typedef Pair<Key, Value> HashItem;
+        typedef HashMap<Key, Value> HashType;
+        typedef HashMapAdapter<SrcItem> HashItemAdapter;
 
-        constexpr size_t alignOfT = std::alignment_of<Item>::value;
-        constexpr size_t sizeOfT = sizeof(Item);
-        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
-
-        BlobPtr<THashMap> dst = getBlobPtr(&_dst);
-
-        size_t numElements = other.size();
-        ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
-        size_t hashMod = (numElements - 1);
-
-        // linearize buckets into temporary buffer
-        typedef std::vector<Item, BlobAllocator<Item, std::alignment_of<Item>::value>> TBucket;
-        std::vector<TBucket, BlobAllocator<TBucket, std::alignment_of<TBucket>::value>> linearizedBuckets;
-
-        linearizedBuckets.resize(numElements);
-        for (const auto& item : other)
-        {
-            size_t hash = AppInterop::hasher(item.first);
-            size_t bucketIndex = hash & hashMod;
-            TBucket& linearizedBucket = linearizedBuckets[bucketIndex];
-            linearizedBucket.emplace_back(item.first, item.second);
-        }
-
-        // allocate buckets
-        resizeArray(dst->buckets, numElements);
-
-        // copy linearized elements
-        offset_t dataAbsoluteOffset = 0;
-        size_t beginIndex = 0;
-        for (size_t bucketIndex = 0; bucketIndex < linearizedBuckets.size(); bucketIndex++)
-        {
-            const TBucket& linearizedBucket = linearizedBuckets[bucketIndex];
-            size_t numElementsInBucket = linearizedBucket.size();
-            for (size_t i = 0; i < numElementsInBucket; i++)
-            {
-                BlobPtr<Item> element = emplace_back<Item>(linearizedBucket[i]);
-                if (dataAbsoluteOffset == 0)
-                {
-                    dataAbsoluteOffset = element.getAbsoluteOffset();
-                }
-            }
-
-            size_t endIndex = beginIndex + numElementsInBucket;
-            ZMEYA_ASSERT(endIndex < size_t(std::numeric_limits<uint32_t>::max()));
-
-            typename THashMap::Bucket& bucket = dst->buckets[bucketIndex];
-            bucket.beginIndex = uint32_t(beginIndex);
-            bucket.endIndex = uint32_t(endIndex);
-
-            beginIndex = endIndex;
-        }
-        assign(dst->data, dataAbsoluteOffset);
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, src.begin(), src.end(), src.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           dst.first = src.first;
+                                                           dst.second = src.second;
+                                                       });
     }
 
-    // assign hash map from std::unordered_map
+    // assign hash set from std::unordered_map (specialization for string key)
     template <typename Value, typename Hasher, typename KeyEq, typename TAllocator>
-    void assign(HashMap<String, Value>& _dst, const std::unordered_map<std::string, Value, Hasher, KeyEq, TAllocator>& other)
+    void assign(HashMap<String, Value>& dst, const std::unordered_map<std::string, Value, Hasher, KeyEq, TAllocator>& src)
     {
-        // TODO
+        typedef std::pair<const std::string, Value> SrcItem;
+        typedef Pair<String, Value> HashItem;
+        typedef HashMap<String, Value> HashType;
+        typedef HashMapAdapterStdString<Value> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, src.begin(), src.end(), src.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           blob->assign(dst.first, src.first);
+                                                           dst.second = src.second;
+                                                       });
+    }
+
+    // assign hash set from std::unordered_map (specialization for string value)
+    template <typename Key, typename Hasher, typename KeyEq, typename TAllocator>
+    void assign(HashMap<Key, String>& dst, const std::unordered_map<Key, std::string, Hasher, KeyEq, TAllocator>& src)
+    {
+        typedef std::pair<const Key, std::string> SrcItem;
+        typedef Pair<Key, String> HashItem;
+        typedef HashMap<Key, String> HashType;
+        typedef HashMapAdapter<SrcItem> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, src.begin(), src.end(), src.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           dst.first = src.first;
+                                                           blob->assign(dst.second, src.second);
+                                                       });
+    }
+
+    // assign hash set from std::unordered_map (specialization for string key/value)
+    template <typename Hasher, typename KeyEq, typename TAllocator>
+    void assign(HashMap<String, String>& dst, const std::unordered_map<std::string, std::string, Hasher, KeyEq, TAllocator>& src)
+    {
+        typedef std::pair<const std::string, std::string> SrcItem;
+        typedef Pair<String, String> HashItem;
+        typedef HashMap<String, String> HashType;
+        typedef HashMapAdapterStdString<std::string> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, src.begin(), src.end(), src.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           blob->assign(dst.first, src.first);
+                                                           blob->assign(dst.second, src.second);
+                                                       });
     }
 
     // assign hash map from std::initializer_list
     template <typename Key, typename Value> void assign(HashMap<Key, Value>& dst, std::initializer_list<std::pair<const Key, Value>> list)
     {
-        // TODO: make it more optimal without temporary copy?
-        typedef std::pair<const Key, Value> Item;
-        std::unordered_map<Key, Value, std::hash<Key>, std::equal_to<Key>, BlobAllocator<Item, std::alignment_of<Item>::value>> tmp(list);
-        assign(dst, tmp);
+        typedef std::pair<const Key, Value> SrcItem;
+        typedef Pair<Key, Value> HashItem;
+        typedef HashMap<Key, Value> HashType;
+        typedef HashMapAdapter<SrcItem> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, list.begin(), list.end(), list.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           dst.first = src.first;
+                                                           dst.second = src.second;
+                                                       });
+    }
+
+    // assign hash map from std::initializer_list (specialization for string key)
+    template <typename Value> void assign(HashMap<String, Value>& dst, std::initializer_list<std::pair<const std::string, Value>> list)
+    {
+        typedef std::pair<const std::string, Value> SrcItem;
+        typedef Pair<String, Value> HashItem;
+        typedef HashMap<String, Value> HashType;
+        typedef HashMapAdapterStdString<Value> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, list.begin(), list.end(), list.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           blob->assign(dst.first, src.first);
+                                                           dst.second = src.second;
+                                                       });
+    }
+
+    // assign hash map from std::initializer_list (specialization for string value)
+    template <typename Key> void assign(HashMap<Key, String>& dst, std::initializer_list<std::pair<const Key, std::string>> list)
+    {
+        typedef std::pair<const Key, std::string> SrcItem;
+        typedef Pair<Key, String> HashItem;
+        typedef HashMap<Key, String> HashType;
+        typedef HashMapAdapter<SrcItem> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, list.begin(), list.end(), list.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           dst.first = src.first;
+                                                           blob->assign(dst.second, src.second);
+                                                       });
+    }
+
+    // assign hash map from std::initializer_list (specialization for string key)
+    void assign(HashMap<String, String>& dst, std::initializer_list<std::pair<const std::string, std::string>> list)
+    {
+        typedef std::pair<const std::string, std::string> SrcItem;
+        typedef Pair<String, String> HashItem;
+        typedef HashMap<String, String> HashType;
+        typedef HashMapAdapterStdString<std::string> HashItemAdapter;
+
+        assignHash<SrcItem, HashItem, HashItemAdapter>(dst, list.begin(), list.end(), list.size(),
+                                                       [](Blob* blob, size_t dstAbsoluteOffset, const SrcItem& src) {
+                                                           HashItem& dst = blob->getDirectMemoryAccess<HashItem>(dstAbsoluteOffset);
+                                                           blob->assign(dst.first, src.first);
+                                                           blob->assign(dst.second, src.second);
+                                                       });
     }
 
     // assign string from const char* and size
@@ -891,60 +1230,6 @@ template <typename T> Pointer<T>& Pointer<T>::operator=(const BlobPtr<T>& other)
 
 #endif
 
-#define ZMEYA_MURMURHASH_MAGIC64A 0xc6a4a7935bd1e995LLU
-
-inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t seed)
-{
-    const uint64_t m = ZMEYA_MURMURHASH_MAGIC64A;
-    const int r = 47;
-
-    uint64_t h = seed ^ (len * m);
-
-    const uint64_t* data = (const uint64_t*)key;
-    const uint64_t* end = data + (len / 8);
-
-    while (data != end)
-    {
-        uint64_t k = *data++;
-
-        k *= m;
-        k ^= k >> r;
-        k *= m;
-
-        h ^= k;
-        h *= m;
-    }
-
-    const unsigned char* data2 = (const unsigned char*)data;
-
-    switch (len & 7)
-    {
-    case 7:
-        h ^= (uint64_t)((uint64_t)data2[6] << (uint64_t)48);
-    case 6:
-        h ^= (uint64_t)((uint64_t)data2[5] << (uint64_t)40);
-    case 5:
-        h ^= (uint64_t)((uint64_t)data2[4] << (uint64_t)32);
-    case 4:
-        h ^= (uint64_t)((uint64_t)data2[3] << (uint64_t)24);
-    case 3:
-        h ^= (uint64_t)((uint64_t)data2[2] << (uint64_t)16);
-    case 2:
-        h ^= (uint64_t)((uint64_t)data2[1] << (uint64_t)8);
-    case 1:
-        h ^= (uint64_t)((uint64_t)data2[0]);
-        h *= m;
-    };
-
-    h ^= h >> r;
-    h *= m;
-    h ^= h >> r;
-
-    return h;
-}
-
-#undef ZMEYA_MURMURHASH_MAGIC64A
-
 } // namespace Zmeya
 
 namespace std
@@ -954,9 +1239,7 @@ template <> struct hash<Zmeya::String>
     size_t operator()(Zmeya::String const& s) const noexcept
     {
         const char* str = s.c_str();
-        size_t len = std::strlen(str);
-        uint64_t hash = Zmeya::murmur_hash_process64a(str, uint32_t(len), 13061979);
-        return size_t(hash);
+        return Zmeya::AppInterop::hashString(str);
     }
 };
 } // namespace std

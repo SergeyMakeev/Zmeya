@@ -1,10 +1,14 @@
 cmake_minimum_required(VERSION 2.8.12)
 project(ZmeyaTest)
 
-add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
+# add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
+if (MSVC)
+  add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif()
 
 set(ZMEYA_SOURCES 
-  ZmeyaTest.cpp
+  ZmeyaTest1.cpp
+  ZmeyaTest2.cpp
   Zmeya.h
 )
 
