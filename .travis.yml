@@ -6,6 +6,8 @@ os:
   - osx
 
 script:
+  - CXXFLAGS="-coverage"
+  - LDFLAGS="-coverage"
   - mkdir -p build
   - cd build
   - cmake ..

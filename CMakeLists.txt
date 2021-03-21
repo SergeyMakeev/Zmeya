@@ -32,16 +32,6 @@ else()
   target_compile_options(${PROJ_NAME} PRIVATE -Wall -Wextra -pedantic -Werror)
 endif()
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(${PROJ_NAME} PRIVATE
-    -O0        # no optimization
-    -g         # generate debug info
-    --coverage # sets all required flags
-  )
-  target_link_options(${PROJ_NAME} PRIVATE --coverage)
-endif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-
-
 # force shared crt
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
