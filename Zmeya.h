@@ -1081,7 +1081,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename Key, typename Hasher, typename KeyEq, typename TAllocator>
     void copyTo(HashSet<Key>& dst, const std::unordered_set<Key, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef HashSet<Key> HashType;
         typedef HashKeyAdapterGeneric<Key> DstItemAdapter;
         typedef HashKeyAdapterGeneric<Key> SrcItemAdapter;
 
@@ -1098,7 +1097,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename Hasher, typename KeyEq, typename TAllocator>
     void copyTo(HashSet<String>& dst, const std::unordered_set<std::string, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef HashSet<String> HashType;
         typedef HashKeyAdapterStdString SrcItemAdapter;
         typedef HashKeyAdapterGeneric<String> DstItemAdapter;
 
@@ -1114,7 +1112,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo hash set from std::initializer_list
     template <typename Key> void copyTo(HashSet<Key>& dst, std::initializer_list<Key> list)
     {
-        typedef HashSet<Key> HashType;
         typedef HashKeyAdapterGeneric<Key> SrcItemAdapter;
         typedef HashKeyAdapterGeneric<Key> DstItemAdapter;
 
@@ -1130,7 +1127,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo hash set from std::initializer_list (specialization for string key)
     void copyTo(HashSet<String>& dst, std::initializer_list<std::string> list)
     {
-        typedef HashSet<String> HashType;
         typedef HashKeyAdapterStdString SrcItemAdapter;
         typedef HashKeyAdapterGeneric<String> DstItemAdapter;
 
@@ -1147,7 +1143,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename Key, typename Value, typename Hasher, typename KeyEq, typename TAllocator>
     void copyTo(HashMap<Key, Value>& dst, const std::unordered_map<Key, Value, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef HashMap<Key, Value> HashType;
         typedef HashKeyValueAdapterGeneric<std::pair<const Key, Value>> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<Key, Value>> DstItemAdapter;
 
@@ -1165,7 +1160,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename Value, typename Hasher, typename KeyEq, typename TAllocator>
     void copyTo(HashMap<String, Value>& dst, const std::unordered_map<std::string, Value, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef HashMap<String, Value> HashType;
         typedef HashKeyValueAdapterStdString<Value> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<String, Value>> DstItemAdapter;
 
@@ -1183,7 +1177,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename Key, typename Hasher, typename KeyEq, typename TAllocator>
     void copyTo(HashMap<Key, String>& dst, const std::unordered_map<Key, std::string, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef HashMap<Key, String> HashType;
         typedef HashKeyValueAdapterGeneric<std::pair<const Key, std::string>> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<Key, String>> DstItemAdapter;
 
@@ -1201,7 +1194,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename Hasher, typename KeyEq, typename TAllocator>
     void copyTo(HashMap<String, String>& dst, const std::unordered_map<std::string, std::string, Hasher, KeyEq, TAllocator>& src)
     {
-        typedef HashMap<String, String> HashType;
         typedef HashKeyValueAdapterStdString<std::string> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<String, String>> DstItemAdapter;
 
@@ -1218,7 +1210,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo hash map from std::initializer_list
     template <typename Key, typename Value> void copyTo(HashMap<Key, Value>& dst, std::initializer_list<std::pair<const Key, Value>> list)
     {
-        typedef HashMap<Key, Value> HashType;
         typedef HashKeyValueAdapterGeneric<std::pair<const Key, Value>> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<Key, Value>> DstItemAdapter;
 
@@ -1235,7 +1226,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo hash map from std::initializer_list (specialization for string key)
     template <typename Value> void copyTo(HashMap<String, Value>& dst, std::initializer_list<std::pair<const std::string, Value>> list)
     {
-        typedef HashMap<String, Value> HashType;
         typedef HashKeyValueAdapterStdString<Value> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<String, Value>> DstItemAdapter;
 
@@ -1252,7 +1242,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo hash map from std::initializer_list (specialization for string value)
     template <typename Key> void copyTo(HashMap<Key, String>& dst, std::initializer_list<std::pair<const Key, std::string>> list)
     {
-        typedef HashMap<Key, String> HashType;
         typedef HashKeyValueAdapterGeneric<std::pair<const Key, std::string>> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<Key, String>> DstItemAdapter;
 
@@ -1269,7 +1258,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo hash map from std::initializer_list (specialization for string key)
     void copyTo(HashMap<String, String>& dst, std::initializer_list<std::pair<const std::string, std::string>> list)
     {
-        typedef HashMap<String, String> HashType;
         typedef HashKeyValueAdapterStdString<std::string> SrcItemAdapter;
         typedef HashKeyValueAdapterGeneric<Pair<String, String>> DstItemAdapter;
 

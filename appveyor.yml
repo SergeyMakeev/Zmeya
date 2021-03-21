@@ -1,6 +1,7 @@
 version: 1.0.{build}
 
 build_script:
+- git submodule update --init --recursive
 - mkdir build
 - cd build
 - cmake ..
