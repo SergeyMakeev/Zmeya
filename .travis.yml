@@ -10,5 +10,7 @@ script:
   - cd build
   - cmake ..
   - cmake --build . --config Release
-  - ./Release/ZmeyaTest
+  - ls
+  - cd Release
+  - ./ZmeyaTest
 

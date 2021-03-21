@@ -8,4 +8,5 @@ build_script:
 - cmake --build . --config Release
 
 test_script:
-- ./Release/ZmeyaTest.exe
+- cd Release
+- ZmeyaTest.exe
