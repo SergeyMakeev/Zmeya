@@ -5,13 +5,15 @@ os:
   - linux
   - osx
 
+addons:
+  apt:
+    packages: lcov
+
 script:
-  - CXXFLAGS="-coverage"
-  - LDFLAGS="-coverage"
   - mkdir -p build
   - cd build
   - cmake ..
-  - cmake --build . --config Debug
+  - cmake --build . --config Release
   - ./ZmeyaTest
 
 after_success:
