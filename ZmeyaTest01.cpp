@@ -11,13 +11,15 @@ struct SimpleTestRoot
     uint32_t arr[32];
 };
 
+
+
 static void validate(const SimpleTestRoot* root)
 {
     EXPECT_FLOAT_EQ(root->a, 13.0f);
     EXPECT_EQ(root->b, 1979u);
     EXPECT_EQ(root->c, 6);
     EXPECT_EQ(root->d, -9);
-    for (size_t i = 0; i < std::size(root->arr); i++)
+    for (size_t i = 0; i < 32; i++)
     {
         EXPECT_EQ(root->arr[i], uint32_t(i + 3));
     }
