@@ -91,7 +91,7 @@ TEST(ZmeyaTestSuite, StringTest)
     validate(root.get());
 
     zm::Span<char> bytes = blobBuilder->finalize();
-    EXPECT_LE(bytes.size, 4000500);
+    EXPECT_LE(bytes.size, std::size_t(4000500));
 
     std::vector<char> bytesCopy = utils::copyBytes(bytes);
 

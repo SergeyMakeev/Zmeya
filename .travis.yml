@@ -10,5 +10,5 @@ script:
   - cd build
   - cmake ..
   - cmake --build . --config Release
-  - ./build/Release/ZmeyaTest
+  - ./Release/ZmeyaTest
 
