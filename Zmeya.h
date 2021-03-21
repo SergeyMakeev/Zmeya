@@ -729,6 +729,12 @@ template <typename T> struct Span
     }
 };
 
+template <typename T> std::weak_ptr<T> weak_from(T* p)
+{
+    std::shared_ptr<T> shared = p->shared_from_this();
+    return shared;
+}
+
 /*
     Blob - a binary blob of data that is able to store POD types and special
    "movable" data structures Note: Zmeya containers can be freely moved in
@@ -749,7 +755,7 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     {
         ZMEYA_ASSERT(containsPointer(p));
         offset_t absoluteOffset = diffAddr(uintptr_t(p), uintptr_t(data.data()));
-        return BlobPtr<T>(this->weak_from_this(), absoluteOffset);
+        return BlobPtr<T>(weak_from(this), absoluteOffset);
     }
 
     struct PrivateToken
@@ -798,7 +804,7 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         // check alignment
         ZMEYA_ASSERT((uintptr_t(&data[absoluteOffset]) & (alignment - 1)) == 0);
         ZMEYA_ASSERT(absoluteOffset < size_t(std::numeric_limits<offset_t>::max()));
-        return BlobPtr<char>(this->weak_from_this(), offset_t(absoluteOffset));
+        return BlobPtr<char>(weak_from(this), offset_t(absoluteOffset));
     }
 
     template <typename T, typename... _Valty> void placementCtor(void* ptr, _Valty&&... _Val)
@@ -819,7 +825,7 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         placementCtor<T>(ptr.get(), std::forward<_Valty>(_Val)...);
 
-        return BlobPtr<T>(this->weak_from_this(), ptr.getAbsoluteOffset());
+        return BlobPtr<T>(weak_from(this), ptr.getAbsoluteOffset());
     }
 
     template <typename T> T& getDirectMemoryAccess(offset_t absoluteOffset)
