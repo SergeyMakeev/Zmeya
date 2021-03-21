@@ -21,10 +21,11 @@
 // THE SOFTWARE.
 #pragma once
 
-#include <array>
+#include <cstddef>
 #include <assert.h>
 #include <limits>
 #include <memory>
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -35,7 +36,8 @@
 //#define ZMEYA_ENABLE_SERIALIZE_SUPPORT
 
 #define ZMEYA_ASSERT(cond) assert(cond)
-#define ZMEYA_NODISCARD [[nodiscard]]
+//#define ZMEYA_NODISCARD [[nodiscard]]
+#define ZMEYA_NODISCARD
 #define ZMEYA_MAX_ALIGN (64)
 
 #ifdef _DEBUG
@@ -126,8 +128,8 @@ inline void aligned_free(void* p) { _mm_free(p); }
 } // namespace AppInterop
 
 // absolute offset/difference type
-using offset_t = uintptr_t;
-using diff_t = ptrdiff_t;
+using offset_t = std::uintptr_t;
+using diff_t = std::ptrdiff_t;
 // relative offset type
 using roffset_t = int32_t;
 
