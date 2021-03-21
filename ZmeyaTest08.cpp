@@ -14,7 +14,7 @@ static void validate(const IteratorsTestRoot* root)
 {
     std::vector<int> temp;
 
-    EXPECT_EQ(root->arr.size(), 11);
+    EXPECT_EQ(root->arr.size(), std::size_t(11));
     temp.clear();
     temp.resize(root->arr.size(), 0);
     for (const int& val : root->arr)
@@ -26,7 +26,7 @@ static void validate(const IteratorsTestRoot* root)
         EXPECT_EQ(temp[i], 1);
     }
 
-    EXPECT_EQ(root->set.size(), 6);
+    EXPECT_EQ(root->set.size(), std::size_t(6));
     temp.clear();
     temp.resize(root->set.size(), 0);
     for (const int& val : root->set)
@@ -38,7 +38,7 @@ static void validate(const IteratorsTestRoot* root)
         EXPECT_EQ(temp[i], 1);
     }
 
-    EXPECT_EQ(root->map.size(), 3);
+    EXPECT_EQ(root->map.size(), std::size_t(3));
     temp.clear();
     temp.resize(root->map.size() * 2, 0);
     for (const zm::Pair<const int, int>& val : root->map)

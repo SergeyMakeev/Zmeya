@@ -26,7 +26,7 @@ struct ArrayTestRoot
 
 static void validate(const ArrayTestRoot* root)
 {
-    EXPECT_EQ(root->arr1.size(), 2);
+    EXPECT_EQ(root->arr1.size(), std::size_t(2));
     const Payload& item0 = root->arr1[0];
     EXPECT_FLOAT_EQ(item0.a, 1.3f);
     EXPECT_EQ(item0.b, 13u);
@@ -34,7 +34,7 @@ static void validate(const ArrayTestRoot* root)
     EXPECT_FLOAT_EQ(item1.a, 2.7f);
     EXPECT_EQ(item1.b, 27u);
 
-    EXPECT_EQ(root->arr2.size(), 6);
+    EXPECT_EQ(root->arr2.size(), std::size_t(6));
     EXPECT_EQ(root->arr2[0], 2);
     EXPECT_EQ(root->arr2[1], 4);
     EXPECT_EQ(root->arr2[2], 6);
@@ -42,29 +42,29 @@ static void validate(const ArrayTestRoot* root)
     EXPECT_EQ(root->arr2[4], 14);
     EXPECT_EQ(root->arr2[5], 32);
 
-    EXPECT_EQ(root->arr3.size(), 4);
+    EXPECT_EQ(root->arr3.size(), std::size_t(4));
     EXPECT_FLOAT_EQ(root->arr3[0], 67.0f);
     EXPECT_FLOAT_EQ(root->arr3[1], 82.0f);
     EXPECT_FLOAT_EQ(root->arr3[2], 11.0f);
     EXPECT_FLOAT_EQ(root->arr3[3], 54.0f);
 
-    EXPECT_EQ(root->arr4.size(), 4);
-    EXPECT_EQ(root->arr4[0].size(), 2);
+    EXPECT_EQ(root->arr4.size(), std::size_t(4));
+    EXPECT_EQ(root->arr4[0].size(), std::size_t(2));
     EXPECT_FLOAT_EQ(root->arr4[0][0], 1.2f);
     EXPECT_FLOAT_EQ(root->arr4[0][1], 2.3f);
-    EXPECT_EQ(root->arr4[1].size(), 3);
+    EXPECT_EQ(root->arr4[1].size(), std::size_t(3));
     EXPECT_FLOAT_EQ(root->arr4[1][0], 7.1f);
     EXPECT_FLOAT_EQ(root->arr4[1][1], 8.8f);
     EXPECT_FLOAT_EQ(root->arr4[1][2], 3.2f);
-    EXPECT_EQ(root->arr4[2].size(), 4);
+    EXPECT_EQ(root->arr4[2].size(), std::size_t(4));
     EXPECT_FLOAT_EQ(root->arr4[2][0], 16.0f);
     EXPECT_FLOAT_EQ(root->arr4[2][1], 12.0f);
     EXPECT_FLOAT_EQ(root->arr4[2][2], 99.5f);
     EXPECT_FLOAT_EQ(root->arr4[2][3], -143.0f);
-    EXPECT_EQ(root->arr4[3].size(), 1);
+    EXPECT_EQ(root->arr4[3].size(), std::size_t(1));
     EXPECT_FLOAT_EQ(root->arr4[3][0], -1.0f);
 
-    EXPECT_EQ(root->arr5.size(), 793);
+    EXPECT_EQ(root->arr5.size(), std::size_t(793));
     for (size_t i = 0; i < root->arr5.size(); i++)
     {
         EXPECT_NE(root->arr5[i], nullptr);

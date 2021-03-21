@@ -30,22 +30,22 @@ static void validate(const StringTestRoot* root)
     EXPECT_FALSE(root->str1 == root->str3);
     EXPECT_FALSE(root->str1 == root->str5);
 
-    EXPECT_EQ(root->strArr1.size(), 4);
+    EXPECT_EQ(root->strArr1.size(), std::size_t(4));
     EXPECT_EQ(root->strArr1[0], "first");
     EXPECT_EQ(root->strArr1[1], "second");
     EXPECT_EQ(root->strArr1[2], "third");
     EXPECT_EQ(root->strArr1[3], "fourth");
 
-    EXPECT_EQ(root->strArr2.size(), 3);
+    EXPECT_EQ(root->strArr2.size(), std::size_t(3));
     EXPECT_EQ(root->strArr2[0], "one");
     EXPECT_EQ(root->strArr2[1], "two");
     EXPECT_EQ(root->strArr2[2], "three");
 
-    EXPECT_EQ(root->strArr3.size(), 2);
+    EXPECT_EQ(root->strArr3.size(), std::size_t(2));
     EXPECT_EQ(root->strArr3[0], "hello");
     EXPECT_EQ(root->strArr3[1], "world");
 
-    EXPECT_EQ(root->strArr4.size(), 1000000);
+    EXPECT_EQ(root->strArr4.size(), std::size_t(1000000));
     for (const zm::String& s : root->strArr4)
     {
         EXPECT_EQ(s, root->str1);

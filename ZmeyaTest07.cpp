@@ -16,7 +16,7 @@ struct HashMapTestRoot
 
 static void validate(const HashMapTestRoot* root)
 {
-    EXPECT_EQ(root->hashMap1.size(), 5);
+    EXPECT_EQ(root->hashMap1.size(), std::size_t(5));
     EXPECT_FLOAT_EQ(root->hashMap1.find(3, -1.0f), 7.0f);
     EXPECT_FLOAT_EQ(root->hashMap1.find(4, -1.0f), 17.0f);
     EXPECT_FLOAT_EQ(root->hashMap1.find(9, -1.0f), 79.0f);
@@ -28,7 +28,7 @@ static void validate(const HashMapTestRoot* root)
     EXPECT_EQ(root->hashMap1.contains(99), false);
     EXPECT_EQ(root->hashMap1.contains(3), true);
 
-    EXPECT_EQ(root->hashMap2.size(), 3);
+    EXPECT_EQ(root->hashMap2.size(), std::size_t(3));
     EXPECT_FLOAT_EQ(root->hashMap2.find(1, 0.0f), -1.0f);
     EXPECT_FLOAT_EQ(root->hashMap2.find(2, 0.0f), -2.0f);
     EXPECT_FLOAT_EQ(root->hashMap2.find(3, 0.0f), -3.0f);
@@ -36,18 +36,18 @@ static void validate(const HashMapTestRoot* root)
     EXPECT_FLOAT_EQ(root->hashMap2.find(5, 0.0f), 0.0f);
     EXPECT_FLOAT_EQ(root->hashMap2.find(6, 0.0f), 0.0f);
 
-    EXPECT_EQ(root->strHashMap1.size(), 3);
+    EXPECT_EQ(root->strHashMap1.size(), std::size_t(3));
     EXPECT_FLOAT_EQ(root->strHashMap1.find("one", 0.0f), 1.0f);
     EXPECT_FLOAT_EQ(root->strHashMap1.find("two", 0.0f), 2.0f);
     EXPECT_FLOAT_EQ(root->strHashMap1.find("three", 0.0f), 3.0f);
     EXPECT_FLOAT_EQ(root->strHashMap1.find("five", 0.0f), 0.0f);
 
-    EXPECT_EQ(root->strHashMap2.size(), 2);
+    EXPECT_EQ(root->strHashMap2.size(), std::size_t(2));
     EXPECT_FLOAT_EQ(root->strHashMap2.find("five", 0.0f), -5.0f);
     EXPECT_FLOAT_EQ(root->strHashMap2.find("six", 0.0f), -6.0f);
     EXPECT_FLOAT_EQ(root->strHashMap2.find("seven", 0.0f), 0.0f);
 
-    EXPECT_EQ(root->strHashMap3.size(), 5);
+    EXPECT_EQ(root->strHashMap3.size(), std::size_t(5));
     EXPECT_STREQ(root->strHashMap3.find(1, ""), "one");
     EXPECT_STREQ(root->strHashMap3.find(2, ""), "two");
     EXPECT_STREQ(root->strHashMap3.find(3, ""), "three");
@@ -55,12 +55,12 @@ static void validate(const HashMapTestRoot* root)
     EXPECT_STREQ(root->strHashMap3.find(10, ""), "ten");
     EXPECT_STREQ(root->strHashMap3.find(13, nullptr), nullptr);
 
-    EXPECT_EQ(root->strHashMap4.size(), 2);
+    EXPECT_EQ(root->strHashMap4.size(), std::size_t(2));
     EXPECT_STREQ(root->strHashMap4.find(5, ""), "five");
     EXPECT_STREQ(root->strHashMap4.find(7, ""), "seven");
     EXPECT_STREQ(root->strHashMap4.find(6, nullptr), nullptr);
 
-    EXPECT_EQ(root->strHashMap5.size(), 5);
+    EXPECT_EQ(root->strHashMap5.size(), std::size_t(5));
     EXPECT_STREQ(root->strHashMap5.find("1", ""), "one");
     EXPECT_STREQ(root->strHashMap5.find("2", ""), "two");
     EXPECT_STREQ(root->strHashMap5.find("3", ""), "three");
@@ -68,7 +68,7 @@ static void validate(const HashMapTestRoot* root)
     EXPECT_STREQ(root->strHashMap5.find("10", ""), "ten");
     EXPECT_STREQ(root->strHashMap5.find("13", nullptr), nullptr);
 
-    EXPECT_EQ(root->strHashMap6.size(), 2);
+    EXPECT_EQ(root->strHashMap6.size(), std::size_t(2));
     EXPECT_STREQ(root->strHashMap6.find("5", ""), "five");
     EXPECT_STREQ(root->strHashMap6.find("7", ""), "seven");
     EXPECT_STREQ(root->strHashMap6.find("6", nullptr), nullptr);

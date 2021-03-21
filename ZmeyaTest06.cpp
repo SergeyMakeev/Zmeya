@@ -12,7 +12,7 @@ struct HashSetTestRoot
 
 static void validate(const HashSetTestRoot* root)
 {
-    EXPECT_EQ(root->set1.size(), 5);
+    EXPECT_EQ(root->set1.size(), std::size_t(5));
     EXPECT_TRUE(root->set1.contains(99));
     EXPECT_TRUE(root->set1.contains(5));
     EXPECT_TRUE(root->set1.contains(7));
@@ -23,7 +23,7 @@ static void validate(const HashSetTestRoot* root)
     EXPECT_FALSE(root->set1.contains(15));
     EXPECT_FALSE(root->set1.contains(88));
 
-    EXPECT_EQ(root->set2.size(), 7);
+    EXPECT_EQ(root->set2.size(), std::size_t(7));
     EXPECT_TRUE(root->set2.contains(1));
     EXPECT_TRUE(root->set2.contains(2));
     EXPECT_TRUE(root->set2.contains(3));
@@ -35,7 +35,7 @@ static void validate(const HashSetTestRoot* root)
     EXPECT_FALSE(root->set2.contains(-2));
     EXPECT_FALSE(root->set2.contains(11));
 
-    EXPECT_EQ(root->strSet1.size(), 4);
+    EXPECT_EQ(root->strSet1.size(), std::size_t(4));
     EXPECT_FALSE(root->strSet1.contains("zero"));
     EXPECT_TRUE(root->strSet1.contains("one"));
     EXPECT_TRUE(root->strSet1.contains("two"));
@@ -45,7 +45,7 @@ static void validate(const HashSetTestRoot* root)
     EXPECT_FALSE(root->strSet1.contains("six"));
     EXPECT_FALSE(root->strSet1.contains("seven"));
 
-    EXPECT_EQ(root->strSet2.size(), 5);
+    EXPECT_EQ(root->strSet2.size(), std::size_t(5));
     EXPECT_TRUE(root->strSet2.contains("five"));
     EXPECT_TRUE(root->strSet2.contains("six"));
     EXPECT_TRUE(root->strSet2.contains("seven"));

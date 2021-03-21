@@ -39,7 +39,7 @@ static void validate(const SimpleFileTestRoot* root)
 {
     EXPECT_EQ(root->magic, 0x59454D5Au);
 
-    EXPECT_EQ(root->objects.size(), 6);
+    EXPECT_EQ(root->objects.size(), std::size_t(6));
     EXPECT_EQ(root->objects[0].name, "root");
     EXPECT_EQ(root->objects[1].name, "test1");
     EXPECT_EQ(root->objects[2].name, "floor");
@@ -62,12 +62,12 @@ static void validate(const SimpleFileTestRoot* root)
         }
     }
 
-    EXPECT_EQ(root->hashSet.size(), 3);
+    EXPECT_EQ(root->hashSet.size(), std::size_t(3));
     EXPECT_TRUE(root->hashSet.contains("one"));
     EXPECT_TRUE(root->hashSet.contains("two"));
     EXPECT_TRUE(root->hashSet.contains("three"));
 
-    EXPECT_EQ(root->hashMap.size(), 3);
+    EXPECT_EQ(root->hashMap.size(), std::size_t(3));
     EXPECT_FLOAT_EQ(root->hashMap.find("1", 0.0f), 1.0f);
     EXPECT_FLOAT_EQ(root->hashMap.find("2", 0.0f), 2.0f);
     EXPECT_FLOAT_EQ(root->hashMap.find("3", 0.0f), 3.0f);

@@ -2,7 +2,9 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if _WIN32
 #include <Windows.h>
+#endif
 
 /*
 
@@ -102,7 +104,7 @@ static void validateNode2(const MMapTestNode* nodeBase, size_t index)
     const MMapTestNode2* node = reinterpret_cast<const MMapTestNode2*>(nodeBase);
     EXPECT_EQ(node->str1, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
 
-    EXPECT_EQ(node->hashSet.size(), 3);
+    EXPECT_EQ(node->hashSet.size(), std::size_t(3));
     EXPECT_TRUE(node->hashSet.contains(int32_t(index + 1)));
     EXPECT_TRUE(node->hashSet.contains(int32_t(index + 2)));
     EXPECT_TRUE(node->hashSet.contains(int32_t(index + 3)));
@@ -115,7 +117,7 @@ static void validate(const MMapTestRoot* root)
     EXPECT_EQ(root->magic, 0x59454D5Au);
     EXPECT_EQ(root->desc, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
 
-    EXPECT_EQ(root->hashMap.size(), 6);
+    EXPECT_EQ(root->hashMap.size(), std::size_t(6));
     EXPECT_FLOAT_EQ(root->hashMap.find("one", 0.0f), 1.0f);
     EXPECT_FLOAT_EQ(root->hashMap.find("two", 0.0f), 2.0f);
     EXPECT_FLOAT_EQ(root->hashMap.find("three", 0.0f), 3.0f);
@@ -123,7 +125,7 @@ static void validate(const MMapTestRoot* root)
     EXPECT_FLOAT_EQ(root->hashMap.find("five", 0.0f), 5.0f);
     EXPECT_FLOAT_EQ(root->hashMap.find("six", 0.0f), 6.0f);
 
-    EXPECT_EQ(root->roots.size(), 512);
+    EXPECT_EQ(root->roots.size(), std::size_t(512));
     for (size_t i = 0; i < root->roots.size(); i++)
     {
         const zm::Pointer<MMapTestNode>& rootNode = root->roots[i];
@@ -203,7 +205,7 @@ static void generateTestFile(const char* fileName)
     validate(root.get());
 
     zm::Span<char> bytes = blobBuilder->finalize(32);
-    EXPECT_TRUE((bytes.size % 32) == 0);
+    EXPECT_TRUE((bytes.size % 32) == std::size_t(0));
 
     FILE* file = fopen(fileName, "wb");
     ASSERT_TRUE(file != nullptr);
@@ -216,6 +218,7 @@ TEST(ZmeyaTestSuite, MMapTest)
     const char* fileName = "mmaptest.zmy";
     generateTestFile(fileName);
 
+#if _WIN32
     // use memory mapped file view to access the data
     HANDLE hFile = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     ASSERT_TRUE(hFile != INVALID_HANDLE_VALUE);
@@ -235,4 +238,5 @@ TEST(ZmeyaTestSuite, MMapTest)
     UnmapViewOfFile(fileRoot);
     CloseHandle(hMapping);
     CloseHandle(hFile);
+#endif
 }

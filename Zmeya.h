@@ -173,7 +173,7 @@ template <typename T> class Pointer
     ZMEYA_NODISCARD T* getUnsafe() const noexcept
     {
         uintptr_t self = uintptr_t(this);
-        // dereferencing a NULL pointer is undefined behavior, so we can ignore a case with nullptr
+        // dereferencing a NULL pointer is undefined behavior, so we can skip nullptr check
         uintptr_t addr = toAbsoluteAddr(self + 1, relativeOffset);
         return reinterpret_cast<T*>(addr);
     }
@@ -470,7 +470,7 @@ template <typename Key, typename Value> class HashMap
         size_t numBuckets = buckets.size();
         if (numBuckets == 0)
         {
-            return false;
+            return nullptr;
         }
         size_t hashMod = numBuckets;
         size_t hash = Adapter::hash(key);

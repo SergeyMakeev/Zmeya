@@ -23,7 +23,7 @@ struct ReferToTestRoot
 template <typename T> static void validateNode(const T* node)
 {
     EXPECT_EQ(node->str, "This is supposed to be a long enough string. I think it is long enough now.");
-    EXPECT_EQ(node->arr.size(), 10);
+    EXPECT_EQ(node->arr.size(), std::size_t(10));
     EXPECT_EQ(node->arr[0], 1);
     EXPECT_EQ(node->arr[1], 2);
     EXPECT_EQ(node->arr[2], 5);
@@ -35,7 +35,7 @@ template <typename T> static void validateNode(const T* node)
     EXPECT_EQ(node->arr[8], 293);
     EXPECT_EQ(node->arr[9], 890);
 
-    EXPECT_EQ(node->hashSet.size(), 6);
+    EXPECT_EQ(node->hashSet.size(), std::size_t(6));
     EXPECT_TRUE(node->hashSet.contains(1));
     EXPECT_TRUE(node->hashSet.contains(5));
     EXPECT_TRUE(node->hashSet.contains(15));
@@ -44,7 +44,7 @@ template <typename T> static void validateNode(const T* node)
     EXPECT_TRUE(node->hashSet.contains(31));
     EXPECT_FALSE(node->hashSet.contains(32));
 
-    EXPECT_EQ(node->hashMap.size(), 4);
+    EXPECT_EQ(node->hashMap.size(), std::size_t(4));
     EXPECT_FLOAT_EQ(node->hashMap.find("one", 0.0f), 1.0f);
     EXPECT_FLOAT_EQ(node->hashMap.find("two", 0.0f), 2.0f);
     EXPECT_FLOAT_EQ(node->hashMap.find("three", 0.0f), 3.0f);
@@ -54,7 +54,7 @@ template <typename T> static void validateNode(const T* node)
 static void validate(const ReferToTestRoot* root)
 {
     validateNode(root);
-    EXPECT_EQ(root->nodes.size(), 10000);
+    EXPECT_EQ(root->nodes.size(), std::size_t(10000));
     for (size_t i = 0; i < root->nodes.size(); i++)
     {
         validateNode(&root->nodes[i]);
@@ -87,7 +87,7 @@ TEST(ZmeyaTestSuite, ReferToTest)
     validate(root.get());
 
     zm::Span<char> bytes = blobBuilder->finalize();
-    EXPECT_LE(bytes.size, 450000);
+    EXPECT_LE(bytes.size, std::size_t(450000));
     std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     const ReferToTestRoot* rootCopy = (const ReferToTestRoot*)(bytesCopy.data());
