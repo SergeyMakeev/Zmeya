@@ -21,18 +21,18 @@
 // THE SOFTWARE.
 #pragma once
 
-#include <cstring>
+#include <array>
 #include <cstddef>
+#include <cstring>
 #include <limits>
 #include <memory>
-#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include <xmmintrin.h>
 #include <assert.h>
+#include <xmmintrin.h>
 
 // This macro is only needed if you want to create serializable data
 // (deserialization doesn't need this)
@@ -660,15 +660,7 @@ template <typename T> class BlobPtr
 
     offset_t getAbsoluteOffset() const { return absoluteOffset; }
 
-    ZMEYA_NODISCARD T* get() const
-    {
-        std::shared_ptr<const BlobBuilder> p = blob.lock();
-        if (!p)
-        {
-            return nullptr;
-        }
-        return reinterpret_cast<T*>(const_cast<char*>(p->get(absoluteOffset)));
-    }
+    ZMEYA_NODISCARD T* get() const;
 
     T* operator->() const { return get(); }
     T& operator*() const { return *(get()); }
@@ -677,7 +669,7 @@ template <typename T> class BlobPtr
     bool operator==(const BlobPtr& other) const { return isEqual(other); }
     bool operator!=(const BlobPtr& other) const { return !isEqual(other); }
 
-    template <typename T> friend class Pointer;
+    template <typename T2> friend class Pointer;
 };
 
 /*
@@ -1087,8 +1079,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem = srcElem;
             });
     }
@@ -1103,8 +1096,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem, srcElem);
             });
     }
@@ -1118,8 +1112,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem = srcElem;
             });
     }
@@ -1133,8 +1128,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem, srcElem);
             });
     }
@@ -1149,8 +1145,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
                 dstElem.second = srcElem.second;
             });
@@ -1166,8 +1163,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
                 dstElem.second = srcElem.second;
             });
@@ -1183,8 +1181,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
                 blobBuilder->copyTo(dstElem.second, srcElem.second);
             });
@@ -1200,8 +1199,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
                 blobBuilder->copyTo(dstElem.second, srcElem.second);
             });
@@ -1216,8 +1216,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
                 dstElem.second = srcElem.second;
             });
@@ -1232,8 +1233,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
                 dstElem.second = srcElem.second;
             });
@@ -1248,8 +1250,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
                 blobBuilder->copyTo(dstElem.second, srcElem.second);
             });
@@ -1264,8 +1267,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const SrcItemAdapter::ItemType& srcElem) {
-                DstItemAdapter::ItemType& dstElem = blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+                typename DstItemAdapter::ItemType& dstElem =
+                    blobBuilder->getDirectMemoryAccess<DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
                 blobBuilder->copyTo(dstElem.second, srcElem.second);
             });
@@ -1349,6 +1353,16 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
     template <typename T> friend class BlobPtr;
 };
+
+template <typename T> ZMEYA_NODISCARD T* BlobPtr<T>::get() const
+{
+    std::shared_ptr<const BlobBuilder> p = blob.lock();
+    if (!p)
+    {
+        return nullptr;
+    }
+    return reinterpret_cast<T*>(const_cast<char*>(p->get(absoluteOffset)));
+}
 
 template <typename T> Pointer<T>& Pointer<T>::operator=(const BlobPtr<T>& other)
 {

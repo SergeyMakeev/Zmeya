@@ -1,0 +1,10 @@
+version: 1.0.{build}
+
+build_script:
+- mkdir build
+- cd build
+- cmake ..
+- cmake --build . --config Release
+
+test_script:
+- ./build/Release/ZmeyaTest.exe
