@@ -12,3 +12,5 @@ script:
   - cmake --build . --config Release
   - ./ZmeyaTest
 
+after_success:
+  - ls
