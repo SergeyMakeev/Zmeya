@@ -88,7 +88,7 @@ TEST(ZmeyaTestSuite, ArrayTest)
     blobBuilder->copyTo(root->arr2, {2, 4, 6, 10, 14, 32});
 
     // assign from std::array
-    std::array<float, 4> arr = {67.0f, 82.0f, 11.0f, 54.0f};
+    std::array<float, 4> arr{{67.0f, 82.0f, 11.0f, 54.0f}};
     blobBuilder->copyTo(root->arr3, arr);
 
     // resize array
