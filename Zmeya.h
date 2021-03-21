@@ -174,6 +174,7 @@ template <typename T> class Pointer
     {
         uintptr_t self = uintptr_t(this);
         // dereferencing a NULL pointer is undefined behavior, so we can skip nullptr check
+        ZMEYA_ASSERT(relativeOffset != 0);
         uintptr_t addr = toAbsoluteAddr(self + 1, relativeOffset);
         return reinterpret_cast<T*>(addr);
     }
@@ -928,10 +929,7 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     {
         // Note: this bucketing method relies on the fact that the input data set is (already) unique
         size_t numElements = (size >= 0) ? size_t(size) : std::distance(begin, end);
-        if (numElements == 0)
-        {
-            return;
-        }
+        ZMEYA_ASSERT(numElements > 0);
         size_t numBuckets = numElements * 2;
         ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
         size_t hashMod = numBuckets;
@@ -1015,20 +1013,14 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo array from std::vector
     template <typename T, typename TAllocator> void copyTo(Array<T>& dst, const std::vector<T, TAllocator>& src)
     {
-        if (src.empty())
-        {
-            return;
-        }
+        ZMEYA_ASSERT(src.size() > 0);
         copyToArrayFast(dst, src.data(), src.size());
     }
 
     // specialization for vector of strings
     template <typename T, typename TAllocator> void copyTo(Array<String>& dst, const std::vector<T, TAllocator>& src)
     {
-        if (src.empty())
-        {
-            return;
-        }
+        ZMEYA_ASSERT(src.size() > 0);
         copyToArray(dst, src.begin(), src.end(), src.size(), [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src) {
             String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
             blobBuilder->copyTo(dst, src);
@@ -1038,20 +1030,14 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo array from std::initializer_list
     template <typename T> void copyTo(Array<T>& dst, std::initializer_list<T> list)
     {
-        if (list.size() == 0)
-        {
-            return;
-        }
+        ZMEYA_ASSERT(list.size() > 0);
         copyToArrayFast(dst, list.begin(), list.size());
     }
 
     // specialization for std::initializer_list<std::string>
     void copyTo(Array<String>& dst, std::initializer_list<const char*> list)
     {
-        if (list.size() == 0)
-        {
-            return;
-        }
+        ZMEYA_ASSERT(list.size() > 0);
         copyToArray(dst, list.begin(), list.end(), list.size(),
                     [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const char* const& src) {
                         String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
@@ -1062,20 +1048,14 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo array from std::array
     template <typename T, size_t NumElements> void copyTo(Array<T>& dst, const std::array<T, NumElements>& src)
     {
-        if (src.empty())
-        {
-            return;
-        }
+        ZMEYA_ASSERT(src.size() > 0);
         copyToArrayFast(dst, src.data(), src.size());
     }
 
     // specialization for array of strings
     template <typename T, size_t NumElements> void copyTo(Array<String>& dst, const std::array<T, NumElements>& src)
     {
-        if (src.empty())
-        {
-            return;
-        }
+        ZMEYA_ASSERT(src.size() > 0);
         copyToArray(dst, src.begin(), src.end(), src.size(), [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src) {
             String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
             blobBuilder->copyTo(dst, src);
@@ -1279,13 +1259,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     // copyTo string from const char* and size
     void copyTo(String& _dst, const char* src, size_t len)
     {
+        ZMEYA_ASSERT(src != nullptr && len > 0);
         BlobPtr<String> dst(getBlobPtr(&_dst));
-        if (!src)
-        {
-            assignTo(dst->data, nullptr);
-            return;
-        }
-
         BlobPtr<char> stringData = allocate<char>(src[0]);
         if (len > 0)
         {
@@ -1302,10 +1277,11 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     void copyTo(String& dst, const std::string& src) { copyTo(dst, src.c_str(), src.size()); }
 
     // copyTo string from null teminated c-string
-    void copyTo(String& dst, const char* src)
+    void copyTo(String& _dst, const char* src)
     {
+        ZMEYA_ASSERT(src != nullptr);
         size_t len = std::strlen(src);
-        copyTo(dst, src, len);
+        copyTo(_dst, src, len);
     }
 
     // referTo another String (it is not a copy, the destination string will refer to the same data)

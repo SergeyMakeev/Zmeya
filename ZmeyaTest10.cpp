@@ -65,10 +65,7 @@ static void validateChildren(const MMapTestNode* parent, size_t count, size_t st
         EXPECT_EQ(nodeBase->nodeType, NodeType::Leaf);
         std::string expectedName = "leaf_" + std::to_string(startIndex + i);
         EXPECT_EQ(nodeBase->name, expectedName);
-        if (nodeBase->nodeType != NodeType::Leaf)
-        {
-            continue;
-        }
+        ZMEYA_ASSERT(nodeBase->nodeType == NodeType::Leaf);
 
         const MMapTestLeafNode* node = reinterpret_cast<const MMapTestLeafNode*>(nodeBase);
         EXPECT_EQ(node->payload, uint32_t(count + startIndex * 13));
@@ -81,10 +78,7 @@ static void validateNode1(const MMapTestNode* nodeBase, size_t index)
     EXPECT_EQ(nodeBase->nodeType, NodeType::NodeType1);
     std::string expectedName = "node_" + std::to_string(index);
     EXPECT_EQ(nodeBase->name, expectedName);
-    if (nodeBase->nodeType != NodeType::NodeType1)
-    {
-        return;
-    }
+    ZMEYA_ASSERT(nodeBase->nodeType == NodeType::NodeType1);
 
     const MMapTestNode1* node = reinterpret_cast<const MMapTestNode1*>(nodeBase);
     EXPECT_EQ(node->str1, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
@@ -97,10 +91,8 @@ static void validateNode2(const MMapTestNode* nodeBase, size_t index)
     EXPECT_EQ(nodeBase->nodeType, NodeType::NodeType2);
     std::string expectedName = "item_" + std::to_string(index);
     EXPECT_EQ(nodeBase->name, expectedName);
-    if (nodeBase->nodeType != NodeType::NodeType2)
-    {
-        return;
-    }
+    ZMEYA_ASSERT(nodeBase->nodeType == NodeType::NodeType2);
+
     const MMapTestNode2* node = reinterpret_cast<const MMapTestNode2*>(nodeBase);
     EXPECT_EQ(node->str1, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
 

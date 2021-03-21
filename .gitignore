@@ -1,2 +1,4 @@
 ﻿build2019
 build
+*.log
+*.zm

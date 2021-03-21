@@ -6,6 +6,7 @@ struct HashMapTestRoot
 {
     zm::HashMap<int32_t, float> hashMap1;
     zm::HashMap<int32_t, float> hashMap2;
+    zm::HashMap<int32_t, float> hashMap3;
     zm::HashMap<zm::String, float> strHashMap1;
     zm::HashMap<zm::String, float> strHashMap2;
     zm::HashMap<int32_t, zm::String> strHashMap3;
@@ -35,6 +36,14 @@ static void validate(const HashMapTestRoot* root)
     EXPECT_FLOAT_EQ(root->hashMap2.find(4, 0.0f), 0.0f);
     EXPECT_FLOAT_EQ(root->hashMap2.find(5, 0.0f), 0.0f);
     EXPECT_FLOAT_EQ(root->hashMap2.find(6, 0.0f), 0.0f);
+
+    EXPECT_EQ(root->hashMap3.size(), std::size_t(0));
+    EXPECT_FLOAT_EQ(root->hashMap3.find(1, 0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(root->hashMap3.find(2, 0.0f), 0.0f);
+    EXPECT_FLOAT_EQ(root->hashMap3.find(3, 0.0f), 0.0f);
+    EXPECT_FALSE(root->hashMap3.contains(4));
+    EXPECT_FALSE(root->hashMap3.contains(5));
+    EXPECT_FALSE(root->hashMap3.contains(6));
 
     EXPECT_EQ(root->strHashMap1.size(), std::size_t(3));
     EXPECT_FLOAT_EQ(root->strHashMap1.find("one", 0.0f), 1.0f);

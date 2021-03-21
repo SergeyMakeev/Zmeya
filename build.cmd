@@ -5,9 +5,7 @@ del %builddir% /S /Q
 :GENERATE
 mkdir %builddir%
 cd %builddir%
-cmake ../
-cmake --build . --config Release
+cmake ..
 cd ..
-
-
-
+cmake --build .\build\ --config Debug
+OpenCppCoverage.exe --sources Zmeya*.* --excluded_sources *googletest* --modules *.exe -- .\build\Debug\ZmeyaTest.exe
