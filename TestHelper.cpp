@@ -3,7 +3,7 @@
 namespace utils
 {
 
-std::vector<char> copyBytes(Zmeya::Span<char> from)
+std::vector<char> copyBytes(zm::Span<char> from)
 {
     std::vector<char> res;
     res.resize(from.size);

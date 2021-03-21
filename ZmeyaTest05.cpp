@@ -4,15 +4,15 @@
 
 struct StringTestRoot
 {
-    Zmeya::String str1;
-    Zmeya::String str2;
-    Zmeya::String str3;
-    Zmeya::String str4;
-    Zmeya::String str5;
-    Zmeya::Array<Zmeya::String> strArr1;
-    Zmeya::Array<Zmeya::String> strArr2;
-    Zmeya::Array<Zmeya::String> strArr3;
-    Zmeya::Array<Zmeya::String> strArr4;
+    zm::String str1;
+    zm::String str2;
+    zm::String str3;
+    zm::String str4;
+    zm::String str5;
+    zm::Array<zm::String> strArr1;
+    zm::Array<zm::String> strArr2;
+    zm::Array<zm::String> strArr3;
+    zm::Array<zm::String> strArr4;
 };
 
 static void validate(const StringTestRoot* root)
@@ -46,7 +46,7 @@ static void validate(const StringTestRoot* root)
     EXPECT_EQ(root->strArr3[1], "world");
 
     EXPECT_EQ(root->strArr4.size(), 1000000);
-    for (const Zmeya::String& s : root->strArr4)
+    for (const zm::String& s : root->strArr4)
     {
         EXPECT_EQ(s, root->str1);
     }
@@ -54,8 +54,8 @@ static void validate(const StringTestRoot* root)
 
 TEST(ZmeyaTestSuite, StringTest)
 {
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
-    Zmeya::BlobPtr<StringTestRoot> root = blobBuilder->allocate<StringTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    zm::BlobPtr<StringTestRoot> root = blobBuilder->allocate<StringTestRoot>();
 
     // assign from null-terminated c string (74 bytes long)
     blobBuilder->copyTo(root->str1, "Hello World - This is a very long test string. Expected 1000000 instances");
@@ -90,7 +90,7 @@ TEST(ZmeyaTestSuite, StringTest)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize();
+    zm::Span<char> bytes = blobBuilder->finalize();
     EXPECT_LE(bytes.size, 4000500);
 
     std::vector<char> bytesCopy = utils::copyBytes(bytes);

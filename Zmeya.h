@@ -42,7 +42,7 @@
 #define ZMEYA_VALIDATE_HASH_DUPLICATES
 #endif
 
-namespace Zmeya
+namespace zm
 {
 
 #define ZMEYA_MURMURHASH_MAGIC64A 0xc6a4a7935bd1e995LLU
@@ -113,7 +113,7 @@ template <typename T> ZMEYA_NODISCARD inline size_t hasher(const T& v) { return 
 ZMEYA_NODISCARD inline size_t hashString(const char* str)
 {
     size_t len = std::strlen(str);
-    uint64_t hash = Zmeya::murmur_hash_process64a(str, uint32_t(len), 13061979);
+    uint64_t hash = zm::murmur_hash_process64a(str, uint32_t(len), 13061979);
     return size_t(hash);
 }
 
@@ -124,7 +124,6 @@ ZMEYA_NODISCARD inline void* aligned_alloc(size_t size, size_t alignment) { retu
 inline void aligned_free(void* p) { _mm_free(p); }
 
 } // namespace AppInterop
-
 
 // absolute offset/difference type
 using offset_t = uintptr_t;
@@ -153,24 +152,33 @@ template <typename T> class BlobPtr;
 */
 template <typename T> class Pointer
 {
+    // -1 = this
+    // 0 = nullptr (can't point to 1-st byte of this pointer)
+    // 1 = this + 2
+    //
+    // this encoding is used because by default blob memory initialized by zeros and it's convenient to have all pointers initialized to
+    // null
+    //
+    // this extra offset math fits well into the x86 address arithmetic
+    // see for deteails  https://godbolt.org/z/v6sj6s
     roffset_t relativeOffset;
 
     bool isEqual(const Pointer& other) const noexcept { return get() == other.get(); }
 
+    ZMEYA_NODISCARD T* getUnsafe() const noexcept
+    {
+        uintptr_t self = uintptr_t(this);
+        // dereferencing a NULL pointer is undefined behavior, so we can ignore a case with nullptr
+        uintptr_t addr = toAbsoluteAddr(self + 1, relativeOffset);
+        return reinterpret_cast<T*>(addr);
+    }
+
   public:
     Pointer() noexcept = default;
-
     Pointer& operator=(const Pointer& other) = delete;
 
     ZMEYA_NODISCARD T* get() const noexcept
     {
-        // -1 = this
-        // 0 = nullptr (can't point to 1-st byte of this pointer)
-        // 1 = this + 2
-        //
-        // this encoding is used because by default blob memory initialized by zeros and it's convenient to have all pointers initialized to
-        // null
-        //
         uintptr_t self = uintptr_t(this);
         uintptr_t addr = (relativeOffset == 0) ? uintptr_t(0) : toAbsoluteAddr(self + 1, relativeOffset);
         return reinterpret_cast<T*>(addr);
@@ -184,14 +192,14 @@ template <typename T> class Pointer
     // operator const T*() const noexcept { return get(); }
     // operator T*() noexcept { return get(); }
 
-    ZMEYA_NODISCARD T* operator->() const noexcept { return get(); }
+    ZMEYA_NODISCARD T* operator->() const noexcept { return getUnsafe(); }
 
-    ZMEYA_NODISCARD T& operator*() const noexcept { return *(get()); }
+    ZMEYA_NODISCARD T& operator*() const noexcept { return *(getUnsafe()); }
 
-    explicit operator bool() const noexcept { return relativeOffset != 0; }
     ZMEYA_NODISCARD bool operator==(const Pointer& other) const noexcept { return isEqual(other); }
     ZMEYA_NODISCARD bool operator!=(const Pointer& other) const noexcept { return !isEqual(other); }
 
+    operator bool() const noexcept { return relativeOffset != 0; }
     ZMEYA_NODISCARD bool operator==(nullptr_t) const noexcept { return relativeOffset == 0; }
     ZMEYA_NODISCARD bool operator!=(nullptr_t) const noexcept { return relativeOffset != 0; }
 
@@ -207,7 +215,6 @@ class String
 
   public:
     String() noexcept = default;
-
     String& operator=(const String& other) = delete;
 
     bool isEqual(const char* s2) const noexcept
@@ -269,7 +276,6 @@ template <typename T> class Array
 
   public:
     Array() noexcept = default;
-
     Array& operator=(const Array& other) = delete;
 
     ZMEYA_NODISCARD size_t size() const noexcept { return size_t(numElements); }
@@ -399,7 +405,6 @@ template <typename Key> class HashSet
 
   public:
     HashSet() noexcept = default;
-
     HashSet& operator=(const HashSet& other) = delete;
 
     ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
@@ -475,7 +480,6 @@ template <typename Key, typename Value> class HashMap
 
   public:
     HashMap() noexcept = default;
-
     HashMap& operator=(const HashMap& other) = delete;
 
     ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
@@ -760,12 +764,12 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
     BlobBuilder(size_t initialSizeInBytes, PrivateToken)
     {
-        static_assert(std::is_trivially_copyable<Pointer<int>>::value, "Pointer trivial check failed");
-        static_assert(std::is_trivially_copyable<Array<int>>::value, "Array trivial check failed");
-        static_assert(std::is_trivially_copyable<HashSet<int>>::value, "HashSet trivial check failed");
-        static_assert(std::is_trivially_copyable<Pair<int, float>>::value, "Pair trivial check failed");
-        static_assert(std::is_trivially_copyable<HashMap<int, int>>::value, "HashMap trivial check failed");
-        static_assert(std::is_trivially_copyable<String>::value, "String trivial check failed");
+        static_assert(std::is_trivially_copyable<Pointer<int>>::value, "Pointer is_trivially_copyable check failed");
+        static_assert(std::is_trivially_copyable<Array<int>>::value, "Array is_trivially_copyable check failed");
+        static_assert(std::is_trivially_copyable<HashSet<int>>::value, "HashSet is_trivially_copyable check failed");
+        static_assert(std::is_trivially_copyable<Pair<int, float>>::value, "Pair is_trivially_copyable check failed");
+        static_assert(std::is_trivially_copyable<HashMap<int, int>>::value, "HashMap is_trivially_copyable check failed");
+        static_assert(std::is_trivially_copyable<String>::value, "String is_trivially_copyable check failed");
 
         data.reserve(initialSizeInBytes);
     }
@@ -789,7 +793,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         size_t absoluteOffset = cursor + padding;
         size_t numBytesToAllocate = numBytes + padding;
 
-        // allocate more memory (filled with 0, some containers rely on this)
+        // Allocate more memory
+        // Note: new memory is filled with zeroes
+        // Zmeya containers rely on this behavior and we want to have all the padding zeroed as well
         data.resize(data.size() + numBytesToAllocate, char(0));
 
         // check alignment
@@ -825,6 +831,11 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         return *const_cast<T*>(reinterpret_cast<const T*>(p));
     }
 
+    template <typename T> void setArrayOffset(const BlobPtr<Array<T>>& dst, offset_t absoluteOffset)
+    {
+        dst->relativeOffset = toRelativeOffset(diff(absoluteOffset, dst.getAbsoluteOffset()));
+    }
+
     template <typename T> offset_t resizeArrayWithoutInitialization(Array<T>& _dst, size_t numElements)
     {
         constexpr size_t alignOfT = std::alignment_of<T>::value;
@@ -838,7 +849,7 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         BlobPtr<char> arrData = allocate(sizeOfT * numElements, alignOfT);
         ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
         dst->numElements = uint32_t(numElements);
-        dst->relativeOffset = toRelativeOffset(diff(arrData.getAbsoluteOffset(), dst.getAbsoluteOffset()));
+        setArrayOffset(dst, arrData.getAbsoluteOffset());
         return arrData.getAbsoluteOffset();
     }
 
@@ -1255,13 +1266,6 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
             });
     }
 
-    // referTo another String (it is not a copy, the destination string will refer to the same data)
-    void referTo(String& dst, const String& src)
-    {
-        BlobPtr<char> stringData = getBlobPtr(src.c_str());
-        assignTo(dst.data, stringData);
-    }
-
     // copyTo string from const char* and size
     void copyTo(String& _dst, const char* src, size_t len)
     {
@@ -1294,10 +1298,40 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         copyTo(dst, src, len);
     }
 
+    // referTo another String (it is not a copy, the destination string will refer to the same data)
+    void referTo(String& dst, const String& src)
+    {
+        BlobPtr<char> stringData = getBlobPtr(src.c_str());
+        assignTo(dst.data, stringData);
+    }
+
+    // referTo another Array (it is not a copy, the destination string will refer to the same data)
+    template <typename T> void referTo(Array<T>& _dst, const Array<T>& src)
+    {
+        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
+        BlobPtr<T> arrData = getBlobPtr(src.data());
+        dst->numElements = uint32_t(src.size());
+        setArrayOffset(dst, arrData.getAbsoluteOffset());
+    }
+
+    // referTo another HashSet (it is not a copy, the destination string will refer to the same data)
+    template <typename Key> void referTo(HashSet<Key>& dst, const HashSet<Key>& src)
+    {
+        referTo(dst.buckets, src.buckets);
+        referTo(dst.items, src.items);
+    }
+
+    // referTo another HashMap (it is not a copy, the destination string will refer to the same data)
+    template <typename Key, typename Value> void referTo(HashMap<Key, Value>& dst, const HashMap<Key, Value>& src)
+    {
+        referTo(dst.buckets, src.buckets);
+        referTo(dst.items, src.items);
+    }
+
     Span<char> finalize(size_t desiredSizeShouldBeMultipleOf = 4)
     {
         size_t numPaddingBytes = desiredSizeShouldBeMultipleOf - (data.size() % desiredSizeShouldBeMultipleOf);
-        data.resize(data.size() + numPaddingBytes, char(0));
+        allocate(numPaddingBytes, 1);
 
         ZMEYA_ASSERT((data.size() % desiredSizeShouldBeMultipleOf) == 0);
         return Span<char>(data.data(), data.size());
@@ -1329,16 +1363,16 @@ template <typename T> Pointer<T>& Pointer<T>::operator=(const BlobPtr<T>& other)
 
 #endif
 
-} // namespace Zmeya
+} // namespace zm
 
 namespace std
 {
-template <> struct hash<Zmeya::String>
+template <> struct hash<zm::String>
 {
-    size_t operator()(Zmeya::String const& s) const noexcept
+    size_t operator()(zm::String const& s) const noexcept
     {
         const char* str = s.c_str();
-        return Zmeya::AppInterop::hashString(str);
+        return zm::AppInterop::hashString(str);
     }
 };
 } // namespace std

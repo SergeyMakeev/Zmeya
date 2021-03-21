@@ -4,14 +4,14 @@
 
 struct HashMapTestRoot
 {
-    Zmeya::HashMap<int32_t, float> hashMap1;
-    Zmeya::HashMap<int32_t, float> hashMap2;
-    Zmeya::HashMap<Zmeya::String, float> strHashMap1;
-    Zmeya::HashMap<Zmeya::String, float> strHashMap2;
-    Zmeya::HashMap<int32_t, Zmeya::String> strHashMap3;
-    Zmeya::HashMap<int32_t, Zmeya::String> strHashMap4;
-    Zmeya::HashMap<Zmeya::String, Zmeya::String> strHashMap5;
-    Zmeya::HashMap<Zmeya::String, Zmeya::String> strHashMap6;
+    zm::HashMap<int32_t, float> hashMap1;
+    zm::HashMap<int32_t, float> hashMap2;
+    zm::HashMap<zm::String, float> strHashMap1;
+    zm::HashMap<zm::String, float> strHashMap2;
+    zm::HashMap<int32_t, zm::String> strHashMap3;
+    zm::HashMap<int32_t, zm::String> strHashMap4;
+    zm::HashMap<zm::String, zm::String> strHashMap5;
+    zm::HashMap<zm::String, zm::String> strHashMap6;
 };
 
 static void validate(const HashMapTestRoot* root)
@@ -76,8 +76,8 @@ static void validate(const HashMapTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashMapTest)
 {
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
-    Zmeya::BlobPtr<HashMapTestRoot> root = blobBuilder->allocate<HashMapTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    zm::BlobPtr<HashMapTestRoot> root = blobBuilder->allocate<HashMapTestRoot>();
 
     // assign from std::unordered_map
     std::unordered_map<int, float> testMap = {{3, 7.0f}, {4, 17.0f}, {9, 79.0f}, {11, 13.0f}, {77, 13.0f}};
@@ -109,7 +109,7 @@ TEST(ZmeyaTestSuite, HashMapTest)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize();
+    zm::Span<char> bytes = blobBuilder->finalize();
     std::vector<char> bytesCopy = utils::copyBytes(bytes);
     const HashMapTestRoot* rootCopy = (const HashMapTestRoot*)(bytesCopy.data());
 

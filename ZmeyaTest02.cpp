@@ -5,13 +5,13 @@
 struct PointerTestNode
 {
     int32_t payload;
-    Zmeya::Pointer<PointerTestNode> other;
+    zm::Pointer<PointerTestNode> other;
 };
 
 struct PointerTestRoot
 {
-    Zmeya::Pointer<PointerTestNode> left;
-    Zmeya::Pointer<PointerTestNode> right;
+    zm::Pointer<PointerTestNode> left;
+    zm::Pointer<PointerTestNode> right;
 };
 
 static void validate(const PointerTestRoot* root)
@@ -33,11 +33,11 @@ static void validate(const PointerTestRoot* root)
 
 TEST(ZmeyaTestSuite, PointerTest)
 {
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
 
-    Zmeya::BlobPtr<PointerTestRoot> root = blobBuilder->allocate<PointerTestRoot>();
-    Zmeya::BlobPtr<PointerTestNode> nodeLeft = blobBuilder->allocate<PointerTestNode>();
-    Zmeya::BlobPtr<PointerTestNode> nodeRight = blobBuilder->allocate<PointerTestNode>();
+    zm::BlobPtr<PointerTestRoot> root = blobBuilder->allocate<PointerTestRoot>();
+    zm::BlobPtr<PointerTestNode> nodeLeft = blobBuilder->allocate<PointerTestNode>();
+    zm::BlobPtr<PointerTestNode> nodeRight = blobBuilder->allocate<PointerTestNode>();
 
     root->left = nodeLeft;
     root->right = nodeRight;
@@ -50,7 +50,7 @@ TEST(ZmeyaTestSuite, PointerTest)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize(16);
+    zm::Span<char> bytes = blobBuilder->finalize(16);
     // check (optional) blob size alignment
     EXPECT_TRUE((bytes.size % 16) == 0);
 

@@ -26,10 +26,10 @@ static void validate(const SimpleTestRoot* root)
 TEST(ZmeyaTestSuite, SimpleTest)
 {
     // create blob
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
 
     // allocate structure
-    Zmeya::BlobPtr<SimpleTestRoot> root = blobBuilder->allocate<SimpleTestRoot>();
+    zm::BlobPtr<SimpleTestRoot> root = blobBuilder->allocate<SimpleTestRoot>();
 
     // fill with data
     root->a = 13.0f;
@@ -44,7 +44,7 @@ TEST(ZmeyaTestSuite, SimpleTest)
     validate(root.get());
 
     // finalize blob
-    Zmeya::Span<char> bytes = blobBuilder->finalize();
+    zm::Span<char> bytes = blobBuilder->finalize();
 
     // copy resulting bytes
     std::vector<char> bytesCopy = utils::copyBytes(bytes);

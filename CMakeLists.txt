@@ -19,6 +19,7 @@ set(ZMEYA_SOURCES
   ZmeyaTest08.cpp
   ZmeyaTest09.cpp
   ZmeyaTest10.cpp
+  ZmeyaTest11.cpp
   Zmeya.h
 )
 

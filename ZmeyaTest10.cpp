@@ -21,36 +21,36 @@ enum class NodeType : uint32_t
 
 struct MMapTestNode
 {
-    Zmeya::String name;
+    zm::String name;
     NodeType nodeType;
-    Zmeya::Array<Zmeya::Pointer<MMapTestNode>> children;
+    zm::Array<zm::Pointer<MMapTestNode>> children;
 };
 
 struct MMapTestRoot
 {
     uint32_t magic;
-    Zmeya::String desc;
-    Zmeya::HashMap<Zmeya::String, float> hashMap;
-    Zmeya::Array<Zmeya::Pointer<MMapTestNode>> roots;
+    zm::String desc;
+    zm::HashMap<zm::String, float> hashMap;
+    zm::Array<zm::Pointer<MMapTestNode>> roots;
 };
 
 struct MMapTestLeafNode : public MMapTestNode
 {
     uint32_t payload;
-    Zmeya::Pointer<MMapTestNode> parent;
+    zm::Pointer<MMapTestNode> parent;
 };
 
 struct MMapTestNode1 : public MMapTestNode
 {
-    Zmeya::String str1;
+    zm::String str1;
     uint32_t idx;
-    Zmeya::Pointer<MMapTestRoot> root;
+    zm::Pointer<MMapTestRoot> root;
 };
 
 struct MMapTestNode2 : public MMapTestNode
 {
-    Zmeya::String str1;
-    Zmeya::HashSet<int32_t> hashSet;
+    zm::String str1;
+    zm::HashSet<int32_t> hashSet;
 };
 
 static void validateChildren(const MMapTestNode* parent, size_t count, size_t startIndex)
@@ -126,7 +126,7 @@ static void validate(const MMapTestRoot* root)
     EXPECT_EQ(root->roots.size(), 512);
     for (size_t i = 0; i < root->roots.size(); i++)
     {
-        const Zmeya::Pointer<MMapTestNode>& rootNode = root->roots[i];
+        const zm::Pointer<MMapTestNode>& rootNode = root->roots[i];
         if ((i & 1) == 0)
         {
             validateNode1(rootNode.get(), i);
@@ -138,11 +138,11 @@ static void validate(const MMapTestRoot* root)
     }
 }
 
-void createChildren(Zmeya::BlobBuilder* blobBuilder, const Zmeya::BlobPtr<MMapTestNode>& parent, size_t count, size_t startIndex)
+void createChildren(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestNode>& parent, size_t count, size_t startIndex)
 {
     for (size_t i = 0; i < count; i++)
     {
-        Zmeya::BlobPtr<MMapTestLeafNode> node = blobBuilder->allocate<MMapTestLeafNode>();
+        zm::BlobPtr<MMapTestLeafNode> node = blobBuilder->allocate<MMapTestLeafNode>();
         node->nodeType = NodeType::Leaf;
         blobBuilder->copyTo(node->name, "leaf_" + std::to_string(startIndex + i));
         node->payload = uint32_t(count + startIndex * 13);
@@ -151,9 +151,9 @@ void createChildren(Zmeya::BlobBuilder* blobBuilder, const Zmeya::BlobPtr<MMapTe
     }
 }
 
-Zmeya::BlobPtr<MMapTestNode> allocateNode1(Zmeya::BlobBuilder* blobBuilder, const Zmeya::BlobPtr<MMapTestRoot>& root, size_t index)
+zm::BlobPtr<MMapTestNode> allocateNode1(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestRoot>& root, size_t index)
 {
-    Zmeya::BlobPtr<MMapTestNode1> node = blobBuilder->allocate<MMapTestNode1>();
+    zm::BlobPtr<MMapTestNode1> node = blobBuilder->allocate<MMapTestNode1>();
     node->nodeType = NodeType::NodeType1;
     blobBuilder->copyTo(node->name, "node_" + std::to_string(index));
     blobBuilder->referTo(node->str1, root->desc);
@@ -164,9 +164,9 @@ Zmeya::BlobPtr<MMapTestNode> allocateNode1(Zmeya::BlobBuilder* blobBuilder, cons
     return node;
 }
 
-Zmeya::BlobPtr<MMapTestNode> allocateNode2(Zmeya::BlobBuilder* blobBuilder, const Zmeya::BlobPtr<MMapTestRoot>& root, size_t index)
+zm::BlobPtr<MMapTestNode> allocateNode2(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestRoot>& root, size_t index)
 {
-    Zmeya::BlobPtr<MMapTestNode2> node = blobBuilder->allocate<MMapTestNode2>();
+    zm::BlobPtr<MMapTestNode2> node = blobBuilder->allocate<MMapTestNode2>();
     node->nodeType = NodeType::NodeType2;
     blobBuilder->copyTo(node->name, "item_" + std::to_string(index));
     blobBuilder->referTo(node->str1, root->desc);
@@ -179,8 +179,8 @@ Zmeya::BlobPtr<MMapTestNode> allocateNode2(Zmeya::BlobBuilder* blobBuilder, cons
 
 static void generateTestFile(const char* fileName)
 {
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
-    Zmeya::BlobPtr<MMapTestRoot> root = blobBuilder->allocate<MMapTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    zm::BlobPtr<MMapTestRoot> root = blobBuilder->allocate<MMapTestRoot>();
     root->magic = 0x59454D5A;
     blobBuilder->copyTo(root->desc, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
     blobBuilder->copyTo(root->hashMap, {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}, {"five", 5.0f}, {"six", 6.0f}});
@@ -188,7 +188,7 @@ static void generateTestFile(const char* fileName)
     blobBuilder->resizeArray(root->roots, numRoots);
     for (size_t i = 0; i < 512; i++)
     {
-        Zmeya::BlobPtr<MMapTestNode> rootNode;
+        zm::BlobPtr<MMapTestNode> rootNode;
         if ((i & 1) == 0)
         {
             rootNode = allocateNode1(blobBuilder.get(), root, i);
@@ -202,7 +202,7 @@ static void generateTestFile(const char* fileName)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize(32);
+    zm::Span<char> bytes = blobBuilder->finalize(32);
     EXPECT_TRUE((bytes.size % 32) == 0);
 
     FILE* file = fopen(fileName, "wb");

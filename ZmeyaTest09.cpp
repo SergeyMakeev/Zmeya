@@ -17,22 +17,22 @@ struct Vec2
 
 struct Node
 {
-    Zmeya::String name;
+    zm::String name;
 };
 
 // as long as inheritance = aggregation it is supported (but beware of different compilers paddings!)
 struct Object : public Node
 {
-    Zmeya::Pointer<Object> parent;
+    zm::Pointer<Object> parent;
     Vec2 position;
 };
 
 struct SimpleFileTestRoot
 {
     uint32_t magic;
-    Zmeya::Array<Object> objects;
-    Zmeya::HashSet<Zmeya::String> hashSet;
-    Zmeya::HashMap<Zmeya::String, float> hashMap;
+    zm::Array<Object> objects;
+    zm::HashSet<zm::String> hashSet;
+    zm::HashMap<zm::String, float> hashMap;
 };
 
 static void validate(const SimpleFileTestRoot* root)
@@ -77,8 +77,8 @@ static void generateTestFile(const char* fileName)
 {
     std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
-    Zmeya::BlobPtr<SimpleFileTestRoot> root = blobBuilder->allocate<SimpleFileTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    zm::BlobPtr<SimpleFileTestRoot> root = blobBuilder->allocate<SimpleFileTestRoot>();
     root->magic = 0x59454D5A;
     blobBuilder->resizeArray(root->objects, 6);
     for (size_t i = 0; i < root->objects.size(); i++)
@@ -99,7 +99,7 @@ static void generateTestFile(const char* fileName)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize(32);
+    zm::Span<char> bytes = blobBuilder->finalize(32);
     EXPECT_TRUE((bytes.size % 32) == 0);
 
     std::vector<char> bytesCopy = utils::copyBytes(bytes);

@@ -4,10 +4,10 @@
 
 struct HashSetTestRoot
 {
-    Zmeya::HashSet<int32_t> set1;
-    Zmeya::HashSet<int32_t> set2;
-    Zmeya::HashSet<Zmeya::String> strSet1;
-    Zmeya::HashSet<Zmeya::String> strSet2;
+    zm::HashSet<int32_t> set1;
+    zm::HashSet<int32_t> set2;
+    zm::HashSet<zm::String> strSet1;
+    zm::HashSet<zm::String> strSet2;
 };
 
 static void validate(const HashSetTestRoot* root)
@@ -59,8 +59,8 @@ static void validate(const HashSetTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashSetTest)
 {
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
-    Zmeya::BlobPtr<HashSetTestRoot> root = blobBuilder->allocate<HashSetTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    zm::BlobPtr<HashSetTestRoot> root = blobBuilder->allocate<HashSetTestRoot>();
 
     // assign from std::unordered_set
     std::unordered_set<int> testSet1 = {5, 7, 3, 11, 99};
@@ -78,7 +78,7 @@ TEST(ZmeyaTestSuite, HashSetTest)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize();
+    zm::Span<char> bytes = blobBuilder->finalize();
     std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     const HashSetTestRoot* rootCopy = (const HashSetTestRoot*)(bytesCopy.data());

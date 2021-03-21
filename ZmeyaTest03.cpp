@@ -17,11 +17,11 @@ struct Payload
 
 struct ArrayTestRoot
 {
-    Zmeya::Array<Payload> arr1;
-    Zmeya::Array<int32_t> arr2;
-    Zmeya::Array<float> arr3;
-    Zmeya::Array<Zmeya::Array<float>> arr4;
-    Zmeya::Array<Zmeya::Pointer<Payload>> arr5;
+    zm::Array<Payload> arr1;
+    zm::Array<int32_t> arr2;
+    zm::Array<float> arr3;
+    zm::Array<zm::Array<float>> arr4;
+    zm::Array<zm::Pointer<Payload>> arr5;
 };
 
 static void validate(const ArrayTestRoot* root)
@@ -77,8 +77,8 @@ static void validate(const ArrayTestRoot* root)
 
 TEST(ZmeyaTestSuite, ArrayTest)
 {
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create();
-    Zmeya::BlobPtr<ArrayTestRoot> root = blobBuilder->allocate<ArrayTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    zm::BlobPtr<ArrayTestRoot> root = blobBuilder->allocate<ArrayTestRoot>();
 
     // assign from std::vector
     std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
@@ -103,13 +103,13 @@ TEST(ZmeyaTestSuite, ArrayTest)
     blobBuilder->resizeArray(root->arr5, 793);
     for (size_t i = 0; i < root->arr5.size(); i++)
     {
-        Zmeya::BlobPtr<Payload> payload = blobBuilder->allocate<Payload>(1.3f + float(i) * 0.4f, uint32_t(i) + 3);
+        zm::BlobPtr<Payload> payload = blobBuilder->allocate<Payload>(1.3f + float(i) * 0.4f, uint32_t(i) + 3);
         root->arr5[i] = payload;
     }
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize();
+    zm::Span<char> bytes = blobBuilder->finalize();
     std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     const ArrayTestRoot* rootCopy = (const ArrayTestRoot*)(bytesCopy.data());

@@ -5,14 +5,14 @@
 struct ListTestNode
 {
     uint32_t payload;
-    Zmeya::Pointer<ListTestNode> prev;
-    Zmeya::Pointer<ListTestNode> next;
+    zm::Pointer<ListTestNode> prev;
+    zm::Pointer<ListTestNode> next;
 };
 
 struct ListTestRoot
 {
     uint32_t numNodes;
-    Zmeya::Pointer<ListTestNode> root;
+    zm::Pointer<ListTestNode> root;
 };
 
 static void validate(const ListTestRoot* root)
@@ -50,8 +50,8 @@ static void validate(const ListTestRoot* root)
 TEST(ZmeyaTestSuite, ListTest)
 {
     // immediatly reserve 4Mb
-    std::shared_ptr<Zmeya::BlobBuilder> blobBuilder = Zmeya::BlobBuilder::create(4 * 1024 * 1024);
-    Zmeya::BlobPtr<ListTestRoot> root = blobBuilder->allocate<ListTestRoot>();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(4 * 1024 * 1024);
+    zm::BlobPtr<ListTestRoot> root = blobBuilder->allocate<ListTestRoot>();
 
 #ifdef _DEBUG
     uint32_t numNodes = 3000;
@@ -60,10 +60,10 @@ TEST(ZmeyaTestSuite, ListTest)
 #endif
 
     root->numNodes = numNodes;
-    Zmeya::BlobPtr<ListTestNode> prevNode;
+    zm::BlobPtr<ListTestNode> prevNode;
     for (uint32_t i = 0; i < numNodes; i++)
     {
-        Zmeya::BlobPtr<ListTestNode> node = blobBuilder->allocate<ListTestNode>();
+        zm::BlobPtr<ListTestNode> node = blobBuilder->allocate<ListTestNode>();
         node->payload = 13 + i;
         node->prev = prevNode;
         if (prevNode)
@@ -80,7 +80,7 @@ TEST(ZmeyaTestSuite, ListTest)
 
     validate(root.get());
 
-    Zmeya::Span<char> bytes = blobBuilder->finalize();
+    zm::Span<char> bytes = blobBuilder->finalize();
     
     std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
