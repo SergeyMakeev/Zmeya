@@ -38,7 +38,7 @@ TEST(ZmeyaTestSuite, SimpleTest)
     root->b = 1979;
     root->c = 6;
     root->d = -9;
-    for (size_t i = 0; i < std::size(root->arr); i++)
+    for (size_t i = 0; i < 32; i++)
     {
         root->arr[i] = uint32_t(i + 3);
     }

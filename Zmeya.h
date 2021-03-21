@@ -180,7 +180,8 @@ template <typename T> class Pointer
 
   public:
     Pointer() noexcept = default;
-    Pointer& operator=(const Pointer& other) = delete;
+    // Pointer(const Pointer&) = delete;
+    // Pointer& operator=(const Pointer&) = delete;
 
     ZMEYA_NODISCARD T* get() const noexcept
     {
@@ -220,7 +221,8 @@ class String
 
   public:
     String() noexcept = default;
-    String& operator=(const String& other) = delete;
+    // String(const String&) = delete;
+    // String& operator=(const String&) = delete;
 
     bool isEqual(const char* s2) const noexcept
     {
@@ -281,7 +283,8 @@ template <typename T> class Array
 
   public:
     Array() noexcept = default;
-    Array& operator=(const Array& other) = delete;
+    // Array(const Array&) = delete;
+    // Array& operator=(const Array&) = delete;
 
     ZMEYA_NODISCARD size_t size() const noexcept { return size_t(numElements); }
 
@@ -410,7 +413,8 @@ template <typename Key> class HashSet
 
   public:
     HashSet() noexcept = default;
-    HashSet& operator=(const HashSet& other) = delete;
+    // HashSet(const HashSet&) = delete;
+    // HashSet& operator=(const HashSet&) = delete;
 
     ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
 
@@ -485,7 +489,8 @@ template <typename Key, typename Value> class HashMap
 
   public:
     HashMap() noexcept = default;
-    HashMap& operator=(const HashMap& other) = delete;
+    // HashMap(const HashMap&) = delete;
+    // HashMap& operator=(const HashMap&) = delete;
 
     ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
 
