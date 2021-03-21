@@ -38,11 +38,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     -g         # generate debug info
     --coverage # sets all required flags
   )
-  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
-    target_link_options(${PROJ_NAME} PRIVATE --coverage)
-  else()
-    target_link_libraries(${PROJ_NAME} PRIVATE --coverage)
-  endif()
+  target_link_options(${PROJ_NAME} PRIVATE --coverage)
 endif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
 
