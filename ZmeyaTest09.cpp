@@ -114,7 +114,7 @@ static void generateTestFile(const char* fileName)
 
 TEST(ZmeyaTestSuite, SimpleFileTest)
 {
-    const char* fileName = "test.zmy";
+    const char* fileName = "test.zm";
     generateTestFile(fileName);
 
     std::vector<char> content;

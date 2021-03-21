@@ -76,7 +76,7 @@ TEST(ZmeyaTestSuite, StringTest)
     blobBuilder->copyTo(root->strArr1, arr1);
     blobBuilder->copyTo(root->strArr2, {"one", "two", "three"});
 
-    std::array<const char*, 2> arr3 = {"hello", "world"};
+    std::array<const char*, 2> arr3 = {{"hello", "world"}};
     blobBuilder->copyTo(root->strArr3, arr3);
 
     // 1,000,000 strings 74 bytes each

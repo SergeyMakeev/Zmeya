@@ -215,7 +215,7 @@ static void generateTestFile(const char* fileName)
 
 TEST(ZmeyaTestSuite, MMapTest)
 {
-    const char* fileName = "mmaptest.zmy";
+    const char* fileName = "mmaptest.zm";
     generateTestFile(fileName);
 
 #if _WIN32
