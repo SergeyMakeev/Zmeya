@@ -119,7 +119,7 @@ test2(Ptr<int> const&):
 
 So there is no extra overhead from using such pointers in comparison with traditional pointers.
 
-All other containers are pretty much based on the same principles.
+All other Zmeya containers are pretty much based on the same principles.
 i.e.
 `zm::String` is a self-relative pointer to `const char*`
 `zm::Array<T>` is a self-relative pointer to data + size
@@ -129,4 +129,30 @@ etc...
 The only requirement is that we have to have all the data tightly packed in a single memory region or binary blob.
 Zmeya provides a convenient mechanism to build such a binary blob called `zm::BlobBuilder`
 Blob builder is capable of convert all the standard STL containers to appropriate zmeya movable containers. Blob builder also provides a mechanism to convert all the inner types (e.g., std::vector<std::string>) to Zmeya compatible type. And by default, Zmeya offers convertors/template specializations for all commonly used cases.
+
+# References
+
+https://www.boost.org/doc/libs/1_75_0/doc/html/interprocess/offset_ptr.html
+
+
+https://hero.handmade.network/forums/code-discussion/t/487-serialization_techniques_with_memory_pooling
+
+
+https://www.gingerbill.org/article/2020/05/17/relative-pointers/
+
+
+https://bitsquid.blogspot.com/2010/02/blob-and-i.html
+
+
+https://google.github.io/flatbuffers/
+
+
+http://media.steampowered.com/apps/valve/2015/Migdalskiy_Sergiy_Physics_Optimization_Strategies.pdf
+
+
+https://www.youtube.com/watch?v=Z0tsNFZLxSU
+
+
+https://youtu.be/Nsf2_Au6KxU?t=1542
+
 
