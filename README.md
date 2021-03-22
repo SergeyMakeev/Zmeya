@@ -132,27 +132,40 @@ Blob builder is capable of convert all the standard STL containers to appropriat
 
 # References
 
+Boost::offset_ptr<T>
+  
 https://www.boost.org/doc/libs/1_75_0/doc/html/interprocess/offset_ptr.html
 
+Handmade Hero forum thread
 
 https://hero.handmade.network/forums/code-discussion/t/487-serialization_techniques_with_memory_pooling
 
 
+Relative Pointers article by Ginger Bill
+
 https://www.gingerbill.org/article/2020/05/17/relative-pointers/
 
+"The Blob and I" by Niklas Gray
 
 https://bitsquid.blogspot.com/2010/02/blob-and-i.html
 
 
+FlatBuffers by Google
+
 https://google.github.io/flatbuffers/
 
+Physics Optimization Strategies by Sergiy Migdalskiy (slides 56-68)
 
 http://media.steampowered.com/apps/valve/2015/Migdalskiy_Sergiy_Physics_Optimization_Strategies.pdf
 
+https://youtu.be/Nsf2_Au6KxU?t=1542
+
+
+Relative Pointers by Jonathan Blow
 
 https://www.youtube.com/watch?v=Z0tsNFZLxSU
 
 
-https://youtu.be/Nsf2_Au6KxU?t=1542
+
 
 
