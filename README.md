@@ -74,7 +74,7 @@ So the final absolute addres resolve logic looks like this
 Which is perfectly representable by one of x86 addressing modes
 `addr = base_reg + index_reg + const_8`
 
-Here is an example of resulting asm
+Here is an example of generated assembly code
 https://godbolt.org/z/v6sj6s
 
 ```cpp
@@ -116,3 +116,17 @@ test2(Ptr<int> const&):
         mov     eax, DWORD PTR [rax]
         ret
 ```
+
+So there is no extra overhead from using such pointers in comparison with traditional pointers.
+
+All other containers are pretty much based on the same principles.
+i.e.
+`zm::String` is a self-relative pointer to `const char*`
+`zm::Array<T>` is a self-relative pointer to data + size
+`zm::HashSet<Key>` is made using two arrays (buckets and values)
+etc...
+
+The only requirement is that we have to have all the data tightly packed in a single memory region or binary blob.
+Zmeya provides a convenient mechanism to build such a binary blob called `zm::BlobBuilder`
+Blob builder is capable of convert all the standard STL containers to appropriate zmeya movable containers. Blob builder also provides a mechanism to convert all the inner types (e.g., std::vector<std::string>) to Zmeya compatible type. And by default, Zmeya offers convertors/template specializations for all commonly used cases.
+
