@@ -43,7 +43,7 @@ struct Test
 int main()
 {
    // load binary file to memory (using fread, mmap, etc)
-   // parsing/decoding needed
+   // no parsing/decoding needed
    const Test* test = (const Test*)loadBytesFromDisk("binaryFile.zm");  
    
    // use your loaded data
