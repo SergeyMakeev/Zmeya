@@ -59,3 +59,60 @@ int main()
 
 You can always find more usage examples looking into unit test files. They are organized in a way to covers all Zmeya features and shows common usage patterns.
 
+# How it works
+
+Zmeya movable containers' key idea is to use self-relative pointers instead of using “absolute” pointers provided by C++ by default.
+The idea is pretty simple; instead of using the absolute address, we are using offset relative to the pointer's memory address.
+i.e., `target_address = uintptr_t(this) + offset`
+
+One of the problems of such offset-based addressing is the representation of the null pointer. The null pointer can't be safely represented like an offset since the absolute address 0 is always outside of the mapped region.
+So we decided to use offset 1 as a special magic value that encodes null pointer. Using offset 1 as the magic value for the null pointer means that the pointer can't point to the byte after its own pointer, which is usually not a problem.
+Also, for convenience, we decided to bias everything by -1, which makes the null pointer encoded by zero, which is great because it fits very well with zero initialization.
+So the final absolute addres resolve logic looks like this
+`target_address = uintptr_t(this) + offset + 1`
+
+Which is perfectly representable by one of x86 addressing modes
+`addr = base_reg + index_reg + const_8`
+
+Here is an example of resulting asm
+https://godbolt.org/z/v6sj6s
+
+```cpp
+#include <stdint.h>
+
+template<typename T>
+struct OffsetPtr {
+    int32_t offset;
+    T* get() const noexcept {
+        return reinterpret_cast<T*>(uintptr_t(this) + 1 + offset);
+    }
+};
+
+template<typename T>
+struct Ptr {
+    T* ptr;
+    T* get() const noexcept {
+        return ptr;
+    }
+};
+
+int test1(const OffsetPtr<int>& ptr) {
+    return *ptr.get();
+}
+
+int test2(const Ptr<int>& ptr) {
+    return *ptr.get();
+}
+```
+
+```asm
+test1(OffsetPtr<int> const&):
+        movsx   rax, DWORD PTR [rdi]
+        mov     eax, DWORD PTR [rax+1+rdi]
+        ret
+        
+test2(Ptr<int> const&):
+        mov     rax, QWORD PTR [rdi]
+        mov     eax, DWORD PTR [rax]
+        ret
+```
