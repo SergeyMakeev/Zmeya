@@ -77,40 +77,44 @@ static void validate(const ArrayTestRoot* root)
 
 TEST(ZmeyaTestSuite, ArrayTest)
 {
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
-    zm::BlobPtr<ArrayTestRoot> root = blobBuilder->allocate<ArrayTestRoot>();
-
-    // assign from std::vector
-    std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
-    blobBuilder->copyTo(root->arr1, vec);
-
-    // assign from std::initializer_list
-    blobBuilder->copyTo(root->arr2, {2, 4, 6, 10, 14, 32});
-
-    // assign from std::array
-    std::array<float, 4> arr{{67.0f, 82.0f, 11.0f, 54.0f}};
-    blobBuilder->copyTo(root->arr3, arr);
-
-    // resize array
-    blobBuilder->resizeArray(root->arr4, 4);
-    // assign array elements (sub-arrays)
-    blobBuilder->copyTo(root->arr4[0], {1.2f, 2.3f});
-    blobBuilder->copyTo(root->arr4[1], {7.1f, 8.8f, 3.2f});
-    blobBuilder->copyTo(root->arr4[2], {16.0f, 12.0f, 99.5f, -143.0f});
-    blobBuilder->copyTo(root->arr4[3], {-1.0f});
-
-    // resize array
-    blobBuilder->resizeArray(root->arr5, 793);
-    for (size_t i = 0; i < root->arr5.size(); i++)
+    std::vector<char> bytesCopy;
     {
-        zm::BlobPtr<Payload> payload = blobBuilder->allocate<Payload>(1.3f + float(i) * 0.4f, uint32_t(i) + 3);
-        root->arr5[i] = payload;
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        zm::BlobPtr<ArrayTestRoot> root = blobBuilder->allocate<ArrayTestRoot>();
+
+        // assign from std::vector
+        std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
+        blobBuilder->copyTo(root->arr1, vec);
+
+        // assign from std::initializer_list
+        blobBuilder->copyTo(root->arr2, {2, 4, 6, 10, 14, 32});
+
+        // assign from std::array
+        std::array<float, 4> arr{{67.0f, 82.0f, 11.0f, 54.0f}};
+        blobBuilder->copyTo(root->arr3, arr);
+
+        // resize array
+        blobBuilder->resizeArray(root->arr4, 4);
+        // assign array elements (sub-arrays)
+        blobBuilder->copyTo(root->arr4[0], {1.2f, 2.3f});
+        blobBuilder->copyTo(root->arr4[1], {7.1f, 8.8f, 3.2f});
+        blobBuilder->copyTo(root->arr4[2], {16.0f, 12.0f, 99.5f, -143.0f});
+        blobBuilder->copyTo(root->arr4[3], {-1.0f});
+
+        // resize array
+        blobBuilder->resizeArray(root->arr5, 793);
+        for (size_t i = 0; i < root->arr5.size(); i++)
+        {
+            zm::BlobPtr<Payload> payload = blobBuilder->allocate<Payload>(1.3f + float(i) * 0.4f, uint32_t(i) + 3);
+            root->arr5[i] = payload;
+        }
+
+        validate(root.get());
+
+        zm::Span<char> bytes = blobBuilder->finalize();
+        bytesCopy = utils::copyBytes(bytes);
+        std::memset(bytes.data, 0xFF, bytes.size);
     }
-
-    validate(root.get());
-
-    zm::Span<char> bytes = blobBuilder->finalize();
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     const ArrayTestRoot* rootCopy = (const ArrayTestRoot*)(bytesCopy.data());
     validate(rootCopy);

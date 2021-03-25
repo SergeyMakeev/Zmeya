@@ -49,40 +49,44 @@ static void validate(const ListTestRoot* root)
 
 TEST(ZmeyaTestSuite, ListTest)
 {
-    // immediatly reserve 4Mb
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(4 * 1024 * 1024);
-    zm::BlobPtr<ListTestRoot> root = blobBuilder->allocate<ListTestRoot>();
+    std::vector<char> bytesCopy;
+    {
+        // immediatly reserve 4Mb
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(4 * 1024 * 1024);
+        zm::BlobPtr<ListTestRoot> root = blobBuilder->allocate<ListTestRoot>();
 
 #ifdef _DEBUG
-    uint32_t numNodes = 3000;
+        uint32_t numNodes = 3000;
 #else
-    uint32_t numNodes = 1000000;
+        uint32_t numNodes = 1000000;
 #endif
 
-    root->numNodes = numNodes;
-    zm::BlobPtr<ListTestNode> prevNode;
-    for (uint32_t i = 0; i < numNodes; i++)
-    {
-        zm::BlobPtr<ListTestNode> node = blobBuilder->allocate<ListTestNode>();
-        node->payload = 13 + i;
-        node->prev = prevNode;
-        if (prevNode)
+        root->numNodes = numNodes;
+        zm::BlobPtr<ListTestNode> prevNode;
+        for (uint32_t i = 0; i < numNodes; i++)
         {
-            prevNode->next = node;
+            zm::BlobPtr<ListTestNode> node = blobBuilder->allocate<ListTestNode>();
+            node->payload = 13 + i;
+            node->prev = prevNode;
+            if (prevNode)
+            {
+                prevNode->next = node;
+            }
+            else
+            {
+                EXPECT_TRUE(root->root == nullptr);
+                root->root = node;
+            }
+            prevNode = node;
         }
-        else
-        {
-            EXPECT_TRUE(root->root == nullptr);
-            root->root = node;
-        }
-        prevNode = node;
+
+        validate(root.get());
+
+        zm::Span<char> bytes = blobBuilder->finalize();
+
+        bytesCopy = utils::copyBytes(bytes);
+        std::memset(bytes.data, 0xFF, bytes.size);
     }
-
-    validate(root.get());
-
-    zm::Span<char> bytes = blobBuilder->finalize();
-    
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     const ListTestRoot* rootCopy = (const ListTestRoot*)(bytesCopy.data());
     validate(rootCopy);

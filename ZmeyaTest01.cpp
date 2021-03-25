@@ -27,29 +27,35 @@ static void validate(const SimpleTestRoot* root)
 
 TEST(ZmeyaTestSuite, SimpleTest)
 {
-    // create blob
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
-
-    // allocate structure
-    zm::BlobPtr<SimpleTestRoot> root = blobBuilder->allocate<SimpleTestRoot>();
-
-    // fill with data
-    root->a = 13.0f;
-    root->b = 1979;
-    root->c = 6;
-    root->d = -9;
-    for (size_t i = 0; i < 32; i++)
+    std::vector<char> bytesCopy;
     {
-        root->arr[i] = uint32_t(i + 3);
+        // create blob
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+
+        // allocate structure
+        zm::BlobPtr<SimpleTestRoot> root = blobBuilder->allocate<SimpleTestRoot>();
+
+        // fill with data
+        root->a = 13.0f;
+        root->b = 1979;
+        root->c = 6;
+        root->d = -9;
+        for (size_t i = 0; i < 32; i++)
+        {
+            root->arr[i] = uint32_t(i + 3);
+        }
+
+        validate(root.get());
+
+        // finalize blob
+        zm::Span<char> bytes = blobBuilder->finalize();
+
+        // copy resulting bytes
+        bytesCopy = utils::copyBytes(bytes);
+
+        // fill original memory with 0xff
+        std::memset(bytes.data, 0xFF, bytes.size);
     }
-
-    validate(root.get());
-
-    // finalize blob
-    zm::Span<char> bytes = blobBuilder->finalize();
-
-    // copy resulting bytes
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     // "deserialize" and test results
     const SimpleTestRoot* rootCopy = (const SimpleTestRoot*)(bytesCopy.data());

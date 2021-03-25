@@ -54,46 +54,50 @@ static void validate(const StringTestRoot* root)
 
 TEST(ZmeyaTestSuite, StringTest)
 {
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
-    zm::BlobPtr<StringTestRoot> root = blobBuilder->allocate<StringTestRoot>();
-
-    // assign from null-terminated c string (74 bytes long)
-    blobBuilder->copyTo(root->str1, "Hello World - This is a very long test string. Expected 1000000 instances");
-
-    // assign from std::string
-    std::string testStr("Hello World 2");
-    blobBuilder->copyTo(root->str2, testStr);
-
-    // assign range
-    blobBuilder->copyTo(root->str3, "Hello World 3", 7);
-
-    // assign existing string (do not introduce extra copy!)
-    blobBuilder->referTo(root->str4, root->str1);
-
-    blobBuilder->copyTo(root->str5, "Hello World 2");
-
-    std::vector<std::string> arr1 = {"first", "second", "third", "fourth"};
-    blobBuilder->copyTo(root->strArr1, arr1);
-    blobBuilder->copyTo(root->strArr2, {"one", "two", "three"});
-
-    std::array<const char*, 2> arr3 = {{"hello", "world"}};
-    blobBuilder->copyTo(root->strArr3, arr3);
-
-    // 1,000,000 strings 74 bytes each
-    // since we are assigning already existing string the string body will not be copied (only offset will be stored)
-    size_t numStrings = 1000000;
-    blobBuilder->resizeArray(root->strArr4, numStrings);
-    for (size_t i = 0; i < root->strArr4.size(); i++)
+    std::vector<char> bytesCopy;
     {
-        blobBuilder->referTo(root->strArr4[i], root->str1);
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        zm::BlobPtr<StringTestRoot> root = blobBuilder->allocate<StringTestRoot>();
+
+        // assign from null-terminated c string (74 bytes long)
+        blobBuilder->copyTo(root->str1, "Hello World - This is a very long test string. Expected 1000000 instances");
+
+        // assign from std::string
+        std::string testStr("Hello World 2");
+        blobBuilder->copyTo(root->str2, testStr);
+
+        // assign range
+        blobBuilder->copyTo(root->str3, "Hello World 3", 7);
+
+        // assign existing string (do not introduce extra copy!)
+        blobBuilder->referTo(root->str4, root->str1);
+
+        blobBuilder->copyTo(root->str5, "Hello World 2");
+
+        std::vector<std::string> arr1 = {"first", "second", "third", "fourth"};
+        blobBuilder->copyTo(root->strArr1, arr1);
+        blobBuilder->copyTo(root->strArr2, {"one", "two", "three"});
+
+        std::array<const char*, 2> arr3 = {{"hello", "world"}};
+        blobBuilder->copyTo(root->strArr3, arr3);
+
+        // 1,000,000 strings 74 bytes each
+        // since we are assigning already existing string the string body will not be copied (only offset will be stored)
+        size_t numStrings = 1000000;
+        blobBuilder->resizeArray(root->strArr4, numStrings);
+        for (size_t i = 0; i < root->strArr4.size(); i++)
+        {
+            blobBuilder->referTo(root->strArr4[i], root->str1);
+        }
+
+        validate(root.get());
+
+        zm::Span<char> bytes = blobBuilder->finalize();
+        EXPECT_LE(bytes.size, std::size_t(4000500));
+
+        bytesCopy = utils::copyBytes(bytes);
+        std::memset(bytes.data, 0xFF, bytes.size);
     }
-
-    validate(root.get());
-
-    zm::Span<char> bytes = blobBuilder->finalize();
-    EXPECT_LE(bytes.size, std::size_t(4000500));
-
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
 
     const StringTestRoot* rootCopy = (const StringTestRoot*)(bytesCopy.data());
 

@@ -33,28 +33,32 @@ static void validate(const PointerTestRoot* root)
 
 TEST(ZmeyaTestSuite, PointerTest)
 {
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    std::vector<char> bytesCopy;
+    {
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
 
-    zm::BlobPtr<PointerTestRoot> root = blobBuilder->allocate<PointerTestRoot>();
-    zm::BlobPtr<PointerTestNode> nodeLeft = blobBuilder->allocate<PointerTestNode>();
-    zm::BlobPtr<PointerTestNode> nodeRight = blobBuilder->allocate<PointerTestNode>();
+        zm::BlobPtr<PointerTestRoot> root = blobBuilder->allocate<PointerTestRoot>();
+        zm::BlobPtr<PointerTestNode> nodeLeft = blobBuilder->allocate<PointerTestNode>();
+        zm::BlobPtr<PointerTestNode> nodeRight = blobBuilder->allocate<PointerTestNode>();
 
-    root->left = nodeLeft;
-    root->right = nodeRight;
+        root->left = nodeLeft;
+        root->right = nodeRight;
 
-    nodeLeft->payload = -13;
-    nodeLeft->other = nodeRight;
+        nodeLeft->payload = -13;
+        nodeLeft->other = nodeRight;
 
-    nodeRight->payload = 13;
-    nodeRight->other = nodeLeft;
+        nodeRight->payload = 13;
+        nodeRight->other = nodeLeft;
 
-    validate(root.get());
+        validate(root.get());
 
-    zm::Span<char> bytes = blobBuilder->finalize(16);
-    // check (optional) blob size alignment
-    EXPECT_TRUE((bytes.size % 16) == 0);
+        zm::Span<char> bytes = blobBuilder->finalize(16);
+        // check (optional) blob size alignment
+        EXPECT_TRUE((bytes.size % 16) == 0);
 
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
+        bytesCopy = utils::copyBytes(bytes);
+        std::memset(bytes.data, 0xFF, bytes.size);
+    }
 
     const PointerTestRoot* rootCopy = (const PointerTestRoot*)(bytesCopy.data());
     validate(rootCopy);

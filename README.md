@@ -65,17 +65,13 @@ Zmeya movable containers' key idea is to use self-relative pointers instead of u
 The idea is pretty simple; instead of using the absolute address, we are using offset relative to the pointer's memory address.
 i.e., `target_address = uintptr_t(this) + offset`
 
-One of the problems of such offset-based addressing is the representation of the null pointer. The null pointer can't be safely represented like an offset since the absolute address 0 is always outside of the mapped region.
-So we decided to use offset 1 as a special magic value that encodes null pointer. Using offset 1 as the magic value for the null pointer means that the pointer can't point to the byte after its own pointer, which is usually not a problem.
-Also, for convenience, we decided to bias everything by -1, which makes the null pointer encoded by zero, which is great because it fits very well with zero initialization.
-So the final absolute addres resolve logic looks like this
-`target_address = uintptr_t(this) + offset + 1`
-
-Which is perfectly representable by one of x86 addressing modes
-`addr = base_reg + index_reg + const_8`
-
+Which is perfectly representable by one of x86/ARM addressing modes `addr = reg+reg`
 Here is an example of generated assembly code
-https://godbolt.org/z/v6sj6s
+https://godbolt.org/z/aTTW9E7o9
+https://godbolt.org/z/xEqTYe44j
+
+
+One of the problems of such offset-based addressing is the representation of the null pointer. The null pointer can't be safely represented like an offset since the absolute address 0 is always outside of the mapped region. So we decided to use offset 0 (pointer to self) as a special magic value that encodes null pointer.
 
 ```cpp
 #include <stdint.h>

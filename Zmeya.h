@@ -157,15 +157,10 @@ template <typename T> class BlobPtr;
 */
 template <typename T> class Pointer
 {
-    // -1 = this
-    // 0 = nullptr (can't point to 1-st byte of this pointer)
-    // 1 = this + 2
-    //
-    // this encoding is used because by default blob memory initialized by zeros and it's convenient to have all pointers initialized to
-    // null
-    //
-    // this extra offset math fits well into the x86 address arithmetic
-    // see for deteails  https://godbolt.org/z/v6sj6s
+    // addr = this + offset
+    // offset(0) = this = nullptr (here is the limitation, pointer can't point to itself)
+    // this extra offset fits well into the x86/ARM addressing modes
+    // see for details  https://godbolt.org/z/aTTW9E7o9
     roffset_t relativeOffset;
 
     bool isEqual(const Pointer& other) const noexcept { return get() == other.get(); }
@@ -175,7 +170,7 @@ template <typename T> class Pointer
         uintptr_t self = uintptr_t(this);
         // dereferencing a NULL pointer is undefined behavior, so we can skip nullptr check
         ZMEYA_ASSERT(relativeOffset != 0);
-        uintptr_t addr = toAbsoluteAddr(self + 1, relativeOffset);
+        uintptr_t addr = toAbsoluteAddr(self, relativeOffset);
         return reinterpret_cast<T*>(addr);
     }
 
@@ -187,7 +182,7 @@ template <typename T> class Pointer
     ZMEYA_NODISCARD T* get() const noexcept
     {
         uintptr_t self = uintptr_t(this);
-        uintptr_t addr = (relativeOffset == 0) ? uintptr_t(0) : toAbsoluteAddr(self + 1, relativeOffset);
+        uintptr_t addr = (relativeOffset == 0) ? uintptr_t(0) : toAbsoluteAddr(self, relativeOffset);
         return reinterpret_cast<T*>(addr);
     }
 
@@ -231,7 +226,15 @@ class String
         return (std::strcmp(s1, s2) == 0);
     }
 
-    ZMEYA_NODISCARD const char* c_str() const noexcept { return data.get(); }
+    ZMEYA_NODISCARD const char* c_str() const noexcept
+    {
+        const char* v = data.get();
+        if (v != nullptr)
+        {
+            return v;
+        }
+        return "";
+    }
 
     ZMEYA_NODISCARD bool empty() const noexcept { return data.get() != nullptr; }
     ZMEYA_NODISCARD bool operator==(const String& other) const noexcept
@@ -994,7 +997,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename T> void assignTo(Pointer<T>& _dst, offset_t targetAbsoluteOffset)
     {
         BlobPtr<Pointer<T>> dst = getBlobPtr(&_dst);
-        dst->relativeOffset = toRelativeOffset(diff(targetAbsoluteOffset, dst.getAbsoluteOffset()) - 1);
+        roffset_t relativeOffset = toRelativeOffset(diff(targetAbsoluteOffset, dst.getAbsoluteOffset()));
+        ZMEYA_ASSERT(relativeOffset != 0);
+        dst->relativeOffset = relativeOffset;
     }
 
     // copyTo pointer from BlobPtr

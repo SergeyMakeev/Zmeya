@@ -2,7 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-
 struct IteratorsTestRoot
 {
     zm::Array<int> arr;
@@ -54,18 +53,23 @@ static void validate(const IteratorsTestRoot* root)
 
 TEST(ZmeyaTestSuite, IteratorsTest)
 {
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
-    zm::BlobPtr<IteratorsTestRoot> root = blobBuilder->allocate<IteratorsTestRoot>();
+    std::vector<char> bytesCopy;
+    {
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        zm::BlobPtr<IteratorsTestRoot> root = blobBuilder->allocate<IteratorsTestRoot>();
 
-    blobBuilder->copyTo(root->arr, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0});
-    blobBuilder->copyTo(root->set, {0, 1, 4, 3, 5, 2});
-    blobBuilder->copyTo(root->map, {{0, 1}, {3, 2}, {4, 5}});
+        blobBuilder->copyTo(root->arr, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0});
+        blobBuilder->copyTo(root->set, {0, 1, 4, 3, 5, 2});
+        blobBuilder->copyTo(root->map, {{0, 1}, {3, 2}, {4, 5}});
 
-    validate(root.get());
+        validate(root.get());
 
-    zm::Span<char> bytes = blobBuilder->finalize();
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
-    
+        zm::Span<char> bytes = blobBuilder->finalize();
+        
+        bytesCopy = utils::copyBytes(bytes);
+        std::memset(bytes.data, 0xFF, bytes.size);
+    }
+
     const IteratorsTestRoot* rootCopy = (const IteratorsTestRoot*)(bytesCopy.data());
 
     validate(rootCopy);

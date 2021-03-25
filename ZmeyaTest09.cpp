@@ -75,40 +75,45 @@ static void validate(const SimpleFileTestRoot* root)
 
 static void generateTestFile(const char* fileName)
 {
-    std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
-
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
-    zm::BlobPtr<SimpleFileTestRoot> root = blobBuilder->allocate<SimpleFileTestRoot>();
-    root->magic = 0x59454D5A;
-    blobBuilder->resizeArray(root->objects, 6);
-    for (size_t i = 0; i < root->objects.size(); i++)
+    std::vector<char> bytesCopy;
     {
-        Object& object = root->objects[i];
-        blobBuilder->copyTo(object.name, objectNames[i]);
-        object.position = Vec2(float(i), float(i + 4));
+        std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-        if (i > 0)
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        zm::BlobPtr<SimpleFileTestRoot> root = blobBuilder->allocate<SimpleFileTestRoot>();
+        root->magic = 0x59454D5A;
+        blobBuilder->resizeArray(root->objects, 6);
+        for (size_t i = 0; i < root->objects.size(); i++)
         {
-            const Object& parentObject = root->objects[i - 1];
-            blobBuilder->assignTo(object.parent, parentObject);
+            Object& object = root->objects[i];
+            blobBuilder->copyTo(object.name, objectNames[i]);
+            object.position = Vec2(float(i), float(i + 4));
+
+            if (i > 0)
+            {
+                const Object& parentObject = root->objects[i - 1];
+                blobBuilder->assignTo(object.parent, parentObject);
+            }
         }
+
+        blobBuilder->copyTo(root->hashSet, {"one", "two", "three"});
+        blobBuilder->copyTo(root->hashMap, {{"1", 1.0f}, {"2", 2.0f}, {"3", 3.0f}});
+
+        validate(root.get());
+
+        zm::Span<char> bytes = blobBuilder->finalize(32);
+        EXPECT_TRUE((bytes.size % 32) == 0);
+
+        bytesCopy = utils::copyBytes(bytes);
+        std::memset(bytes.data, 0xFF, bytes.size);
     }
 
-    blobBuilder->copyTo(root->hashSet, {"one", "two", "three"});
-    blobBuilder->copyTo(root->hashMap, {{"1", 1.0f}, {"2", 2.0f}, {"3", 3.0f}});
-
-    validate(root.get());
-
-    zm::Span<char> bytes = blobBuilder->finalize(32);
-    EXPECT_TRUE((bytes.size % 32) == 0);
-
-    std::vector<char> bytesCopy = utils::copyBytes(bytes);
     const SimpleFileTestRoot* rootCopy = (const SimpleFileTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 
     FILE* file = fopen(fileName, "wb");
     ASSERT_TRUE(file != nullptr);
-    fwrite(bytes.data, bytes.size, 1, file);
+    fwrite(bytesCopy.data(), bytesCopy.size(), 1, file);
     fclose(file);
 }
 
