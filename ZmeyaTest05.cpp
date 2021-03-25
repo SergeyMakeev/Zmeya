@@ -9,6 +9,7 @@ struct StringTestRoot
     zm::String str3;
     zm::String str4;
     zm::String str5;
+    zm::String str6;
     zm::Array<zm::String> strArr1;
     zm::Array<zm::String> strArr2;
     zm::Array<zm::String> strArr3;
@@ -22,6 +23,7 @@ static void validate(const StringTestRoot* root)
     EXPECT_STREQ(root->str3.c_str(), "Hello W");
     EXPECT_STREQ(root->str4.c_str(), "Hello World - This is a very long test string. Expected 1000000 instances");
     EXPECT_STREQ(root->str5.c_str(), "Hello World 2");
+    EXPECT_STREQ(root->str6.c_str(), "");
 
     EXPECT_TRUE(root->str1 == root->str1);
     EXPECT_TRUE(root->str2 == root->str5);
