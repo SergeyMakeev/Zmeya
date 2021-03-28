@@ -123,8 +123,8 @@ i.e.
 etc...
 
 The only requirement is that we have to have all the data tightly packed in a single memory region or binary blob.
-Zmeya provides a convenient mechanism to build such a binary blob called `zm::BlobBuilder`
-Blob builder is capable of convert all the standard STL containers to appropriate zmeya movable containers. Blob builder also provides a mechanism to convert all the inner types (e.g., std::vector<std::string>) to Zmeya compatible type. And by default, Zmeya offers convertors/template specializations for all commonly used cases.
+Zmeya provides a convenient mechanism to build such a binary blob called `zm::BlobBuilder`.
+Blob builder is capable of convert all the standard STL containers to appropriate Zmeya movable containers. Blob builder also provides a mechanism to convert all the inner types (e.g., `std::vector<std::string>`) to Zmeya compatible type. And by default, Zmeya offers convertors/template specializations for all commonly used cases.
 
 # References
 
