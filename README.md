@@ -80,7 +80,7 @@ template<typename T>
 struct OffsetPtr {
     int32_t offset;
     T* get() const noexcept {
-        return reinterpret_cast<T*>(uintptr_t(this) + 1 + offset);
+        return reinterpret_cast<T*>(uintptr_t(this) + offset);
     }
 };
 
@@ -104,7 +104,7 @@ int test2(const Ptr<int>& ptr) {
 ```asm
 test1(OffsetPtr<int> const&):
         movsx   rax, DWORD PTR [rdi]
-        mov     eax, DWORD PTR [rax+1+rdi]
+        mov     eax, DWORD PTR [rax+rdi]
         ret
         
 test2(Ptr<int> const&):
