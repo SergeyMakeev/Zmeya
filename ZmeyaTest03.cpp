@@ -22,6 +22,7 @@ struct ArrayTestRoot
     zm::Array<float> arr3;
     zm::Array<zm::Array<float>> arr4;
     zm::Array<zm::Pointer<Payload>> arr5;
+    zm::Array<zm::Array<uint32_t>> arr6;
 };
 
 static void validate(const ArrayTestRoot* root)
@@ -73,6 +74,25 @@ static void validate(const ArrayTestRoot* root)
         EXPECT_FLOAT_EQ(root->arr5[i]->a, a);
         EXPECT_EQ(root->arr5[i]->b, b);
     }
+
+    EXPECT_EQ(root->arr6.size(), std::size_t(3));
+    EXPECT_EQ(root->arr6[0].size(), std::size_t(2));
+    EXPECT_EQ(root->arr6[1].size(), std::size_t(5));
+    EXPECT_EQ(root->arr6[2].size(), std::size_t(4));
+
+    EXPECT_EQ(root->arr6[0][0], uint32_t(1));
+    EXPECT_EQ(root->arr6[0][1], uint32_t(2));
+
+    EXPECT_EQ(root->arr6[1][0], uint32_t(2));
+    EXPECT_EQ(root->arr6[1][1], uint32_t(7));
+    EXPECT_EQ(root->arr6[1][2], uint32_t(11));
+    EXPECT_EQ(root->arr6[1][3], uint32_t(9));
+    EXPECT_EQ(root->arr6[1][4], uint32_t(141));
+
+    EXPECT_EQ(root->arr6[2][0], uint32_t(15));
+    EXPECT_EQ(root->arr6[2][1], uint32_t(9));
+    EXPECT_EQ(root->arr6[2][2], uint32_t(33));
+    EXPECT_EQ(root->arr6[2][3], uint32_t(7));
 }
 
 TEST(ZmeyaTestSuite, ArrayTest)
@@ -108,6 +128,9 @@ TEST(ZmeyaTestSuite, ArrayTest)
             zm::BlobPtr<Payload> payload = blobBuilder->allocate<Payload>(1.3f + float(i) * 0.4f, uint32_t(i) + 3);
             root->arr5[i] = payload;
         }
+
+        std::vector<std::vector<uint32_t>> vec2 = {{1, 2}, {2, 7, 11, 9, 141}, {15, 9, 33, 7}};
+        blobBuilder->copyTo(root->arr6, vec2);
 
         validate(root.get());
 

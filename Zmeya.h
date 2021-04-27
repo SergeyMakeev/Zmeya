@@ -1022,6 +1022,18 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         copyToArrayFast(dst, src.data(), src.size());
     }
 
+    // specialization for vector of vectors
+    template <typename T, typename TAllocator1, typename TAllocator2>
+    void copyTo(Array<Array<T>>& dst, const std::vector<std::vector<T, TAllocator2>, TAllocator1>& src)
+    {
+        ZMEYA_ASSERT(src.size() > 0);
+        copyToArray(dst, src.begin(), src.end(), src.size(),
+                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const std::vector<T>& src) {
+                        Array<T>& dst = blobBuilder->getDirectMemoryAccess<Array<T>>(dstAbsoluteOffset);
+                        blobBuilder->copyTo(dst, src);
+                    });
+    }
+
     // specialization for vector of strings
     template <typename T, typename TAllocator> void copyTo(Array<String>& dst, const std::vector<T, TAllocator>& src)
     {
