@@ -74,7 +74,7 @@
 #else
 // Posix
 #include <stdlib.h>
-void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
+inline void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
 {
     void* ptr = nullptr;
     if (posix_memalign(&ptr, alignment, sizeInBytes) != 0)

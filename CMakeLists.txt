@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.12)
 set(PROJ_NAME ZmeyaTest)
 project(${PROJ_NAME})
 
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
 
