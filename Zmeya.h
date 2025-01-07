@@ -32,15 +32,78 @@
 #include <vector>
 
 #include <assert.h>
+
+// If this is not defined, the built-in hash will be used instead of the user-provided hash
+// ZMEYA_EXTERNAL_HASH
+//
+//
+// Override built-in memory allocation functionbs
+// ZMEYA_ALLOC
+// ZMEYA_FREE
+//
+//
+// This macro is only necessary if you want to create serializable data.
+// If you only need to read Zmeya blobs, you don't need it.
+// ZMEYA_ENABLE_SERIALIZE_SUPPORT
+//
+//
+// To override NODISCARD
+// ZMEYA_NODISCARD
+//
+//
+// To override FALLTHROUGH
+// ZMEYA_FALLTHROUGH
+//
+//
+// To override ASSERT
+// ZMEYA_ASSERT
+//
+//
+
+#if !defined(ZMEYA_ALLOC) || !defined(ZMEYA_FREE)
+#if defined(_WIN32)
+// Windows
 #include <xmmintrin.h>
+#define ZMEYA_ALLOC(sizeInBytes, alignment) _mm_malloc(sizeInBytes, alignment)
+#define ZMEYA_FREE(ptr) _mm_free(ptr)
+#elif defined(__ANDROID__)
+// Android
+#include <stdlib.h>
+#define ZMEYA_ALLOC(sizeInBytes, alignment) memalign(alignment, sizeInBytes);
+#define ZMEYA_FREE(ptr) free(ptr)
+#else
+// Posix
+#include <stdlib.h>
+void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
+{
+    void* ptr = nullptr;
+    if (posix_memalign(&ptr, alignment, sizeInBytes) != 0)
+    {
+        return nullptr;
+    }
+    return ptr;
+}
+#define ZMEYA_ALLOC(sizeInBytes, alignment) alloc_aligned_posix(alignment, sizeInBytes)
+#define ZMEYA_FREE(ptr) free(ptr)
+#endif
+#endif
 
-// This macro is only needed if you want to create serializable data
-// (deserialization doesn't need this)
-//#define ZMEYA_ENABLE_SERIALIZE_SUPPORT
-
+#ifndef ZMEYA_ASSERT
 #define ZMEYA_ASSERT(cond) assert(cond)
-//#define ZMEYA_NODISCARD [[nodiscard]]
-#define ZMEYA_NODISCARD
+#endif
+
+#ifndef ZMEYA_NODISCARD
+#define ZMEYA_NODISCARD [[nodiscard]]
+#endif
+
+#ifndef ZMEYA_FALLTHROUGH
+#if __cplusplus >= 201703L
+#define ZMEYA_FALLTHROUGH [[fallthrough]]
+#else
+#define ZMEYA_FALLTHROUGH
+#endif
+#endif
+
 #define ZMEYA_MAX_ALIGN (64)
 
 #ifdef _DEBUG
@@ -80,16 +143,22 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
     {
     case 7:
         h ^= (uint64_t)((uint64_t)data2[6] << (uint64_t)48);
+        ZMEYA_FALLTHROUGH;
     case 6:
         h ^= (uint64_t)((uint64_t)data2[5] << (uint64_t)40);
+        ZMEYA_FALLTHROUGH;
     case 5:
         h ^= (uint64_t)((uint64_t)data2[4] << (uint64_t)32);
+        ZMEYA_FALLTHROUGH;
     case 4:
         h ^= (uint64_t)((uint64_t)data2[3] << (uint64_t)24);
+        ZMEYA_FALLTHROUGH;
     case 3:
         h ^= (uint64_t)((uint64_t)data2[2] << (uint64_t)16);
+        ZMEYA_FALLTHROUGH;
     case 2:
         h ^= (uint64_t)((uint64_t)data2[1] << (uint64_t)8);
+        ZMEYA_FALLTHROUGH;
     case 1:
         h ^= (uint64_t)((uint64_t)data2[0]);
         h *= m;
@@ -98,17 +167,17 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
     h ^= h >> r;
     h *= m;
     h ^= h >> r;
-
     return h;
 }
 
 #undef ZMEYA_MURMURHASH_MAGIC64A
 
+#ifndef ZMEYA_EXTERNAL_HASH
 //
 // Functions and types to interact with the application
 // Feel free to replace them to your engine specific functions
 //
-namespace AppInterop
+namespace HashUtils
 {
 
 // hasher
@@ -121,14 +190,8 @@ ZMEYA_NODISCARD inline size_t hashString(const char* str)
     uint64_t hash = zm::murmur_hash_process64a(str, uint32_t(len), 13061979);
     return size_t(hash);
 }
-
-// aligned allocator
-ZMEYA_NODISCARD inline void* aligned_alloc(size_t size, size_t alignment) { return _mm_malloc(size, alignment); }
-
-// aligned free
-inline void aligned_free(void* p) { _mm_free(p); }
-
-} // namespace AppInterop
+} // namespace Hash
+#endif
 
 // absolute offset/difference type
 using offset_t = std::uintptr_t;
@@ -341,7 +404,7 @@ template <typename T> class Array
 template <typename Item> struct HashKeyAdapterGeneric
 {
     typedef Item ItemType;
-    static size_t hash(const ItemType& item) { return AppInterop::hasher(item); }
+    static size_t hash(const ItemType& item) { return HashUtils::hasher(item); }
     static bool eq(const ItemType& a, const ItemType& b) { return a == b; }
 };
 
@@ -349,7 +412,7 @@ template <typename Item> struct HashKeyAdapterGeneric
 struct HashKeyAdapterStdString
 {
     typedef std::string ItemType;
-    static size_t hash(const ItemType& item) { return AppInterop::hashString(item.c_str()); }
+    static size_t hash(const ItemType& item) { return HashUtils::hashString(item.c_str()); }
     static bool eq(const ItemType& a, const ItemType& b) { return a == b; }
 };
 
@@ -357,7 +420,7 @@ struct HashKeyAdapterStdString
 template <typename Item> struct HashKeyValueAdapterGeneric
 {
     typedef Item ItemType;
-    static size_t hash(const ItemType& item) { return AppInterop::hasher(item.first); }
+    static size_t hash(const ItemType& item) { return HashUtils::hasher(item.first); }
     static bool eq(const ItemType& a, const ItemType& b) { return a.first == b.first; }
 };
 
@@ -365,7 +428,7 @@ template <typename Item> struct HashKeyValueAdapterGeneric
 template <typename Value> struct HashKeyValueAdapterStdString
 {
     typedef std::pair<const std::string, Value> ItemType;
-    static size_t hash(const ItemType& item) { return AppInterop::hashString(item.first.c_str()); }
+    static size_t hash(const ItemType& item) { return HashUtils::hashString(item.first.c_str()); }
     static bool eq(const ItemType& a, const ItemType& b) { return a.first == b.first; }
 };
 
@@ -374,7 +437,7 @@ template <typename Value> struct HashKeyValueAdapterStdString
 struct HashKeyAdapterCStr
 {
     typedef const char* ItemType;
-    static size_t hash(const ItemType& item) { return AppInterop::hashString(item); }
+    static size_t hash(const ItemType& item) { return HashUtils::hashString(item); }
     static bool eq(const String& a, const ItemType& b) { return a == b; }
 };
 
@@ -599,6 +662,9 @@ template <typename Key, typename Value> class HashMap
     friend class BlobBuilder;
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
 
 ZMEYA_NODISCARD inline diff_t diff(offset_t a, offset_t b) noexcept
@@ -698,11 +764,16 @@ template <typename T, int Alignment> class BlobBuilderAllocator : public std::al
 
     pointer allocate(size_type n)
     {
-        void* const pv = AppInterop::aligned_alloc(n * sizeof(T), Alignment);
+        const size_t alignment = Alignment;
+        void* const pv = ZMEYA_ALLOC(n * sizeof(T), alignment);
         return static_cast<pointer>(pv);
     }
 
-    void deallocate(pointer p, size_type) { AppInterop::aligned_free(p); }
+    void deallocate(pointer p, size_type)
+    {
+        //
+        ZMEYA_FREE(p);
+    }
 
     BlobBuilderAllocator()
         : std::allocator<T>()
@@ -717,7 +788,6 @@ template <typename T, int Alignment> class BlobBuilderAllocator : public std::al
         : std::allocator<T>(a)
     {
     }
-    ~BlobBuilderAllocator() {}
 };
 
 /*
@@ -785,6 +855,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         data.reserve(initialSizeInBytes);
     }
+
+    ~BlobBuilder() = default;
 
     bool containsPointer(const void* p) const { return (!data.empty() && (p >= &data.front() && p <= &data.back())); }
 
@@ -1028,7 +1100,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     {
         ZMEYA_ASSERT(src.size() > 0);
         copyToArray(dst, src.begin(), src.end(), src.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const std::vector<T>& src) {
+                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const std::vector<T>& src)
+                    {
                         Array<T>& dst = blobBuilder->getDirectMemoryAccess<Array<T>>(dstAbsoluteOffset);
                         blobBuilder->copyTo(dst, src);
                     });
@@ -1038,10 +1111,12 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename T, typename TAllocator> void copyTo(Array<String>& dst, const std::vector<T, TAllocator>& src)
     {
         ZMEYA_ASSERT(src.size() > 0);
-        copyToArray(dst, src.begin(), src.end(), src.size(), [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src) {
-            String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
-            blobBuilder->copyTo(dst, src);
-        });
+        copyToArray(dst, src.begin(), src.end(), src.size(),
+                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src)
+                    {
+                        String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
+                        blobBuilder->copyTo(dst, src);
+                    });
     }
 
     // copyTo array from std::initializer_list
@@ -1056,7 +1131,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     {
         ZMEYA_ASSERT(list.size() > 0);
         copyToArray(dst, list.begin(), list.end(), list.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const char* const& src) {
+                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const char* const& src)
+                    {
                         String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
                         blobBuilder->copyTo(dst, src);
                     });
@@ -1073,10 +1149,12 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
     template <typename T, size_t NumElements> void copyTo(Array<String>& dst, const std::array<T, NumElements>& src)
     {
         ZMEYA_ASSERT(src.size() > 0);
-        copyToArray(dst, src.begin(), src.end(), src.size(), [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src) {
-            String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
-            blobBuilder->copyTo(dst, src);
-        });
+        copyToArray(dst, src.begin(), src.end(), src.size(),
+                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src)
+                    {
+                        String& dst = blobBuilder->getDirectMemoryAccess<String>(dstAbsoluteOffset);
+                        blobBuilder->copyTo(dst, src);
+                    });
     }
 
     // copyTo hash set from std::unordered_set
@@ -1088,7 +1166,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem = srcElem;
@@ -1104,7 +1183,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem, srcElem);
@@ -1119,7 +1199,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem = srcElem;
@@ -1134,7 +1215,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem, srcElem);
@@ -1150,7 +1232,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
@@ -1167,7 +1250,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
@@ -1184,7 +1268,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
@@ -1201,7 +1286,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
@@ -1217,7 +1303,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
@@ -1233,7 +1320,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
@@ -1249,7 +1337,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 dstElem.first = srcElem.first;
@@ -1265,7 +1354,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         copyToHash<SrcItemAdapter, DstItemAdapter>(
             dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem) {
+            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
+            {
                 typename DstItemAdapter::ItemType& dstElem =
                     blobBuilder->getDirectMemoryAccess<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
                 blobBuilder->copyTo(dstElem.first, srcElem.first);
@@ -1342,7 +1432,8 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
     ZMEYA_NODISCARD static std::shared_ptr<BlobBuilder> create(size_t initialSizeInBytes = 2048)
     {
-        return std::make_shared<BlobBuilder>(initialSizeInBytes, PrivateToken{});
+        BlobBuilderAllocator<BlobBuilder, ZMEYA_MAX_ALIGN> allocator;
+        return std::allocate_shared<BlobBuilder>(allocator, initialSizeInBytes, PrivateToken{});
     }
 
     template <typename T> friend class BlobPtr;
@@ -1375,6 +1466,9 @@ template <typename T> Pointer<T>& Pointer<T>::operator=(const BlobPtr<T>& other)
 }
 
 #endif
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace zm
 
@@ -1385,7 +1479,7 @@ template <> struct hash<zm::String>
     size_t operator()(zm::String const& s) const noexcept
     {
         const char* str = s.c_str();
-        return zm::AppInterop::hashString(str);
+        return zm::HashUtils::hashString(str);
     }
 };
 } // namespace std

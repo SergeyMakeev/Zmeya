@@ -24,6 +24,7 @@ set(ZMEYA_SOURCES
 )
 
 add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_NAME})
 
 if(MSVC)
   target_compile_options(${PROJ_NAME} PRIVATE /W4 /WX)
