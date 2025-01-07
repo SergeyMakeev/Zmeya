@@ -93,7 +93,11 @@ void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
 #endif
 
 #ifndef ZMEYA_NODISCARD
+#if __cplusplus >= 201703L
 #define ZMEYA_NODISCARD [[nodiscard]]
+#else
+#define ZMEYA_NODISCARD
+#endif
 #endif
 
 #ifndef ZMEYA_FALLTHROUGH
@@ -702,7 +706,7 @@ template <typename T> class BlobPtr
     std::weak_ptr<const BlobBuilder> blob;
     offset_t absoluteOffset = 0;
 
-    bool isEqual(const BlobPtr& other) const
+    bool isEqual(const BlobPtr<T>& other) const
     {
         if (blob != other.blob)
         {
