@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.12)
 set(PROJ_NAME ZmeyaTest)
 project(${PROJ_NAME})
 
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
 
@@ -24,6 +24,7 @@ set(ZMEYA_SOURCES
 )
 
 add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_NAME})
 
 if(MSVC)
   target_compile_options(${PROJ_NAME} PRIVATE /W4 /WX)
