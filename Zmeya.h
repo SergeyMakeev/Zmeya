@@ -83,7 +83,7 @@ inline void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
     }
     return ptr;
 }
-#define ZMEYA_ALLOC(sizeInBytes, alignment) alloc_aligned_posix(alignment, sizeInBytes)
+#define ZMEYA_ALLOC(sizeInBytes, alignment) alloc_aligned_posix(sizeInBytes, alignment)
 #define ZMEYA_FREE(ptr) free(ptr)
 #endif
 #endif
