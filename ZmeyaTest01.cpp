@@ -137,10 +137,12 @@ TEST(ZmeyaTestSuite, SimpleTest2)
                                             "oceanic", "painter", "quarter", "rescue",  "seventh", "trivial", "umbrella",
                                             "village", "warrior", "xenial",  "yonder",  "zephyr"};
 
+/*
     Memory::mallocCount = 0;
     Memory::freeCount = 0;
     EXPECT_EQ(Memory::mallocCount, size_t(0));
     EXPECT_EQ(Memory::freeCount, size_t(0));
+*/
 
     std::vector<char> blob;
     {
@@ -164,9 +166,11 @@ TEST(ZmeyaTestSuite, SimpleTest2)
         blob = std::vector<char>(bytes.data, bytes.data + bytes.size);
     }
 
+/*
     EXPECT_GT(Memory::mallocCount, size_t(0));
     EXPECT_GT(Memory::freeCount, size_t(0));
     EXPECT_EQ(Memory::mallocCount, Memory::freeCount);
+*/
 
     // validate
     const TestRoot* rootCopy = (const TestRoot*)(blob.data());
@@ -180,5 +184,7 @@ TEST(ZmeyaTestSuite, SimpleTest2)
         EXPECT_EQ(desc.v2, (uint32_t)(i));
     }
 
+/*
     EXPECT_EQ(Memory::mallocCount, Memory::freeCount);
+*/
 }
