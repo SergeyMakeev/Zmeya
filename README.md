@@ -5,7 +5,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/qllqgshfy9cjme2q?svg=true)](https://ci.appveyor.com/project/SergeyMakeev/zmeya)
 ![MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-Zmeya is a header-only C++11/17 binary serialization library designed for games and performance-critical applications.
+Zmeya is a header-only C++ binary serialization library designed for games and performance-critical applications.
 Zmeya is not even a serialization library in the usual sense but rather a set of STL-like containers that entirely agnostic for their memory location and movable. As long as you use Zmeya data structures + other trivially_copyable, everything just works, and there is no deserialization cost. You can memory-map a serialized file and immediately start using your data. There are no pointers fixup, nor any other parsing/decoding needed. You can also serialize your data and send it over the network, there is no deserialization cost on the receiver side, or you can even use Zmeya for interprocess communication.
 
 # Features
