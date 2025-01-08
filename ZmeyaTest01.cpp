@@ -34,7 +34,7 @@ void* malloc(size_t bytesCount, size_t alignment)
     Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p2) - sizeof(Header));
     h->p = p;
     h->size = bytesCount;
-    h->magic = 0x13061979;
+    h->magic = size_t(0x13061979);
     return p2;
 }
 
@@ -46,7 +46,7 @@ void mfree(void* p)
         return;
     }
     Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p) - sizeof(Header));
-    ASSERT_EQ(h->magic, 0x13061979);
+    ASSERT_EQ(h->magic, size_t(0x13061979));
     std::free(h->p);
 }
 
@@ -136,8 +136,8 @@ TEST(ZmeyaTestSuite, SimpleTest2)
 
     Memory::mallocCount = 0;
     Memory::freeCount = 0;
-    EXPECT_EQ(Memory::mallocCount, 0);
-    EXPECT_EQ(Memory::freeCount, 0);
+    EXPECT_EQ(Memory::mallocCount, size_t(0));
+    EXPECT_EQ(Memory::freeCount, size_t(0));
 
     std::vector<char> blob;
     {
@@ -161,8 +161,8 @@ TEST(ZmeyaTestSuite, SimpleTest2)
         blob = std::vector<char>(bytes.data, bytes.data + bytes.size);
     }
 
-    EXPECT_GT(Memory::mallocCount, 0);
-    EXPECT_GT(Memory::freeCount, 0);
+    EXPECT_GT(Memory::mallocCount, size_t(0));
+    EXPECT_GT(Memory::freeCount, size_t(0));
     EXPECT_EQ(Memory::mallocCount, Memory::freeCount);
 
     // validate
