@@ -141,7 +141,8 @@ void createChildren(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestNode
         blobBuilder->copyTo(node->name, "leaf_" + std::to_string(startIndex + i));
         node->payload = uint32_t(count + startIndex * 13);
         node->parent = parent;
-        parent->children[i] = node;
+        zm::BlobPtr<zm::Pointer<MMapTestNode>> ch = blobBuilder->getArrayElement(parent->children, i);
+        *ch = node;
     }
 }
 
@@ -173,7 +174,7 @@ zm::BlobPtr<MMapTestNode> allocateNode2(zm::BlobBuilder* blobBuilder, const zm::
 
 static void generateTestFile(const char* fileName)
 {
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
     zm::BlobPtr<MMapTestRoot> root = blobBuilder->allocate<MMapTestRoot>();
     root->magic = 0x59454D5A;
     blobBuilder->copyTo(root->desc, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
@@ -191,7 +192,8 @@ static void generateTestFile(const char* fileName)
         {
             rootNode = allocateNode2(blobBuilder.get(), root, i);
         }
-        root->roots[i] = rootNode;
+        zm::BlobPtr<zm::Pointer<MMapTestNode>> rt = blobBuilder->getArrayElement(root->roots, i);
+        *rt = rootNode;
     }
 
     validate(root.get());

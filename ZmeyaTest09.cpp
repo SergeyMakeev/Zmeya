@@ -79,20 +79,20 @@ static void generateTestFile(const char* fileName)
     {
         std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
         zm::BlobPtr<SimpleFileTestRoot> root = blobBuilder->allocate<SimpleFileTestRoot>();
         root->magic = 0x59454D5A;
         blobBuilder->resizeArray(root->objects, 6);
         for (size_t i = 0; i < root->objects.size(); i++)
         {
-            Object& object = root->objects[i];
-            blobBuilder->copyTo(object.name, objectNames[i]);
-            object.position = Vec2(float(i), float(i + 4));
+            zm::BlobPtr<Object> object = blobBuilder->getArrayElement(root->objects, i);
+            blobBuilder->copyTo(object->name, objectNames[i]);
+            object->position = Vec2(float(i), float(i + 4));
 
             if (i > 0)
             {
                 const Object& parentObject = root->objects[i - 1];
-                blobBuilder->assignTo(object.parent, parentObject);
+                blobBuilder->assignTo(object->parent, parentObject);
             }
         }
 

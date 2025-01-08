@@ -55,7 +55,7 @@ TEST(ZmeyaTestSuite, IteratorsTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
         zm::BlobPtr<IteratorsTestRoot> root = blobBuilder->allocate<IteratorsTestRoot>();
 
         blobBuilder->copyTo(root->arr, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0});

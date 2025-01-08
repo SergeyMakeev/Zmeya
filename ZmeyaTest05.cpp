@@ -58,7 +58,7 @@ TEST(ZmeyaTestSuite, StringTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
         zm::BlobPtr<StringTestRoot> root = blobBuilder->allocate<StringTestRoot>();
 
         // assign from null-terminated c string (74 bytes long)
@@ -89,7 +89,7 @@ TEST(ZmeyaTestSuite, StringTest)
         blobBuilder->resizeArray(root->strArr4, numStrings);
         for (size_t i = 0; i < root->strArr4.size(); i++)
         {
-            blobBuilder->referTo(root->strArr4[i], root->str1);
+            blobBuilder->referTo(blobBuilder->getArrayElement(root->strArr4, i), root->str1);
         }
 
         validate(root.get());
