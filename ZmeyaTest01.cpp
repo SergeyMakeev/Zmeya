@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 
+/*
 namespace Memory
 {
 
@@ -54,6 +55,8 @@ void mfree(void* p)
 
 #define ZMEYA_ALLOC(sizeInBytes, alignment) Memory::malloc(sizeInBytes, alignment)
 #define ZMEYA_FREE(ptr) Memory::mfree(ptr)
+*/
+
 #include "TestHelper.h"
 #include "Zmeya.h"
 
