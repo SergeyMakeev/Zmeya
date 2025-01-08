@@ -99,7 +99,7 @@ TEST(ZmeyaTestSuite, ArrayTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
         zm::BlobPtr<ArrayTestRoot> root = blobBuilder->allocate<ArrayTestRoot>();
 
         // assign from std::vector
@@ -116,17 +116,18 @@ TEST(ZmeyaTestSuite, ArrayTest)
         // resize array
         blobBuilder->resizeArray(root->arr4, 4);
         // assign array elements (sub-arrays)
-        blobBuilder->copyTo(root->arr4[0], {1.2f, 2.3f});
-        blobBuilder->copyTo(root->arr4[1], {7.1f, 8.8f, 3.2f});
-        blobBuilder->copyTo(root->arr4[2], {16.0f, 12.0f, 99.5f, -143.0f});
-        blobBuilder->copyTo(root->arr4[3], {-1.0f});
+        
+        blobBuilder->copyTo(blobBuilder->getArrayElement(root->arr4, 0), {1.2f, 2.3f});
+        blobBuilder->copyTo(blobBuilder->getArrayElement(root->arr4, 1), {7.1f, 8.8f, 3.2f});
+        blobBuilder->copyTo(blobBuilder->getArrayElement(root->arr4, 2), {16.0f, 12.0f, 99.5f, -143.0f});
+        blobBuilder->copyTo(blobBuilder->getArrayElement(root->arr4, 3), {-1.0f});
 
         // resize array
         blobBuilder->resizeArray(root->arr5, 793);
         for (size_t i = 0; i < root->arr5.size(); i++)
         {
             zm::BlobPtr<Payload> payload = blobBuilder->allocate<Payload>(1.3f + float(i) * 0.4f, uint32_t(i) + 3);
-            root->arr5[i] = payload;
+            *blobBuilder->getArrayElement(root->arr5, i) = payload;
         }
 
         std::vector<std::vector<uint32_t>> vec2 = {{1, 2}, {2, 7, 11, 9, 141}, {15, 9, 33, 7}};

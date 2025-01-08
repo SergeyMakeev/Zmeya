@@ -22,7 +22,7 @@ struct ReferToTestRoot
 
 template <typename T> static void validateNode(const T* node)
 {
-    EXPECT_EQ(node->str, "This is supposed to be a long enough string. I think it is long enough now.");
+    EXPECT_STREQ(node->str.c_str(), "This is supposed to be a long enough string. I think it is long enough now.");
     EXPECT_EQ(node->arr.size(), std::size_t(10));
     EXPECT_EQ(node->arr[0], 1);
     EXPECT_EQ(node->arr[1], 2);
@@ -45,10 +45,10 @@ template <typename T> static void validateNode(const T* node)
     EXPECT_FALSE(node->hashSet.contains(32));
 
     EXPECT_EQ(node->hashMap.size(), std::size_t(4));
-    EXPECT_FLOAT_EQ(node->hashMap.find("one", 0.0f), 1.0f);
-    EXPECT_FLOAT_EQ(node->hashMap.find("two", 0.0f), 2.0f);
-    EXPECT_FLOAT_EQ(node->hashMap.find("three", 0.0f), 3.0f);
-    EXPECT_FLOAT_EQ(node->hashMap.find("four", 0.0f), 4.0f);
+    EXPECT_FLOAT_EQ(node->hashMap.find("one", -1.0f), 1.0f);
+    EXPECT_FLOAT_EQ(node->hashMap.find("two", -1.0f), 2.0f);
+    EXPECT_FLOAT_EQ(node->hashMap.find("three", -1.0f), 3.0f);
+    EXPECT_FLOAT_EQ(node->hashMap.find("four", -1.0f), 4.0f);
 }
 
 static void validate(const ReferToTestRoot* root)
@@ -66,7 +66,7 @@ TEST(ZmeyaTestSuite, ReferToTest)
     std::vector<char> bytesCopy;
     {
         // create blob
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
 
         // allocate structure
         zm::BlobPtr<ReferToTestRoot> root = blobBuilder->allocate<ReferToTestRoot>();
@@ -75,15 +75,28 @@ TEST(ZmeyaTestSuite, ReferToTest)
         blobBuilder->copyTo(root->hashSet, {1, 5, 15, 23, 38, 31});
         blobBuilder->copyTo(root->hashMap, {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}});
 
+        float f1 = root->hashMap.find("one", -1.0f);
+        EXPECT_FLOAT_EQ(f1, 1.0f);
+
+        float f2 = root->hashMap.find("two", -1.0f);
+        EXPECT_FLOAT_EQ(f2, 2.0f);
+
+        float f3 = root->hashMap.find("three", -1.0f);
+        EXPECT_FLOAT_EQ(f3, 3.0f);
+
+        float f4 = root->hashMap.find("four", -1.0f);
+        EXPECT_FLOAT_EQ(f4, 4.0f);
+
+
         size_t nodesCount = 10000;
         blobBuilder->resizeArray(root->nodes, nodesCount);
         for (size_t i = 0; i < nodesCount; i++)
         {
-            ReferToTestNode& node = root->nodes[i];
-            blobBuilder->referTo(node.str, root->str);
-            blobBuilder->referTo(node.arr, root->arr);
-            blobBuilder->referTo(node.hashSet, root->hashSet);
-            blobBuilder->referTo(node.hashMap, root->hashMap);
+            zm::BlobPtr<ReferToTestNode> node = blobBuilder->getArrayElement(root->nodes, i);
+            blobBuilder->referTo(node->str, root->str);
+            blobBuilder->referTo(node->arr, root->arr);
+            blobBuilder->referTo(node->hashSet, root->hashSet);
+            blobBuilder->referTo(node->hashMap, root->hashMap);
         }
 
         validate(root.get());

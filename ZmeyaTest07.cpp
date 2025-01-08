@@ -87,7 +87,7 @@ TEST(ZmeyaTestSuite, HashMapTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
         zm::BlobPtr<HashMapTestRoot> root = blobBuilder->allocate<HashMapTestRoot>();
 
         // assign from std::unordered_map

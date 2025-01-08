@@ -35,7 +35,7 @@ TEST(ZmeyaTestSuite, PointerTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
 
         zm::BlobPtr<PointerTestRoot> root = blobBuilder->allocate<PointerTestRoot>();
         zm::BlobPtr<PointerTestNode> nodeLeft = blobBuilder->allocate<PointerTestNode>();

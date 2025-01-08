@@ -70,7 +70,7 @@ TEST(ZmeyaTestSuite, HashSetTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create();
+        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
         zm::BlobPtr<HashSetTestRoot> root = blobBuilder->allocate<HashSetTestRoot>();
 
         // assign from std::unordered_set
