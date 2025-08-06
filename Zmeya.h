@@ -303,7 +303,7 @@ class String
         return "";
     }
 
-    ZMEYA_NODISCARD bool empty() const noexcept { return data.get() != nullptr; }
+    ZMEYA_NODISCARD bool empty() const noexcept { return data.get() == nullptr; }
     ZMEYA_NODISCARD bool operator==(const String& other) const noexcept
     {
         // both strings can point to the same memory (fast-path)
