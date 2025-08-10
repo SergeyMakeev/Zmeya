@@ -20,10 +20,15 @@ set(ZMEYA_SOURCES
   ZmeyaTest09.cpp
   ZmeyaTest10.cpp
   ZmeyaTest11.cpp
-  Zmeya.h
 )
 
 add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})
+
+
+add_subdirectory("${PROJECT_SOURCE_DIR}/Zmeya")
+target_link_libraries(${PROJ_NAME} Zmeya)
+
+
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_NAME})
 
 if(MSVC)
