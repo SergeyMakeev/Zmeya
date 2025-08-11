@@ -20,6 +20,8 @@ set(ZMEYA_SOURCES
   ZmeyaTest09.cpp
   ZmeyaTest10.cpp
   ZmeyaTest11.cpp
+  ZmeyaTestNewAPI.cpp
+  ZmeyaTestSimple.cpp
 )
 
 add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})
