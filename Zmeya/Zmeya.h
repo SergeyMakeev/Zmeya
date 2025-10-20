@@ -291,7 +291,7 @@ template <typename T> class Pointer
     ZMEYA_NODISCARD bool operator==(std::nullptr_t) const noexcept { return relativeOffset == 0; }
     ZMEYA_NODISCARD bool operator!=(std::nullptr_t) const noexcept { return relativeOffset != 0; }
 
-    friend class BlobBuilder;
+    //friend class BlobBuilder;
 };
 
 /*
@@ -341,7 +341,7 @@ class String
         return !isEqual(other.c_str());
     }
 
-    friend class BlobBuilder;
+    //friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     inline friend void assign(String& to, const std::string& from);
@@ -424,7 +424,7 @@ template <typename T> class Array
 
     ZMEYA_NODISCARD bool empty() const noexcept { return size() == 0; }
 
-    friend class BlobBuilder;
+    //friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     template <typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
@@ -538,7 +538,7 @@ template <typename Key> class HashSet
     }
 
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return containsImpl<Key, HashKeyAdapterGeneric<Key>>(key); }
-    friend class BlobBuilder;
+    //friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     template <typename K, typename F> friend void assign(HashSet<K>& to, const std::unordered_set<F>& from);
@@ -702,7 +702,7 @@ template <typename Key, typename Value> class HashMap
         return valueIfNotFound;
     }
 
-    friend class BlobBuilder;
+    //friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     template <typename K, typename V, typename FK, typename FV>
@@ -861,6 +861,9 @@ template <typename T> std::weak_ptr<T> weak_from(T* p)
     return shared;
 }
 
+
+#if 0
+
 /*
     Blob - a binary blob of data that is able to store POD types and special
    "movable" data structures Note: Zmeya containers can be freely moved in
@@ -935,11 +938,14 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         return BlobPtr<char>(weak_from(this), offset_t(absoluteOffset));
     }
 
+#if 0
     template <typename T, typename... _Valty> void placementCtor(void* ptr, _Valty&&... _Val)
     {
         ::new (const_cast<void*>(static_cast<const volatile void*>(ptr))) T(std::forward<_Valty>(_Val)...);
     }
+#endif
 
+#if 0
     template <typename T, typename... _Valty> BlobPtr<T> allocate(_Valty&&... _Val)
     {
         // compile time checks
@@ -955,6 +961,10 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
         return BlobPtr<T>(weak_from(this), ptr.getAbsoluteOffset());
     }
+#endif
+
+
+#if 0
 
     template <typename T> T* getDirectMemoryAccessUnsafe(offset_t absoluteOffset)
     {
@@ -1021,7 +1031,10 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         }
         return absoluteOffset;
     }
+#endif
 
+
+#if 0
     // copyTo array fast (without using convertor)
     template <typename T> offset_t copyToArrayFast(BlobPtr<Array<T>> dst, const T* begin, size_t numElements)
     {
@@ -1136,7 +1149,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
             bucket->endIndex++;
         }
     }
+#endif
 
+#if 0
     // assignTo pointer
     template <typename T> static void assignTo(Pointer<T>& dst, std::nullptr_t) { dst.relativeOffset = 0; }
 
@@ -1161,7 +1176,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
 
     // copyTo pointer from reference
     template <typename T> void assignTo(Pointer<T>& dst, const T& src) { assignTo(dst, &src); }
+#endif
 
+#if 0
     // copyTo array from std::vector
     template <typename T, typename TAllocator> void copyTo(Array<T>& dst, const std::vector<T, TAllocator>& src)
     {
@@ -1493,7 +1510,9 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         size_t len = std::strlen(src);
         copyTo(_dst, src, len);
     }
+#endif
 
+#if 0
     void referTo(BlobPtr<String> dst, const String& src)
     {
         BlobPtr<char> stringData = getBlobPtr(src.c_str());
@@ -1529,6 +1548,7 @@ class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
         referTo(dst.buckets, src.buckets);
         referTo(dst.items, src.items);
     }
+#endif
 
     Span<char> finalize(size_t desiredSizeShouldBeMultipleOf = 4)
     {
@@ -1573,6 +1593,8 @@ template <typename T> Pointer<T>& Pointer<T>::operator=(const BlobPtr<T>& other)
     }
     return self;
 }
+
+#endif
 
 /*
 
