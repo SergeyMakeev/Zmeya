@@ -1702,7 +1702,7 @@ class BuilderBase
         return goffset_t(allocOffset);
     }
 
-    template <typename T, typename... _Valty> void placementCtor(void* ptr, _Valty&&... _Val)
+    template <typename T, typename... _Valty> static void placementCtor(void* ptr, _Valty&&... _Val)
     {
         ::new (const_cast<void*>(static_cast<const volatile void*>(ptr))) T(std::forward<_Valty>(_Val)...);
     }
@@ -1713,7 +1713,7 @@ class BuilderBase
     {
         static_assert(std::is_trivially_copyable<T>::value, "Only trivially copyable types allowed");
         goffset_t g_offs = alloc_algined(sizeof(T), alignof(T));
-        placementCtor<T>(get_ptr_unsafe_to_store(g_offs));
+        BuilderBase::placementCtor<T>(get_ptr_unsafe_to_store(g_offs));
 
         auto obj = Object<T>{g_offs};
         return obj;
@@ -1922,7 +1922,7 @@ template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<
         
         // Get pointer to element and initialize it
         zm::Pointer<T>* element = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(elementOffset));
-        new (element) zm::Pointer<T>{};
+        BuilderBase::placementCtor<zm::Pointer<T>>(element);
         
         // Assign the pointer value
         assign(*element, from[i]);
@@ -2018,9 +2018,9 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
         // TODO: add range check for offset to make sure it within the valid range (goffset_t)
         zm::goffset_t elementOffset = zm::goffset_t(arrayDataOffset + i * sizeOfT);
         
-        // Use placement new and then assign
+        // Use placement constructor and then assign
         T* element = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(elementOffset));
-        new (element) T{};
+        BuilderBase::placementCtor<T>(element);
         
         // For fundamental types, direct assignment
         if constexpr (std::is_fundamental_v<F> && std::is_fundamental_v<T>) {
@@ -2066,7 +2066,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
     // Initialize buckets to zero
     typename HashSet<Key>::Bucket* buckets = reinterpret_cast<typename HashSet<Key>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
     for (size_t i = 0; i < numBuckets; ++i) {
-        new (&buckets[i]) typename HashSet<Key>::Bucket{0, 0};
+        BuilderBase::placementCtor<typename HashSet<Key>::Bucket>(&buckets[i], HashSet<Key>::Bucket{0, 0});
     }
 
     // First pass: count elements per bucket
@@ -2112,7 +2112,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
         
         // Place item at current endIndex and increment
         Key* element = &items[bucket.endIndex];
-        new (element) Key{};
+        BuilderBase::placementCtor<Key>(element);
         
         // Assign the item using the same logic as Array assign
         if constexpr (std::is_fundamental_v<F> && std::is_fundamental_v<Key>) {
@@ -2199,7 +2199,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
     // Initialize buckets to zero
     typename HashMap<Key, Value>::Bucket* buckets = reinterpret_cast<typename HashMap<Key, Value>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
     for (size_t i = 0; i < numBuckets; ++i) {
-        new (&buckets[i]) typename HashMap<Key, Value>::Bucket{0, 0};
+        BuilderBase::placementCtor<typename HashMap<Key, Value>::Bucket>(&buckets[i], HashMap<Key, Value>::Bucket{0, 0});
     }
 
     // First pass: count elements per bucket
@@ -2246,13 +2246,13 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
         
         // Place item at current endIndex and increment
         ItemType* element = &items[bucket.endIndex];
-        new (element) ItemType{};
+        BuilderBase::placementCtor<ItemType>(element);
         
         // Assign key and value using the same logic as Array assign
         // Note: element->first is const Key, so we need to cast away const for assignment
         Key* mutableKey = const_cast<Key*>(&element->first);
-        new (mutableKey) Key{};
-        new (&element->second) Value{};
+        BuilderBase::placementCtor<Key>(mutableKey);
+        BuilderBase::placementCtor<Value>(&element->second);
         
         // Assign key
         if constexpr (std::is_fundamental_v<FK> && std::is_fundamental_v<Key>) {
