@@ -1698,8 +1698,7 @@ class BuilderBase
         ZMEYA_ASSERT((uintptr_t(&data[allocOffset]) & (alignment - 1)) == 0);
 
         // check that global offset fit
-        ZMEYA_ASSERT(((allocOffset > 0 && allocOffset < std::numeric_limits<goffset_t>::max()) == 0) &&
-                     "Offset is too big, more that 2GB?");
+        ZMEYA_ASSERT((allocOffset >= 0 && allocOffset < std::numeric_limits<goffset_t>::max()) && "Offset is too big, more that 2GB?");
         return goffset_t(allocOffset);
     }
 
@@ -1738,8 +1737,7 @@ class BuilderBase
         ZMEYA_ASSERT(contains_pointer(ptr));
         offset_t allocOffset = offset_t(uintptr_t(ptr) - uintptr_t(data.data()));
         // check that global offset fit
-        ZMEYA_ASSERT(((allocOffset > 0 && allocOffset < std::numeric_limits<goffset_t>::max()) == 0) &&
-                     "Offset is too big, more that 2GB?");
+        ZMEYA_ASSERT((allocOffset >= 0 && allocOffset < std::numeric_limits<goffset_t>::max()) && "Offset is too big, more that 2GB?");
         return goffset_t(allocOffset);
     }
 
