@@ -2,10 +2,9 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-
-#include <windows.h>
 #include <dbghelp.h>
 #include <iostream>
+#include <windows.h>
 
 #pragma comment(lib, "dbghelp.lib")
 
@@ -58,14 +57,11 @@ struct TestRoot
 
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
-    std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-    zm::ScopedBuilder scope(_builder.get());
-
-    zm::Builder* builder = zm::detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
+    std::unique_ptr<zm::Builder<TestRoot>> builder = zm::Builder<TestRoot>::create();
+    zm::ScopedBuilder scope(builder.get());
 
     // Allocate root
-    TestRoot* root = builder->allocate_root<TestRoot>();
+    TestRoot* root = builder->getRoot();
 
     // Test basic string assignment
     std::string srcDesc = "Test description";
@@ -117,13 +113,10 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
-    std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-    zm::ScopedBuilder scope(_builder.get());
+    std::unique_ptr<zm::Builder<TestRoot>> builder = zm::Builder<TestRoot>::create();
+    zm::ScopedBuilder scope(builder.get());
 
-    zm::Builder* builder = zm::detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    // Allocate root
-    TestRoot* root = builder->allocate_root<TestRoot>();
+    TestRoot* root = builder->getRoot();
 
     // Test nested array conversion
     std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
