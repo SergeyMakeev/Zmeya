@@ -232,6 +232,10 @@ template <typename T> class BlobPtr;
 class Builder;
 #endif
 
+// Forward declarations for friend functions
+template <typename Key> class HashSet;
+template <typename Key, typename Value> class HashMap;
+
 /*
     Pointer - self-relative pointer relative to its own memory address
 */
@@ -424,6 +428,8 @@ template <typename T> class Array
 
     // Friend declarations for new Builder API
     template <typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
+    template <typename Key, typename F> friend void assign(HashSet<Key>& to, const std::unordered_set<F>& from);
+    template <typename Key, typename Value, typename FK, typename FV> friend void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from);
 };
 
 /*
@@ -1876,20 +1882,29 @@ template <typename Key, typename F> void assign(HashSet<Key>& to, const std::uno
         return; // HashSet is already default-initialized as empty
     }
 
-    // For now, use a simple implementation
-    // TODO: Implement proper hash bucketing
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
 
-    // Convert to vector and assign to items array
-    std::vector<Key> items_vec;
-    items_vec.reserve(from.size());
+    // Allocate array data for items
+    constexpr size_t alignOfKey = std::alignment_of<Key>::value;
+    constexpr size_t sizeOfKey = sizeof(Key);
+
+    char* itemsData = builder->allocate_array_data(sizeOfKey, alignOfKey, from.size());
+
+    // Set items array metadata
+    to.items.numElements = uint32_t(from.size());
+    to.items.relativeOffset = builder->calculate_relative_offset(&to.items, itemsData);
+
+    // Initialize and fill items array elements
+    Key* items = reinterpret_cast<Key*>(itemsData);
+    size_t index = 0;
     for (const auto& item : from)
     {
-        Key converted_item{};
-        deep_copy(item, converted_item);
-        items_vec.push_back(std::move(converted_item));
+        // Use placement new and deep-copy
+        new (&items[index]) Key{};
+        deep_copy(item, items[index]);
+        ++index;
     }
-
-    assign(to.items, items_vec);
 
     // Create a simple bucket structure (1 bucket for now)
     std::vector<typename HashSet<Key>::Bucket> buckets_vec(1);
@@ -1908,27 +1923,30 @@ void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from)
         return; // HashMap is already default-initialized as empty
     }
 
-    // For now, use a simple implementation
-    // TODO: Implement proper hash bucketing
-
     Builder* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
 
-    // Convert to vector of pairs and assign to items array
-    std::vector<Pair<Key, Value>> items_vec;
-    items_vec.reserve(from.size());
+    // Allocate array data for items
+    constexpr size_t alignOfItem = std::alignment_of<Pair<Key, Value>>::value;
+    constexpr size_t sizeOfItem = sizeof(Pair<Key, Value>);
+
+    char* itemsData = builder->allocate_array_data(sizeOfItem, alignOfItem, from.size());
+
+    // Set items array metadata
+    to.items.numElements = uint32_t(from.size());
+    to.items.relativeOffset = builder->calculate_relative_offset(&to.items, itemsData);
+
+    // Initialize and fill items array elements
+    Pair<Key, Value>* items = reinterpret_cast<Pair<Key, Value>*>(itemsData);
+    size_t index = 0;
     for (const auto& [key, value] : from)
     {
-        //char* pairMemory = builder->allocate_raw_public(sizeof(Pair<Key, Value>), alignof(Pair<Key, Value>));
-
-        // FIXME: we can't allocate pair on the stack, zm::Builder requires all allocations to be done via its own methods
-        Pair<Key, Value> pair{};
-        deep_copy(key, pair.first);
-        deep_copy(value, pair.second);
-        items_vec.push_back(std::move(pair));
+        // Use placement new and deep-copy
+        new (&items[index]) Pair<Key, Value>{};
+        deep_copy(key, items[index].first);
+        deep_copy(value, items[index].second);
+        ++index;
     }
-
-    assign(to.items, items_vec);
 
     // Create a simple bucket structure (1 bucket for now)
     std::vector<typename HashMap<Key, Value>::Bucket> buckets_vec(1);
