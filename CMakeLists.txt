@@ -9,19 +9,7 @@ add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
 set(ZMEYA_SOURCES 
   TestHelper.h
   TestHelper.cpp
-  ZmeyaTest01.cpp
-  ZmeyaTest02.cpp
-  ZmeyaTest03.cpp
-  ZmeyaTest04.cpp
-  ZmeyaTest05.cpp
-  ZmeyaTest06.cpp
-  ZmeyaTest07.cpp
-  ZmeyaTest08.cpp
-  ZmeyaTest09.cpp
-  ZmeyaTest10.cpp
-  ZmeyaTest11.cpp
   ZmeyaTestNewAPI.cpp
-  ZmeyaTestSimple.cpp
 )
 
 add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})

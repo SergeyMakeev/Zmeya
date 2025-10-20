@@ -21,6 +21,7 @@
 // THE SOFTWARE.
 #pragma once
 
+
 #include <array>
 #include <cstddef>
 #include <cstring>
@@ -32,6 +33,10 @@
 #include <vector>
 
 #include <assert.h>
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 
 // If this is not defined, the built-in hash will be used instead of the user-provided hash
 // ZMEYA_EXTERNAL_HASH
@@ -89,7 +94,14 @@ inline void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
 #endif
 
 #ifndef ZMEYA_ASSERT
-#define ZMEYA_ASSERT(cond) assert(cond)
+// #define ZMEYA_ASSERT(expression) assert(expression)
+
+namespace zm
+{
+void onAssertionFailed(const char* expression, const char* srcFile, unsigned int srcLine);
+} // namespace zm
+
+#define ZMEYA_ASSERT(expression) (void)((!!(expression)) || (zm::onAssertionFailed(#expression, __FILE__, (unsigned int)(__LINE__)), 0))
 #endif
 
 #ifndef ZMEYA_NODISCARD
@@ -225,15 +237,14 @@ class Builder;
 */
 template <typename T> class Pointer
 {
-public:
+  public:
     // addr = this + offset
     // offset(0) = this = nullptr (here is the limitation, pointer can't point to itself)
     // this extra offset fits well into the x86/ARM addressing modes
     // see for details  https://godbolt.org/z/aTTW9E7o9
     roffset_t relativeOffset;
 
-private:
-
+  private:
     bool isEqual(const Pointer& other) const noexcept { return get() == other.get(); }
 
     ZMEYA_NODISCARD T* getUnsafe() const noexcept
@@ -284,7 +295,7 @@ private:
 */
 class String
 {
-public:
+  public:
     Pointer<char> data;
     String() noexcept = default;
     // String(const String&) = delete;
@@ -327,7 +338,7 @@ public:
     }
 
     friend class BlobBuilder;
-    
+
     // Friend declarations for new Builder API
     inline friend void assign(String& to, const std::string& from);
     inline friend void assign(String& to, const char* from);
@@ -410,9 +421,9 @@ template <typename T> class Array
     ZMEYA_NODISCARD bool empty() const noexcept { return size() == 0; }
 
     friend class BlobBuilder;
-    
+
     // Friend declarations for new Builder API
-    template<typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
+    template <typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
 };
 
 /*
@@ -520,9 +531,9 @@ template <typename Key> class HashSet
 
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return containsImpl<Key, HashKeyAdapterGeneric<Key>>(key); }
     friend class BlobBuilder;
-    
+
     // Friend declarations for new Builder API
-    template<typename K, typename F> friend void assign(HashSet<K>& to, const std::unordered_set<F>& from);
+    template <typename K, typename F> friend void assign(HashSet<K>& to, const std::unordered_set<F>& from);
 };
 
 /*
@@ -684,9 +695,10 @@ template <typename Key, typename Value> class HashMap
     }
 
     friend class BlobBuilder;
-    
+
     // Friend declarations for new Builder API
-    template<typename K, typename V, typename FK, typename FV> friend void assign(HashMap<K,V>& to, const std::unordered_map<FK,FV>& from);
+    template <typename K, typename V, typename FK, typename FV>
+    friend void assign(HashMap<K, V>& to, const std::unordered_map<FK, FV>& from);
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1570,20 +1582,45 @@ Key features:
 
 */
 
-namespace detail {
-    // TLS variable for active builder (inline to avoid ODR violations)
-    inline thread_local class Builder* g_active_builder = nullptr;
-    
-    inline Builder* get_active_builder() noexcept {
-        ZMEYA_ASSERT(g_active_builder != nullptr && "No active builder in current thread");
-        return g_active_builder;
-    }
-    
-    inline void set_active_builder(Builder* builder) noexcept {
-        ZMEYA_ASSERT((builder == nullptr || g_active_builder == nullptr) && "Nested builders not supported");
-        g_active_builder = builder;
-    }
+namespace detail
+{
+// TLS variable for active builder (inline to avoid ODR violations)
+inline thread_local class Builder* g_tls_active_builder = nullptr;
+
+inline Builder* get_global_builder() noexcept { return g_tls_active_builder; }
+
+inline void set_global_builder(Builder* builder) noexcept { g_tls_active_builder = builder; }
+
+inline bool is_stack_pointer(const void* ptr)
+{
+    // Retrieves the stack limits for the current thread
+    PVOID stack_low = nullptr;
+    PVOID stack_high = nullptr;
+    GetCurrentThreadStackLimits(reinterpret_cast<PULONG_PTR>(&stack_low), reinterpret_cast<PULONG_PTR>(&stack_high));
+
+    auto p = reinterpret_cast<uintptr_t>(ptr);
+    return p >= reinterpret_cast<uintptr_t>(stack_low) && p < reinterpret_cast<uintptr_t>(stack_high);
 }
+
+} // namespace detail
+
+class ScopedBuilder
+{
+  public:
+    explicit ScopedBuilder(Builder* builder)
+    {
+        prev = detail::get_global_builder();
+        detail::set_global_builder(builder);
+    }
+
+    ~ScopedBuilder() { detail::set_global_builder(prev); }
+
+    ScopedBuilder(const ScopedBuilder&) = delete;
+    ScopedBuilder& operator=(const ScopedBuilder&) = delete;
+
+  private:
+    Builder* prev;
+};
 
 /*
 
@@ -1594,68 +1631,72 @@ Implements its own memory management and offset calculation.
 
 */
 
-class Builder {
-private:
+class Builder
+{
+  private:
     std::vector<char, BlobBuilderAllocator<char, ZMEYA_MAX_ALIGN>> data;
-    
-    struct PrivateToken {};
-    
+
+    struct PrivateToken
+    {
+    };
+
     // Internal allocation method
-    template<typename T>
-    T* allocate_internal(size_t alignment = alignof(T)) {
+    template <typename T> T* allocate_internal(size_t alignment = alignof(T))
+    {
         static_assert(std::is_trivially_copyable<T>::value, "Only trivially copyable types allowed");
         ZMEYA_ASSERT(isPowerOfTwo(alignment));
         ZMEYA_ASSERT(alignment <= ZMEYA_MAX_ALIGN);
-        
+
         size_t cursor = data.size();
-        
+
         // Calculate padding for alignment
         size_t off = cursor & (alignment - 1);
         size_t padding = (off != 0) ? (alignment - off) : 0;
         size_t allocOffset = cursor + padding;
         size_t totalBytes = sizeof(T) + padding;
-        
+
         // Resize with zero-initialization
         data.resize(data.size() + totalBytes, char(0));
-        
+
         // Verify alignment
         ZMEYA_ASSERT((uintptr_t(&data[allocOffset]) & (alignment - 1)) == 0);
-        
+
         T* ptr = reinterpret_cast<T*>(&data[allocOffset]);
-        
+
         // Call placement constructor
         new (ptr) T{};
-        
+
         return ptr;
     }
-    
+
     // Allocate raw memory
-    char* allocate_raw(size_t numBytes, size_t alignment) {
+    char* allocate_raw(size_t numBytes, size_t alignment)
+    {
         ZMEYA_ASSERT(isPowerOfTwo(alignment));
         ZMEYA_ASSERT(alignment <= ZMEYA_MAX_ALIGN);
-        
+
         size_t cursor = data.size();
-        
+
         // Calculate padding for alignment
         size_t off = cursor & (alignment - 1);
         size_t padding = (off != 0) ? (alignment - off) : 0;
         size_t allocOffset = cursor + padding;
         size_t totalBytes = numBytes + padding;
-        
+
         // Resize with zero-initialization
         data.resize(data.size() + totalBytes, char(0));
-        
+
         // Verify alignment
         ZMEYA_ASSERT((uintptr_t(&data[allocOffset]) & (alignment - 1)) == 0);
-        
+
         return &data[allocOffset];
     }
-    
-public:
-    explicit Builder(size_t initialSizeInBytes, PrivateToken) {
-        detail::set_active_builder(this);
+
+  public:
+    explicit Builder(size_t initialSizeInBytes, PrivateToken)
+    {
         data.reserve(initialSizeInBytes);
-        
+
         // Static assertions for zm types
         static_assert(std::is_trivially_copyable<Pointer<int>>::value, "Pointer is_trivially_copyable check failed");
         static_assert(std::is_trivially_copyable<Array<int>>::value, "Array is_trivially_copyable check failed");
@@ -1664,67 +1705,66 @@ public:
         static_assert(std::is_trivially_copyable<HashMap<int, int>>::value, "HashMap is_trivially_copyable check failed");
         static_assert(std::is_trivially_copyable<String>::value, "String is_trivially_copyable check failed");
     }
-    
-    ~Builder() {
-        detail::set_active_builder(nullptr);
-    }
-    
+
+    ~Builder() {}
+
     // Non-copyable, non-movable to keep TLS simple
     Builder(const Builder&) = delete;
     Builder& operator=(const Builder&) = delete;
     Builder(Builder&&) = delete;
     Builder& operator=(Builder&&) = delete;
-    
-    template<typename T>
-    T* allocate_root() {
-        return allocate_internal<T>();
-    }
-    
-    Span<char> finalize(size_t alignment = 4) {
+
+    template <typename T> T* allocate_root() { return allocate_internal<T>(); }
+
+    Span<char> finalize(size_t alignment = 4)
+    {
         // Add padding to ensure final size is multiple of alignment
         size_t currentSize = data.size();
         size_t remainder = currentSize % alignment;
-        if (remainder != 0) {
+        if (remainder != 0)
+        {
             size_t paddingNeeded = alignment - remainder;
             data.resize(currentSize + paddingNeeded, char(0));
         }
-        
+
         ZMEYA_ASSERT((data.size() % alignment) == 0);
         return Span<char>(data.data(), data.size());
     }
-    
-    ZMEYA_NODISCARD static std::shared_ptr<Builder> create(size_t initialSizeInBytes = 2048) {
+
+    ZMEYA_NODISCARD static std::shared_ptr<Builder> create(size_t initialSizeInBytes = 2048)
+    {
         BlobBuilderAllocator<Builder, ZMEYA_MAX_ALIGN> allocator;
         return std::allocate_shared<Builder>(allocator, initialSizeInBytes, PrivateToken{});
     }
-    
+
     // Helper methods for assignment functions
-    bool contains_pointer(const void* ptr) const {
-        return (!data.empty() && (ptr >= &data.front() && ptr <= &data.back()));
-    }
-    
-    template<typename T>
-    offset_t get_absolute_offset(const T* ptr) const {
+    bool contains_pointer(const void* ptr) const { return (!data.empty() && (ptr >= &data.front() && ptr <= &data.back())); }
+
+    template <typename T> offset_t get_absolute_offset(const T* ptr) const
+    {
         ZMEYA_ASSERT(contains_pointer(ptr));
         return offset_t(uintptr_t(ptr) - uintptr_t(data.data()));
     }
-    
-    template<typename T>
-    roffset_t calculate_relative_offset(const T* from, const void* to) const {
-        uintptr_t fromAddr = uintptr_t(from);
-        uintptr_t toAddr = uintptr_t(to);
-        diff_t diff = toAddr - fromAddr;
+
+    template <typename T> roffset_t calculate_relative_offset(const T* base, const void* ptr) const
+    {
+        ZMEYA_ASSERT(detail::is_stack_pointer(base) == false && "Stack pointer detected!");
+        ZMEYA_ASSERT(detail::is_stack_pointer(ptr) == false && "Stack pointer detected!");
+        ZMEYA_ASSERT(contains_pointer(base) && "A pointer should belong to the builder");
+        ZMEYA_ASSERT(contains_pointer(ptr) && "A pointer should belong to the builder");
+        uintptr_t baseAddr = uintptr_t(base);
+        uintptr_t ptrAddr = uintptr_t(ptr);
+        diff_t diff = ptrAddr - baseAddr;
         return toRelativeOffset(diff);
     }
-    
-    char* allocate_array_data(size_t elementSize, size_t alignment, size_t numElements) {
+
+    char* allocate_array_data(size_t elementSize, size_t alignment, size_t numElements)
+    {
         return allocate_raw(elementSize * numElements, alignment);
     }
-    
+
     // Make allocation methods public for assign functions
-    char* allocate_raw_public(size_t numBytes, size_t alignment) {
-        return allocate_raw(numBytes, alignment);
-    }
+    char* allocate_raw_public(size_t numBytes, size_t alignment) { return allocate_raw(numBytes, alignment); }
 };
 
 /*
@@ -1738,80 +1778,90 @@ adapter pattern for automatic nested conversion.
 */
 
 // Forward declarations for deep-copy functions
-template<typename F, typename T> void deep_copy(const F& from, T& to);
+template <typename F, typename T> void deep_copy(const F& from, T& to);
 
 // String conversions - standalone implementation
-inline void assign(String& to, const std::string& from) {
-    Builder* builder = detail::get_active_builder();
-    
-    if (from.empty()) {
+inline void assign(String& to, const std::string& from)
+{
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+
+    if (from.empty())
+    {
         // Leave as default-initialized (empty string)
         return;
     }
-    
+
     // Allocate memory for string data (including null terminator)
     size_t len = from.size();
     char* stringData = builder->allocate_raw_public(len + 1, 1);
-    
+
     // Copy string data
     std::memcpy(stringData, from.data(), len);
     stringData[len] = '\0';
-    
+
     // Set up the String's pointer
     to.data.relativeOffset = builder->calculate_relative_offset(&to.data, stringData);
 }
 
-inline void assign(String& to, const char* from) {
+inline void assign(String& to, const char* from)
+{
     ZMEYA_ASSERT(from != nullptr);
-    
-    Builder* builder = detail::get_active_builder();
-    
+
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+
     size_t len = std::strlen(from);
-    if (len == 0) {
+    if (len == 0)
+    {
         // Leave as default-initialized (empty string)
         return;
     }
-    
+
     // Allocate memory for string data (including null terminator)
     char* stringData = builder->allocate_raw_public(len + 1, 1);
-    
+
     // Copy string data
     std::memcpy(stringData, from, len);
     stringData[len] = '\0';
-    
+
     // Set up the String's pointer
     to.data.relativeOffset = builder->calculate_relative_offset(&to.data, stringData);
 }
 
 // Array conversions - standalone implementation
-template<typename T, typename F>
-void assign(Array<T>& to, const std::vector<F>& from) {
+template <typename T, typename F> void assign(Array<T>& to, const std::vector<F>& from)
+{
     // Allow empty arrays
-    if (from.empty()) {
-        return;  // Array is already default-initialized as empty
+    if (from.empty())
+    {
+        return; // Array is already default-initialized as empty
     }
-    
-    Builder* builder = detail::get_active_builder();
-    
+
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+
     // Check if array is already assigned
-    if (to.numElements != 0 || to.relativeOffset != 0) {
+    if (to.numElements != 0 || to.relativeOffset != 0)
+    {
         ZMEYA_ASSERT(false && "Array already assigned - multiple assignments not supported");
         return;
     }
-    
+
     // Allocate array data
     constexpr size_t alignOfT = std::alignment_of<T>::value;
     constexpr size_t sizeOfT = sizeof(T);
-    
+
     char* arrayData = builder->allocate_array_data(sizeOfT, alignOfT, from.size());
-    
+
     // Set array metadata
     to.numElements = uint32_t(from.size());
     to.relativeOffset = builder->calculate_relative_offset(&to, arrayData);
-    
+
     // Initialize and fill array elements
     T* elements = reinterpret_cast<T*>(arrayData);
-    for (size_t i = 0; i < from.size(); ++i) {
+    for (size_t i = 0; i < from.size(); ++i)
+    {
         // Use placement new and deep-copy
         new (&elements[i]) T{};
         deep_copy(from[i], elements[i]);
@@ -1819,108 +1869,104 @@ void assign(Array<T>& to, const std::vector<F>& from) {
 }
 
 // HashSet conversions - standalone implementation (simplified for now)
-template<typename Key, typename F>
-void assign(HashSet<Key>& to, const std::unordered_set<F>& from) {
-    if (from.empty()) {
-        return;  // HashSet is already default-initialized as empty
+template <typename Key, typename F> void assign(HashSet<Key>& to, const std::unordered_set<F>& from)
+{
+    if (from.empty())
+    {
+        return; // HashSet is already default-initialized as empty
     }
-    
+
     // For now, use a simple implementation
     // TODO: Implement proper hash bucketing
-    
+
     // Convert to vector and assign to items array
     std::vector<Key> items_vec;
     items_vec.reserve(from.size());
-    for (const auto& item : from) {
+    for (const auto& item : from)
+    {
         Key converted_item{};
         deep_copy(item, converted_item);
         items_vec.push_back(std::move(converted_item));
     }
-    
+
     assign(to.items, items_vec);
-    
+
     // Create a simple bucket structure (1 bucket for now)
     std::vector<typename HashSet<Key>::Bucket> buckets_vec(1);
     buckets_vec[0].beginIndex = 0;
     buckets_vec[0].endIndex = uint32_t(from.size());
-    
+
     assign(to.buckets, buckets_vec);
 }
 
-// HashMap conversions - standalone implementation (simplified for now)  
-template<typename Key, typename Value, typename FK, typename FV>
-void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from) {
-    if (from.empty()) {
-        return;  // HashMap is already default-initialized as empty
+// HashMap conversions - standalone implementation (simplified for now)
+template <typename Key, typename Value, typename FK, typename FV>
+void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from)
+{
+    if (from.empty())
+    {
+        return; // HashMap is already default-initialized as empty
     }
-    
+
     // For now, use a simple implementation
     // TODO: Implement proper hash bucketing
-    
+
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+
     // Convert to vector of pairs and assign to items array
     std::vector<Pair<Key, Value>> items_vec;
     items_vec.reserve(from.size());
-    for (const auto& [key, value] : from) {
+    for (const auto& [key, value] : from)
+    {
+        //char* pairMemory = builder->allocate_raw_public(sizeof(Pair<Key, Value>), alignof(Pair<Key, Value>));
+
+        // FIXME: we can't allocate pair on the stack, zm::Builder requires all allocations to be done via its own methods
         Pair<Key, Value> pair{};
         deep_copy(key, pair.first);
         deep_copy(value, pair.second);
         items_vec.push_back(std::move(pair));
     }
-    
+
     assign(to.items, items_vec);
-    
+
     // Create a simple bucket structure (1 bucket for now)
     std::vector<typename HashMap<Key, Value>::Bucket> buckets_vec(1);
     buckets_vec[0].beginIndex = 0;
     buckets_vec[0].endIndex = uint32_t(from.size());
-    
+
     assign(to.buckets, buckets_vec);
 }
 
 // Deep-copy adapter implementations
 
 // Identity copy for same types
-template<typename T>
-void deep_copy(const T& from, T& to) {
-    to = from;
-}
+template <typename T> void deep_copy(const T& from, T& to) { to = from; }
 
 // Specialized overloads for std::* -> zm::* conversions
-inline void deep_copy(const std::string& from, String& to) {
-    assign(to, from);
-}
+inline void deep_copy(const std::string& from, String& to) { assign(to, from); }
 
-inline void deep_copy(const char* from, String& to) {
-    assign(to, from);
-}
+inline void deep_copy(const char* from, String& to) { assign(to, from); }
 
-template<typename T, typename F>
-void deep_copy(const std::vector<F>& from, Array<T>& to) {
-    assign(to, from);
-}
+template <typename T, typename F> void deep_copy(const std::vector<F>& from, Array<T>& to) { assign(to, from); }
 
-template<typename Key, typename F>
-void deep_copy(const std::unordered_set<F>& from, HashSet<Key>& to) {
-    assign(to, from);
-}
+template <typename Key, typename F> void deep_copy(const std::unordered_set<F>& from, HashSet<Key>& to) { assign(to, from); }
 
-template<typename Key, typename Value, typename FK, typename FV>
-void deep_copy(const std::unordered_map<FK, FV>& from, HashMap<Key, Value>& to) {
+template <typename Key, typename Value, typename FK, typename FV>
+void deep_copy(const std::unordered_map<FK, FV>& from, HashMap<Key, Value>& to)
+{
     assign(to, from);
 }
 
 // Pair conversions
-template<typename T1, typename T2, typename F1, typename F2>
-void deep_copy(const Pair<F1, F2>& from, Pair<T1, T2>& to) {
+template <typename T1, typename T2, typename F1, typename F2> void deep_copy(const Pair<F1, F2>& from, Pair<T1, T2>& to)
+{
     deep_copy(from.first, to.first);
     deep_copy(from.second, to.second);
 }
 
 // Special case for const types - just do identity copy
-template<typename T>
-void deep_copy(const T& from, const T& to) {
-    const_cast<T&>(to) = from;
-}
+template <typename T> void deep_copy(const T& from, const T& to) { const_cast<T&>(to) = from; }
 
 /*
 
