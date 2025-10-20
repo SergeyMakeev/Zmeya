@@ -2041,16 +2041,97 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
     }
 }
 
-// HashSet conversions - standalone implementation (simplified for now)
+// HashSet conversions - standalone implementation
 template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::unordered_set<F>& from)
 {
-    // TODO: Implement HashSet assignment
+    if (from.empty())
+    {
+        return; // HashSet is already default-initialized as empty
+    }
+
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
-    
-    (void)to_offset; // Suppress unused parameter warning
-    (void)from;      // Suppress unused parameter warning
+
+    size_t numElements = from.size();
+    size_t numBuckets = numElements * 2;
+    ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
+    size_t hashMod = numBuckets;
+
+    // Allocate buckets array
+    constexpr size_t alignOfBucket = std::alignment_of<typename HashSet<Key>::Bucket>::value;
+    constexpr size_t sizeOfBucket = sizeof(typename HashSet<Key>::Bucket);
+    zm::goffset_t bucketsDataOffset = builder->alloc_algined(sizeOfBucket * numBuckets, alignOfBucket);
+
+    // Initialize buckets to zero
+    typename HashSet<Key>::Bucket* buckets = reinterpret_cast<typename HashSet<Key>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
+    for (size_t i = 0; i < numBuckets; ++i) {
+        new (&buckets[i]) typename HashSet<Key>::Bucket{0, 0};
+    }
+
+    // First pass: count elements per bucket
+    for (const auto& item : from) {
+        size_t hash;
+        if constexpr (std::is_same_v<F, std::string>) {
+            hash = HashUtils::hashString(item.c_str());
+        } else {
+            hash = HashUtils::hasher(item);
+        }
+        size_t bucketIndex = hash % hashMod;
+        buckets[bucketIndex].beginIndex++; // temporarily use beginIndex to count
+    }
+
+    // Convert counts to ranges
+    size_t beginIndex = 0;
+    for (size_t bucketIndex = 0; bucketIndex < numBuckets; bucketIndex++) {
+        typename HashSet<Key>::Bucket& bucket = buckets[bucketIndex];
+        size_t numElementsInBucket = bucket.beginIndex;
+        bucket.beginIndex = uint32_t(beginIndex);
+        bucket.endIndex = bucket.beginIndex;
+        beginIndex += numElementsInBucket;
+    }
+
+    // Allocate items array
+    constexpr size_t alignOfKey = std::alignment_of<Key>::value;
+    constexpr size_t sizeOfKey = sizeof(Key);
+    zm::goffset_t itemsDataOffset = builder->alloc_algined(sizeOfKey * numElements, alignOfKey);
+
+    // Second pass: copy items to their buckets
+    Key* items = reinterpret_cast<Key*>(builder->get_ptr_unsafe_to_store(itemsDataOffset));
+    buckets = reinterpret_cast<typename HashSet<Key>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset)); // refresh pointer
+
+    for (const auto& item : from) {
+        size_t hash;
+        if constexpr (std::is_same_v<F, std::string>) {
+            hash = HashUtils::hashString(item.c_str());
+        } else {
+            hash = HashUtils::hasher(item);
+        }
+        size_t bucketIndex = hash % hashMod;
+        typename HashSet<Key>::Bucket& bucket = buckets[bucketIndex];
+        
+        // Place item at current endIndex and increment
+        Key* element = &items[bucket.endIndex];
+        new (element) Key{};
+        
+        // Assign the item using the same logic as Array assign
+        if constexpr (std::is_fundamental_v<F> && std::is_fundamental_v<Key>) {
+            *element = static_cast<Key>(item);
+        } else if constexpr (std::is_same_v<F, std::string> && std::is_same_v<Key, String>) {
+            assign(*element, item);
+        } else {
+            assign(*element, item);
+        }
+        
+        bucket.endIndex++;
+    }
+
+    // Update HashSet metadata
+    HashSet<Key>* to = reinterpret_cast<HashSet<Key>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->buckets.numElements = uint32_t(numBuckets);
+    to->buckets.relativeOffset = builder->get_relative_offset(&to->buckets, bucketsDataOffset);
+    to->items.numElements = uint32_t(numElements);
+    to->items.relativeOffset = builder->get_relative_offset(&to->items, itemsDataOffset);
 #if 0
     if (from.empty())
     {
@@ -2092,17 +2173,114 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
 #endif
 }
 
-// HashMap conversions - standalone implementation (simplified for now)
+// HashMap conversions - standalone implementation
 template <typename Key, typename Value, typename FK, typename FV>
 void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 {
-    // TODO: Implement HashMap assignment
+    if (from.empty())
+    {
+        return; // HashMap is already default-initialized as empty
+    }
+
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
-    
-    (void)to_offset; // Suppress unused parameter warning
-    (void)from;      // Suppress unused parameter warning
+
+    size_t numElements = from.size();
+    size_t numBuckets = numElements * 2;
+    ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
+    size_t hashMod = numBuckets;
+
+    // Allocate buckets array
+    constexpr size_t alignOfBucket = std::alignment_of<typename HashMap<Key, Value>::Bucket>::value;
+    constexpr size_t sizeOfBucket = sizeof(typename HashMap<Key, Value>::Bucket);
+    zm::goffset_t bucketsDataOffset = builder->alloc_algined(sizeOfBucket * numBuckets, alignOfBucket);
+
+    // Initialize buckets to zero
+    typename HashMap<Key, Value>::Bucket* buckets = reinterpret_cast<typename HashMap<Key, Value>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
+    for (size_t i = 0; i < numBuckets; ++i) {
+        new (&buckets[i]) typename HashMap<Key, Value>::Bucket{0, 0};
+    }
+
+    // First pass: count elements per bucket
+    for (const auto& [key, value] : from) {
+        size_t hash;
+        if constexpr (std::is_same_v<FK, std::string>) {
+            hash = HashUtils::hashString(key.c_str());
+        } else {
+            hash = HashUtils::hasher(key);
+        }
+        size_t bucketIndex = hash % hashMod;
+        buckets[bucketIndex].beginIndex++; // temporarily use beginIndex to count
+    }
+
+    // Convert counts to ranges
+    size_t beginIndex = 0;
+    for (size_t bucketIndex = 0; bucketIndex < numBuckets; bucketIndex++) {
+        typename HashMap<Key, Value>::Bucket& bucket = buckets[bucketIndex];
+        size_t numElementsInBucket = bucket.beginIndex;
+        bucket.beginIndex = uint32_t(beginIndex);
+        bucket.endIndex = bucket.beginIndex;
+        beginIndex += numElementsInBucket;
+    }
+
+    // Allocate items array (Pair<Key, Value>)
+    using ItemType = Pair<const Key, Value>;
+    constexpr size_t alignOfItem = std::alignment_of<ItemType>::value;
+    constexpr size_t sizeOfItem = sizeof(ItemType);
+    zm::goffset_t itemsDataOffset = builder->alloc_algined(sizeOfItem * numElements, alignOfItem);
+
+    // Second pass: copy items to their buckets
+    ItemType* items = reinterpret_cast<ItemType*>(builder->get_ptr_unsafe_to_store(itemsDataOffset));
+    buckets = reinterpret_cast<typename HashMap<Key, Value>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset)); // refresh pointer
+
+    for (const auto& [key, value] : from) {
+        size_t hash;
+        if constexpr (std::is_same_v<FK, std::string>) {
+            hash = HashUtils::hashString(key.c_str());
+        } else {
+            hash = HashUtils::hasher(key);
+        }
+        size_t bucketIndex = hash % hashMod;
+        typename HashMap<Key, Value>::Bucket& bucket = buckets[bucketIndex];
+        
+        // Place item at current endIndex and increment
+        ItemType* element = &items[bucket.endIndex];
+        new (element) ItemType{};
+        
+        // Assign key and value using the same logic as Array assign
+        // Note: element->first is const Key, so we need to cast away const for assignment
+        Key* mutableKey = const_cast<Key*>(&element->first);
+        new (mutableKey) Key{};
+        new (&element->second) Value{};
+        
+        // Assign key
+        if constexpr (std::is_fundamental_v<FK> && std::is_fundamental_v<Key>) {
+            *mutableKey = static_cast<Key>(key);
+        } else if constexpr (std::is_same_v<FK, std::string> && std::is_same_v<Key, String>) {
+            assign(*mutableKey, key);
+        } else {
+            assign(*mutableKey, key);
+        }
+        
+        // Assign value
+        if constexpr (std::is_fundamental_v<FV> && std::is_fundamental_v<Value>) {
+            element->second = static_cast<Value>(value);
+        } else if constexpr (std::is_same_v<FV, std::string> && std::is_same_v<Value, String>) {
+            assign(element->second, value);
+        } else {
+            assign(element->second, value);
+        }
+        
+        bucket.endIndex++;
+    }
+
+    // Update HashMap metadata
+    HashMap<Key, Value>* to = reinterpret_cast<HashMap<Key, Value>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->buckets.numElements = uint32_t(numBuckets);
+    to->buckets.relativeOffset = builder->get_relative_offset(&to->buckets, bucketsDataOffset);
+    to->items.numElements = uint32_t(numElements);
+    to->items.relativeOffset = builder->get_relative_offset(&to->items, itemsDataOffset);
 #if 0
     if (from.empty())
     {
