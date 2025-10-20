@@ -2,13 +2,41 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+
+#include <windows.h>
+#include <dbghelp.h>
+#include <iostream>
+
+#pragma comment(lib, "dbghelp.lib")
+
+void PrintStackTrace()
+{
+    void* stack[64];
+    HANDLE process = GetCurrentProcess();
+    SymInitialize(process, nullptr, TRUE);
+
+    USHORT frames = CaptureStackBackTrace(0, 64, stack, nullptr);
+
+    SYMBOL_INFO* symbol = (SYMBOL_INFO*)calloc(sizeof(SYMBOL_INFO) + 256 * sizeof(char), 1);
+    symbol->MaxNameLen = 255;
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+    for (USHORT i = 0; i < frames; ++i)
+    {
+        SymFromAddr(process, (DWORD64)(stack[i]), 0, symbol);
+        std::cout << frames - i - 1 << ": " << symbol->Name << " - 0x" << std::hex << symbol->Address << std::dec << "\n";
+    }
+
+    free(symbol);
+}
+
 namespace zm
 {
 void onAssertionFailed(const char* expression, const char* srcFile, unsigned int srcLine)
 {
     printf("Assertion failed: %s, file: %s, line: %u\n", expression, srcFile, srcLine);
-    int a = 0;
-    a = 7;
+    PrintStackTrace();
+    std::abort();
 }
 } // namespace zm
 

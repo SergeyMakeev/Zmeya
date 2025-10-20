@@ -430,6 +430,8 @@ template <typename T> class Array
     template <typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
     template <typename Key, typename F> friend void assign(HashSet<Key>& to, const std::unordered_set<F>& from);
     template <typename Key, typename Value, typename FK, typename FV> friend void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from);
+    template <typename T> friend void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from);
+    friend class Builder;
 };
 
 /*
@@ -1721,6 +1723,9 @@ class Builder
     Builder& operator=(Builder&&) = delete;
 
     template <typename T> T* allocate_root() { return allocate_internal<T>(); }
+    
+    // Allocate individual objects (not just root)
+    template <typename T> T* allocate() { return allocate_internal<T>(); }
 
     Span<char> finalize(size_t alignment = 4)
     {
@@ -1744,7 +1749,13 @@ class Builder
     }
 
     // Helper methods for assignment functions
-    bool contains_pointer(const void* ptr) const { return (!data.empty() && (ptr >= &data.front() && ptr <= &data.back())); }
+    bool contains_pointer(const void* ptr) const 
+    { 
+        if (data.empty()) return false;
+        const char* dataStart = data.data();
+        const char* dataEnd = dataStart + data.size();
+        return (ptr >= dataStart && ptr < dataEnd);
+    }
 
     template <typename T> offset_t get_absolute_offset(const T* ptr) const
     {
@@ -1771,6 +1782,13 @@ class Builder
 
     // Make allocation methods public for assign functions
     char* allocate_raw_public(size_t numBytes, size_t alignment) { return allocate_raw(numBytes, alignment); }
+    
+    // Helper method to set array data (for friend access)
+    template <typename T> void set_array_data(Array<T>& arr, void* data, uint32_t numElements)
+    {
+        arr.numElements = numElements;
+        arr.relativeOffset = calculate_relative_offset(&arr, data);
+    }
 };
 
 /*
@@ -1785,6 +1803,52 @@ adapter pattern for automatic nested conversion.
 
 // Forward declarations for deep-copy functions
 template <typename F, typename T> void deep_copy(const F& from, T& to);
+
+// Pointer assignment function
+template <typename T> void assign(zm::Pointer<T>& to, T* from)
+{
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    
+    if (from == nullptr)
+    {
+        to.relativeOffset = 0; // null pointer
+        return;
+    }
+    
+    // Calculate relative offset from pointer to target
+    to.relativeOffset = builder->calculate_relative_offset(&to, from);
+}
+
+// Array of pointers assignment function
+template <typename T> void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from)
+{
+    if (from.empty())
+    {
+        return; // Array is already default-initialized as empty
+    }
+
+    Builder* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+
+    // Allocate array data
+    constexpr size_t alignOfPtr = std::alignment_of<zm::Pointer<T>>::value;
+    constexpr size_t sizeOfPtr = sizeof(zm::Pointer<T>);
+
+    char* arrayData = builder->allocate_array_data(sizeOfPtr, alignOfPtr, from.size());
+
+    // Set array metadata using helper method
+    builder->set_array_data(to, arrayData, uint32_t(from.size()));
+
+    // Initialize and fill array elements
+    zm::Pointer<T>* elements = reinterpret_cast<zm::Pointer<T>*>(arrayData);
+    for (size_t i = 0; i < from.size(); ++i)
+    {
+        // Use placement new and assign pointer
+        new (&elements[i]) zm::Pointer<T>{};
+        assign(elements[i], from[i]);
+    }
+}
 
 // String conversions - standalone implementation
 inline void assign(String& to, const std::string& from)
@@ -1860,9 +1924,8 @@ template <typename T, typename F> void assign(Array<T>& to, const std::vector<F>
 
     char* arrayData = builder->allocate_array_data(sizeOfT, alignOfT, from.size());
 
-    // Set array metadata
-    to.numElements = uint32_t(from.size());
-    to.relativeOffset = builder->calculate_relative_offset(&to, arrayData);
+    // Set array metadata using helper method
+    builder->set_array_data(to, arrayData, uint32_t(from.size()));
 
     // Initialize and fill array elements
     T* elements = reinterpret_cast<T*>(arrayData);
@@ -1891,9 +1954,8 @@ template <typename Key, typename F> void assign(HashSet<Key>& to, const std::uno
 
     char* itemsData = builder->allocate_array_data(sizeOfKey, alignOfKey, from.size());
 
-    // Set items array metadata
-    to.items.numElements = uint32_t(from.size());
-    to.items.relativeOffset = builder->calculate_relative_offset(&to.items, itemsData);
+    // Set items array metadata using helper method
+    builder->set_array_data(to.items, itemsData, uint32_t(from.size()));
 
     // Initialize and fill items array elements
     Key* items = reinterpret_cast<Key*>(itemsData);
@@ -1932,9 +1994,8 @@ void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from)
 
     char* itemsData = builder->allocate_array_data(sizeOfItem, alignOfItem, from.size());
 
-    // Set items array metadata
-    to.items.numElements = uint32_t(from.size());
-    to.items.relativeOffset = builder->calculate_relative_offset(&to.items, itemsData);
+    // Set items array metadata using helper method
+    builder->set_array_data(to.items, itemsData, uint32_t(from.size()));
 
     // Initialize and fill items array elements
     Pair<Key, Value>* items = reinterpret_cast<Pair<Key, Value>*>(itemsData);
