@@ -1703,7 +1703,10 @@ class Builder
   public:
     explicit Builder(size_t initialSizeInBytes, PrivateToken)
     {
-        data.reserve(initialSizeInBytes);
+        // Reserve a much larger amount of memory to avoid reallocation during building
+        // The ArrayTest creates 793 objects, so we need enough space for that plus arrays
+        size_t reserveSize = std::max(initialSizeInBytes, size_t(10 * 1024 * 1024)); // 10MB minimum
+        data.reserve(reserveSize);
 
         // Static assertions for zm types
         static_assert(std::is_trivially_copyable<Pointer<int>>::value, "Pointer is_trivially_copyable check failed");
