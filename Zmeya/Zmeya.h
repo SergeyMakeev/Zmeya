@@ -1828,6 +1828,7 @@ class BuilderBase
         return roffset_t(diff);
     }
 
+
 #if 0
     char* allocate_array_data(size_t elementSize, size_t alignment, size_t numElements)
     {
@@ -1854,6 +1855,8 @@ template <typename TRoot> class Builder : public BuilderBase
     explicit Builder(size_t initialSizeInBytes, PrivateToken tk)
         : BuilderBase(initialSizeInBytes, tk)
     {
+        // Automatically allocate the root object at offset 0
+        allocate<TRoot>();
     }
 
     using TSelf = Builder<TRoot>;
@@ -1878,59 +1881,83 @@ adapter pattern for automatic nested conversion.
 */
 
 // Forward declarations for deep-copy functions
-template <typename T, typename F> void deep_copy(const T& from, zm::goffset_t to_ofs);
+template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs);
 
 // Pointer assignment function
-template <typename T> void assign(zm::Pointer<T>& to, T* from)
+template <typename T> void assign(zm::Pointer<T>& _to, T* from)
 {
-    Builder* builder = detail::get_global_builder();
+    BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
 
     if (from == nullptr)
     {
-        to.relativeOffset = 0; // null pointer
+        zm::Pointer<T>* to = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
+        to->relativeOffset = 0; // null pointer
         return;
     }
 
-    // Calculate relative offset from pointer to target
-    to.relativeOffset = builder->calculate_relative_offset(&to, from);
+    // Get offsets and calculate relative offset safely
+    ZMEYA_ASSERT(builder->contains_pointer(from) && "Pointer 'from' should belong to the builder");
+    
+    goffset_t fromOffset = builder->get_global_offset(from);
+    
+    zm::Pointer<T>* to = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->relativeOffset = builder->get_relative_offset(to, fromOffset);
 }
 
 // Array of pointers assignment function
-template <typename T> void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from)
+template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<T*>& from)
 {
     if (from.empty())
     {
         return; // Array is already default-initialized as empty
     }
 
-    Builder* builder = detail::get_global_builder();
+    BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
+
+    // Check if array is already assigned
+    Array<zm::Pointer<T>>* to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    if (to->numElements != 0 || to->relativeOffset != 0)
+    {
+        ZMEYA_ASSERT(false && "Array already assigned - multiple assignments not supported to avoid builder's memory fragmentation");
+        return;
+    }
 
     // Allocate array data
     constexpr size_t alignOfPtr = std::alignment_of<zm::Pointer<T>>::value;
     constexpr size_t sizeOfPtr = sizeof(zm::Pointer<T>);
 
-    char* arrayData = builder->allocate_array_data(sizeOfPtr, alignOfPtr, from.size());
+    zm::goffset_t arrayDataOffset = builder->alloc_algined(sizeOfPtr * from.size(), alignOfPtr);
 
-    // Set array metadata using helper method
-    builder->set_array_data(to, arrayData, uint32_t(from.size()));
+    // Update array metadata
+    to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->numElements = uint32_t(from.size());
+    to->relativeOffset = builder->get_relative_offset(to, arrayDataOffset);
 
     // Initialize and fill array elements
-    zm::Pointer<T>* elements = reinterpret_cast<zm::Pointer<T>*>(arrayData);
     for (size_t i = 0; i < from.size(); ++i)
     {
-        // Use placement new and assign pointer
-        new (&elements[i]) zm::Pointer<T>{};
-        assign(elements[i], from[i]);
+        // Calculate offset for this element
+        zm::goffset_t elementOffset = zm::goffset_t(arrayDataOffset + i * sizeOfPtr);
+        
+        // Get pointer to element and initialize it
+        zm::Pointer<T>* element = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(elementOffset));
+        new (element) zm::Pointer<T>{};
+        
+        // Assign the pointer value
+        assign(*element, from[i]);
     }
 }
 
 // String conversions - standalone implementation
-inline void assign(String& to, const std::string& from)
+inline void assign(String& _to, const std::string& from)
 {
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
 
     if (from.empty())
     {
@@ -1940,23 +1967,23 @@ inline void assign(String& to, const std::string& from)
 
     size_t len = from.size();
     zm::goffset_t stringDataOffset = builder->alloc_algined(len + 1, 1);
-    ZMEYA_ASSERT(builder->contains_pointer(&to) && "This object does not belong to zm::Builder");
 
-    {
-        char* stringData = (char*)builder->get_ptr_unsafe_to_store(stringDataOffset);
-        std::memcpy(stringData, from.data(), len);
-        stringData[len] = '\0';
-    }
+    // Copy string data without storing pointer
+    char* stringData = (char*)builder->get_ptr_unsafe_to_store(stringDataOffset);
+    std::memcpy(stringData, from.data(), len);
+    stringData[len] = '\0';
 
-    to.data.relativeOffset = builder->get_relative_offset(&to.data, stringDataOffset);
+    String* to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->data.relativeOffset = builder->get_relative_offset(&to->data, stringDataOffset);
 }
 
-inline void assign(String& to, const char* from)
+inline void assign(String& _to, const char* from)
 {
     ZMEYA_ASSERT(from != nullptr);
 
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
 
     size_t len = std::strlen(from);
     if (len == 0)
@@ -1966,19 +1993,18 @@ inline void assign(String& to, const char* from)
     }
 
     zm::goffset_t stringDataOffset = builder->alloc_algined(len + 1, 1);
-    ZMEYA_ASSERT(builder->contains_pointer(&to) && "This object does not belong to zm::Builder");
 
-    {
-        char* stringData = (char*)builder->get_ptr_unsafe_to_store(stringDataOffset);
-        std::memcpy(stringData, from, len);
-        stringData[len] = '\0';
-    }
+    // Copy string data without storing pointer
+    char* stringData = (char*)builder->get_ptr_unsafe_to_store(stringDataOffset);
+    std::memcpy(stringData, from, len);
+    stringData[len] = '\0';
 
-    to.data.relativeOffset = builder->get_relative_offset(&to.data, stringDataOffset);
+    String* to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->data.relativeOffset = builder->get_relative_offset(&to->data, stringDataOffset);
 }
 
 // Array conversions - standalone implementation
-template <typename T, typename F> void assign(Array<T>& to, const std::vector<F>& from)
+template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F>& from)
 {
     // Allow empty arrays
     if (from.empty())
@@ -1988,9 +2014,11 @@ template <typename T, typename F> void assign(Array<T>& to, const std::vector<F>
 
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
 
     // Check if array is already assigned
-    if (to.numElements != 0 || to.relativeOffset != 0)
+    Array<T>* to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    if (to->numElements != 0 || to->relativeOffset != 0)
     {
         ZMEYA_ASSERT(false && "Array already assigned - multiple assignments not supported to avoid builder's memory fragmentation");
         return;
@@ -2001,10 +2029,11 @@ template <typename T, typename F> void assign(Array<T>& to, const std::vector<F>
     constexpr size_t sizeOfT = sizeof(T);
 
     zm::goffset_t arrayDataOffset = builder->alloc_algined(sizeOfT * from.size(), alignOfT);
-    ZMEYA_ASSERT(builder->contains_pointer(&to) && "This object does not belong to zm::Builder");
 
-    to.numElements = uint32_t(from.size());
-    to.relativeOffset = builder->get_relative_offset(&to, arrayDataOffset);
+    // Update array metadata
+    to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
+    to->numElements = uint32_t(from.size());
+    to->relativeOffset = builder->get_relative_offset(to, arrayDataOffset);
 
     for (size_t i = 0; i < from.size(); ++i)
     {
@@ -2016,8 +2045,15 @@ template <typename T, typename F> void assign(Array<T>& to, const std::vector<F>
 }
 
 // HashSet conversions - standalone implementation (simplified for now)
-template <typename Key, typename F> void assign(HashSet<Key>& to, const std::unordered_set<F>& from)
+template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::unordered_set<F>& from)
 {
+    // TODO: Implement HashSet assignment
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
+    
+    (void)to_offset; // Suppress unused parameter warning
+    (void)from;      // Suppress unused parameter warning
 #if 0
     if (from.empty())
     {
@@ -2061,8 +2097,15 @@ template <typename Key, typename F> void assign(HashSet<Key>& to, const std::uno
 
 // HashMap conversions - standalone implementation (simplified for now)
 template <typename Key, typename Value, typename FK, typename FV>
-void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from)
+void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 {
+    // TODO: Implement HashMap assignment
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    goffset_t to_offset = builder->get_global_offset(&_to);
+    
+    (void)to_offset; // Suppress unused parameter warning
+    (void)from;      // Suppress unused parameter warning
 #if 0
     if (from.empty())
     {
@@ -2105,38 +2148,65 @@ void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from)
 // Deep-copy adapter implementations
 
 // Identity copy for same types
-template <typename T, typename F> void deep_copy(const T& from, zm::goffset_t to_ofs)
+template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs)
 {
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
-    F* p_to = reinterpret_cast<F*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    T* p_to = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(to_ofs));
     *p_to = from;
 }
 
 // Specialized overloads for std::* -> zm::* conversions
-inline void deep_copy(const std::string& from, String& to) { assign(to, from); }
+inline void deep_copy(const std::string& from, zm::goffset_t to_ofs) 
+{ 
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    String* p_to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    assign(*p_to, from); 
+}
 
-inline void deep_copy(const char* from, String& to) { assign(to, from); }
+inline void deep_copy(const char* from, zm::goffset_t to_ofs) 
+{ 
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    String* p_to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    assign(*p_to, from); 
+}
 
-template <typename T, typename F> void deep_copy(const std::vector<F>& from, Array<T>& to) { assign(to, from); }
+template <typename F, typename T> void deep_copy(const std::vector<F>& from, zm::goffset_t to_ofs) 
+{ 
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    Array<T>* p_to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    assign(*p_to, from); 
+}
 
-template <typename Key, typename F> void deep_copy(const std::unordered_set<F>& from, HashSet<Key>& to) { assign(to, from); }
+template <typename F, typename Key> void deep_copy(const std::unordered_set<F>& from, zm::goffset_t to_ofs) 
+{ 
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    HashSet<Key>* p_to = reinterpret_cast<HashSet<Key>*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    assign(*p_to, from); 
+}
 
-template <typename Key, typename Value, typename FK, typename FV>
-void deep_copy(const std::unordered_map<FK, FV>& from, HashMap<Key, Value>& to)
+template <typename FK, typename FV, typename Key, typename Value>
+void deep_copy(const std::unordered_map<FK, FV>& from, zm::goffset_t to_ofs)
 {
-    assign(to, from);
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    HashMap<Key, Value>* p_to = reinterpret_cast<HashMap<Key, Value>*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    assign(*p_to, from);
 }
 
 // Pair conversions
-template <typename T1, typename T2, typename F1, typename F2> void deep_copy(const Pair<F1, F2>& from, Pair<T1, T2>& to)
+template <typename F1, typename F2, typename T1, typename T2> void deep_copy(const Pair<F1, F2>& from, zm::goffset_t to_ofs)
 {
-    deep_copy(from.first, to.first);
-    deep_copy(from.second, to.second);
+    BuilderBase* builder = detail::get_global_builder();
+    ZMEYA_ASSERT(builder != nullptr);
+    Pair<T1, T2>* p_to = reinterpret_cast<Pair<T1, T2>*>(builder->get_ptr_unsafe_to_store(to_ofs));
+    deep_copy<F1, T1>(from.first, builder->get_global_offset(&p_to->first));
+    deep_copy<F2, T2>(from.second, builder->get_global_offset(&p_to->second));
 }
-
-// Special case for const types - just do identity copy
-template <typename T> void deep_copy(const T& from, const T& to) { const_cast<T&>(to) = from; }
 
 /*
 
