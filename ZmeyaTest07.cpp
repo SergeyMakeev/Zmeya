@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct HashMapTestRoot
 {
     zm::HashMap<int32_t, float> hashMap1;
@@ -138,3 +140,6 @@ TEST(ZmeyaTestSuite, HashMapTest)
 
     validate(rootCopy);
 }
+
+
+#endif

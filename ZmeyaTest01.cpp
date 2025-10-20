@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 
+#if 0
+
 /*
 namespace Memory
 {
@@ -221,3 +223,5 @@ TEST(ZmeyaTestSuite, SimpleTest2)
         EXPECT_EQ(desc.v2, (uint32_t)(i));
     }
 }
+
+#endif

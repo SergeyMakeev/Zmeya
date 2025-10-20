@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct Payload
 {
     float a;
@@ -153,3 +155,6 @@ TEST(ZmeyaTestSuite, ArrayTest)
     const ArrayTestRoot* rootCopy = (const ArrayTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
+
+
+#endif

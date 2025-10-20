@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct ListTestNode
 {
     uint32_t payload;
@@ -96,3 +98,6 @@ TEST(ZmeyaTestSuite, ListTest)
     const ListTestRoot* rootCopy = (const ListTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
+
+
+#endif

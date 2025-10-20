@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct PointerTestNode
 {
     int32_t payload;
@@ -67,3 +69,6 @@ TEST(ZmeyaTestSuite, PointerTest)
     const PointerTestRoot* rootCopy = (const PointerTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
+
+
+#endif

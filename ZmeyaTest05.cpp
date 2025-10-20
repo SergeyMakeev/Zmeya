@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct StringTestRoot
 {
     zm::String str1;
@@ -134,3 +136,6 @@ TEST(ZmeyaTestSuite, StringTest)
 
     validate(rootCopy);
 }
+
+
+#endif

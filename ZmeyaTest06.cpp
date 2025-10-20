@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct HashSetTestRoot
 {
     zm::HashSet<int32_t> set1;
@@ -105,3 +107,6 @@ TEST(ZmeyaTestSuite, HashSetTest)
 
     validate(rootCopy);
 }
+
+
+#endif

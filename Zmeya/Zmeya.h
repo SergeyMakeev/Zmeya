@@ -1666,37 +1666,12 @@ Implements its own memory management and offset calculation.
 class BuilderBase
 {
   public:
+    // consider removing?
     template <typename T> struct Object
     {
         goffset_t offset;
     };
 
-    struct FixupTable
-    {
-        using ZmPointer = Object<zm::Pointer<int>>;
-        using ZmArray = Object<zm::Array<int>>;
-        using ZmHashSet = Object<zm::HashSet<int>>;
-        using ZmPair = Object<zm::Pair<int, float>>;
-        using ZmHashMap = Object<zm::HashMap<int, int>>;
-        using ZmString = Object<zm::String>;
-
-        std::vector<ZmPointer> pointer;
-        std::vector<ZmArray> array;
-        std::vector<ZmHashSet> hashSet;
-        std::vector<ZmPair> pair;
-        std::vector<ZmHashMap> hashMap;
-        std::vector<ZmString> string;
-
-        // if you having a compiler error add another method here
-        template <typename U> void track(zm::String v) {}
-        template <typename U> void track(Object<zm::Pointer<U>> v) {}
-        template <typename U> void track(Object<zm::Array<U>> v) {}
-        template <typename U> void track(Object<zm::HashSet<U>> v) {}
-        template <typename U1, typename U2> void track(Object<zm::Pair<U1, U2>> v) {}
-        template <typename U1, typename U2> void track(Object<zm::HashMap<U1, U2>> v) {}
-    };
-
-    FixupTable fixupTable;
     std::vector<char, BlobBuilderAllocator<char, ZMEYA_MAX_ALIGN>> data;
 
     struct PrivateToken
@@ -1742,7 +1717,6 @@ class BuilderBase
         placementCtor<T>(get_ptr_unsafe_to_store(g_offs));
 
         auto obj = Object<T>{g_offs};
-        fixupTable.track(obj);
         return obj;
     }
 
@@ -1880,8 +1854,13 @@ adapter pattern for automatic nested conversion.
 
 */
 
-// Forward declarations for deep-copy functions
-template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs);
+// Forward declarations for deep-copy functions (specialized overloads only)
+inline void deep_copy(const std::string& from, zm::goffset_t to_ofs);
+inline void deep_copy(const char* from, zm::goffset_t to_ofs);
+template <typename F, typename T> void deep_copy(const std::vector<F>& from, zm::goffset_t to_ofs);
+template <typename F, typename Key> void deep_copy(const std::unordered_set<F>& from, zm::goffset_t to_ofs);
+template <typename FK, typename FV, typename Key, typename Value> void deep_copy(const std::unordered_map<FK, FV>& from, zm::goffset_t to_ofs);
+template <typename F1, typename F2, typename T1, typename T2> void deep_copy(const Pair<F1, F2>& from, zm::goffset_t to_ofs);
 
 // Pointer assignment function
 template <typename T> void assign(zm::Pointer<T>& _to, T* from)
@@ -2040,7 +2019,27 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
         // deep-copy elements
         // TODO: add range check for offset to make sure it within the valid range (goffset_t)
         zm::goffset_t elementOffset = zm::goffset_t(arrayDataOffset + i * sizeOfT);
-        deep_copy<F, T>(from[i], elementOffset);
+        
+        // Use placement new and then assign
+        T* element = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(elementOffset));
+        new (element) T{};
+        
+        // For fundamental types, direct assignment
+        if constexpr (std::is_fundamental_v<F> && std::is_fundamental_v<T>) {
+            *element = static_cast<T>(from[i]);
+        }
+        // For string conversion
+        else if constexpr (std::is_same_v<F, std::string> && std::is_same_v<T, String>) {
+            assign(*element, from[i]);
+        }
+        // For vector to array conversion (nested arrays)
+        else if constexpr (std::is_same_v<std::decay_t<F>, std::vector<typename std::decay_t<F>::value_type, typename std::decay_t<F>::allocator_type>>) {
+            assign(*element, from[i]);
+        }
+        // For other complex types, this shouldn't happen in practice
+        else {
+            static_assert(sizeof(F) == 0, "Unsupported type conversion in deep_copy");
+        }
     }
 }
 
@@ -2147,13 +2146,15 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 
 // Deep-copy adapter implementations
 
-// Identity copy for same types
-template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs)
+// Generic copy for fundamental types only (int, float, etc.)
+template <typename F, typename T> 
+std::enable_if_t<std::is_fundamental_v<std::decay_t<F>> && std::is_fundamental_v<std::decay_t<T>> && std::is_convertible_v<F, T>>
+deep_copy(const F& from, zm::goffset_t to_ofs)
 {
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     T* p_to = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    *p_to = from;
+    *p_to = static_cast<T>(from);
 }
 
 // Specialized overloads for std::* -> zm::* conversions
@@ -2204,8 +2205,8 @@ template <typename F1, typename F2, typename T1, typename T2> void deep_copy(con
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     Pair<T1, T2>* p_to = reinterpret_cast<Pair<T1, T2>*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    deep_copy<F1, T1>(from.first, builder->get_global_offset(&p_to->first));
-    deep_copy<F2, T2>(from.second, builder->get_global_offset(&p_to->second));
+    deep_copy(from.first, builder->get_global_offset(&p_to->first));
+    deep_copy(from.second, builder->get_global_offset(&p_to->second));
 }
 
 /*

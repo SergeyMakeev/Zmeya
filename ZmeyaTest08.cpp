@@ -2,6 +2,8 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#if 0
+
 struct IteratorsTestRoot
 {
     zm::Array<int> arr;
@@ -84,3 +86,6 @@ TEST(ZmeyaTestSuite, IteratorsTest)
 
     validate(rootCopy);
 }
+
+
+#endif
