@@ -65,23 +65,23 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 
     // Test basic string assignment
     std::string srcDesc = "Test description";
-    zm::assign(root->description, srcDesc);
+    root->description = srcDesc;
 
     // Test array of primitives
     std::vector<int32_t> srcInts = {1, 2, 3, 4, 5};
-    zm::assign(root->intArray, srcInts);
+    root->intArray =  srcInts;
 
     // Test array of strings
     std::vector<std::string> srcStrings = {"hello", "world", "test"};
-    zm::assign(root->stringArray, srcStrings);
+    root->stringArray =  srcStrings;
 
     // Test HashMap
     std::unordered_map<std::string, int32_t> srcMap = {{"one", 1}, {"two", 2}, {"three", 3}};
-    zm::assign(root->hashMap, srcMap);
+    root->hashMap =  srcMap;
 
     // Test HashSet
     std::unordered_set<std::string> srcSet = {"alpha", "beta", "gamma"};
-    zm::assign(root->hashSet, srcSet);
+    root->hashSet =  srcSet;
 
     // Get result
     zm::Span<char> bytes = builder->finalize();
@@ -120,7 +120,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 
     // Test nested array conversion
     std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
-    zm::assign(root->nestedArray, srcNested);
+    root->nestedArray = srcNested;
 
     // Get result
     zm::Span<char> bytes = builder->finalize();

@@ -341,6 +341,19 @@ class String
         return !isEqual(other.c_str());
     }
 
+    // Assignment operators for automatic conversion
+    String& operator=(const std::string& other)
+    {
+        assign(*this, other);
+        return *this;
+    }
+
+    String& operator=(const char* other)
+    {
+        assign(*this, other);
+        return *this;
+    }
+
     // friend class BlobBuilder;
 
     // Friend declarations for new Builder API
@@ -423,6 +436,14 @@ template <typename T> class Array
     };
 
     ZMEYA_NODISCARD bool empty() const noexcept { return size() == 0; }
+
+    // Assignment operators for automatic conversion
+    template<typename F>
+    Array<T>& operator=(const std::vector<F>& other)
+    {
+        assign(*this, other);
+        return *this;
+    }
 
     // friend class BlobBuilder;
 
@@ -539,6 +560,15 @@ template <typename Key> class HashSet
     }
 
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return containsImpl<Key, HashKeyAdapterGeneric<Key>>(key); }
+
+    // Assignment operators for automatic conversion
+    template<typename F>
+    HashSet<Key>& operator=(const std::unordered_set<F>& other)
+    {
+        assign(*this, other);
+        return *this;
+    }
+
     // friend class BlobBuilder;
 
     // Friend declarations for new Builder API
@@ -701,6 +731,14 @@ template <typename Key, typename Value> class HashMap
             return res->c_str();
         }
         return valueIfNotFound;
+    }
+
+    // Assignment operators for automatic conversion
+    template<typename FK, typename FV>
+    HashMap<Key, Value>& operator=(const std::unordered_map<FK, FV>& other)
+    {
+        assign(*this, other);
+        return *this;
     }
 
     // friend class BlobBuilder;
@@ -2014,30 +2052,9 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
 
     for (size_t i = 0; i < from.size(); ++i)
     {
-        // deep-copy elements
-        // TODO: add range check for offset to make sure it within the valid range (goffset_t)
+        // deep-copy elements using the universal deep_copy function
         zm::goffset_t elementOffset = zm::goffset_t(arrayDataOffset + i * sizeOfT);
-        
-        // Use placement constructor and then assign
-        T* element = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(elementOffset));
-        BuilderBase::placementCtor<T>(element);
-        
-        // For fundamental types, direct assignment
-        if constexpr (std::is_fundamental_v<F> && std::is_fundamental_v<T>) {
-            *element = static_cast<T>(from[i]);
-        }
-        // For string conversion
-        else if constexpr (std::is_same_v<F, std::string> && std::is_same_v<T, String>) {
-            assign(*element, from[i]);
-        }
-        // For vector to array conversion (nested arrays)
-        else if constexpr (std::is_same_v<std::decay_t<F>, std::vector<typename std::decay_t<F>::value_type, typename std::decay_t<F>::allocator_type>>) {
-            assign(*element, from[i]);
-        }
-        // For other complex types, this shouldn't happen in practice
-        else {
-            static_assert(sizeof(F) == 0, "Unsupported type conversion in deep_copy");
-        }
+        deep_copy<F, T>(from[i], elementOffset);
     }
 }
 
@@ -2114,14 +2131,8 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
         Key* element = &items[bucket.endIndex];
         BuilderBase::placementCtor<Key>(element);
         
-        // Assign the item using the same logic as Array assign
-        if constexpr (std::is_fundamental_v<F> && std::is_fundamental_v<Key>) {
-            *element = static_cast<Key>(item);
-        } else if constexpr (std::is_same_v<F, std::string> && std::is_same_v<Key, String>) {
-            assign(*element, item);
-        } else {
-            assign(*element, item);
-        }
+        // Assign the item using operator= (automatic conversion)
+        *element = item;
         
         bucket.endIndex++;
     }
@@ -2254,23 +2265,9 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
         BuilderBase::placementCtor<Key>(mutableKey);
         BuilderBase::placementCtor<Value>(&element->second);
         
-        // Assign key
-        if constexpr (std::is_fundamental_v<FK> && std::is_fundamental_v<Key>) {
-            *mutableKey = static_cast<Key>(key);
-        } else if constexpr (std::is_same_v<FK, std::string> && std::is_same_v<Key, String>) {
-            assign(*mutableKey, key);
-        } else {
-            assign(*mutableKey, key);
-        }
-        
-        // Assign value
-        if constexpr (std::is_fundamental_v<FV> && std::is_fundamental_v<Value>) {
-            element->second = static_cast<Value>(value);
-        } else if constexpr (std::is_same_v<FV, std::string> && std::is_same_v<Value, String>) {
-            assign(element->second, value);
-        } else {
-            assign(element->second, value);
-        }
+        // Assign key and value using operator= (automatic conversion)
+        *mutableKey = key;
+        element->second = value;
         
         bucket.endIndex++;
     }
@@ -2322,67 +2319,14 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 
 // Deep-copy adapter implementations
 
-// Generic copy for fundamental types only (int, float, etc.)
-template <typename F, typename T> 
-std::enable_if_t<std::is_fundamental_v<std::decay_t<F>> && std::is_fundamental_v<std::decay_t<T>> && std::is_convertible_v<F, T>>
-deep_copy(const F& from, zm::goffset_t to_ofs)
+// Universal deep_copy - works for all types thanks to operator= overloads
+template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs)
 {
     BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     T* p_to = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    *p_to = static_cast<T>(from);
-}
-
-// Specialized overloads for std::* -> zm::* conversions
-inline void deep_copy(const std::string& from, zm::goffset_t to_ofs) 
-{ 
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    String* p_to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    assign(*p_to, from); 
-}
-
-inline void deep_copy(const char* from, zm::goffset_t to_ofs) 
-{ 
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    String* p_to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    assign(*p_to, from); 
-}
-
-template <typename F, typename T> void deep_copy(const std::vector<F>& from, zm::goffset_t to_ofs) 
-{ 
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    Array<T>* p_to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    assign(*p_to, from); 
-}
-
-template <typename F, typename Key> void deep_copy(const std::unordered_set<F>& from, zm::goffset_t to_ofs) 
-{ 
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    HashSet<Key>* p_to = reinterpret_cast<HashSet<Key>*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    assign(*p_to, from); 
-}
-
-template <typename FK, typename FV, typename Key, typename Value>
-void deep_copy(const std::unordered_map<FK, FV>& from, zm::goffset_t to_ofs)
-{
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    HashMap<Key, Value>* p_to = reinterpret_cast<HashMap<Key, Value>*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    assign(*p_to, from);
-}
-
-// Pair conversions
-template <typename F1, typename F2, typename T1, typename T2> void deep_copy(const Pair<F1, F2>& from, zm::goffset_t to_ofs)
-{
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-    Pair<T1, T2>* p_to = reinterpret_cast<Pair<T1, T2>*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    deep_copy(from.first, builder->get_global_offset(&p_to->first));
-    deep_copy(from.second, builder->get_global_offset(&p_to->second));
+    BuilderBase::placementCtor<T>(p_to);
+    *p_to = from; // This will call the appropriate operator= automatically!
 }
 
 /*

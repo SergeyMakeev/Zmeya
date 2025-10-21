@@ -124,6 +124,16 @@ struct Desc
     zm::String name;
     float v1;
     uint32_t v2;
+    
+    // Assignment operator for automatic conversion from TempDesc
+    template<typename TempType>
+    Desc& operator=(const TempType& temp)
+    {
+        name = temp.name;
+        v1 = temp.v1;
+        v2 = temp.v2;
+        return *this;
+    }
 };
 
 struct TestRoot
@@ -172,19 +182,19 @@ TEST(ZmeyaTestSuite, SimpleTest2)
             tempDescs.push_back(desc);
         }
         
-        // For complex struct conversion, we need to add a deep_copy specialization
-        // For now, let's create a simple vector of strings to demonstrate the new API
-        std::vector<std::string> nameStrings(names.begin(), names.end());
+        root->arr = tempDescs;
         
-        // TODO: Once we have deep_copy<TempDesc, Desc> specialization, we can use:
-        // zm::assign(root->arr, tempDescs);
-        
-        // For now, let's just test that the root object works and skip the complex array
-        // The array will remain empty, which is fine for testing the basic API
-        
-        EXPECT_EQ(root->arr.size(), 0); // Array is empty for now
-        
-        // TODO: Add array validation once deep_copy<TempDesc, Desc> is implemented
+        EXPECT_EQ(root->arr.size(), names.size());
+
+        // Validate data during build
+        for (size_t i = 0; i < names.size(); i++)
+        {
+            const char* s1 = root->arr[i].name.c_str();
+            const char* s2 = names[i].c_str();
+            EXPECT_STREQ(s1, s2);
+            EXPECT_FLOAT_EQ(root->arr[i].v1, (float)(i));
+            EXPECT_EQ(root->arr[i].v2, (uint32_t)(i));
+        }
         
         zm::Span<char> bytes = builder->finalize();
         blob = std::vector<char>(bytes.data, bytes.data + bytes.size);
@@ -198,9 +208,15 @@ TEST(ZmeyaTestSuite, SimpleTest2)
 
     // validate
     const TestRoot* rootCopy = (const TestRoot*)(blob.data());
-    EXPECT_EQ(rootCopy->arr.size(), 0); // Array is empty for now
-    
-    // TODO: Add validation once complex struct conversion is implemented
+    EXPECT_EQ(rootCopy->arr.size(), names.size());
+
+    for (size_t i = 0; i < names.size(); i++)
+    {
+        const Desc& desc = rootCopy->arr[i];
+        EXPECT_STREQ(desc.name.c_str(), names[i].c_str());
+        EXPECT_FLOAT_EQ(desc.v1, (float)(i));
+        EXPECT_EQ(desc.v2, (uint32_t)(i));
+    }
 
 /*
     EXPECT_EQ(Memory::mallocCount, Memory::freeCount);
