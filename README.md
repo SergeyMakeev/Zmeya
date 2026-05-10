@@ -128,8 +128,27 @@ i.e.
 etc...
 
 The only requirement is that we have to have all the data tightly packed in a single memory region or binary blob.
-Zmeya provides a convenient mechanism to build such a binary blob called `zm::BlobBuilder`.
-Blob builder is capable of convert all the standard STL containers to appropriate Zmeya movable containers. Blob builder also provides a mechanism to convert all the inner types (e.g., `std::vector<std::string>`) to Zmeya compatible type. And by default, Zmeya offers convertors/template specializations for all commonly used cases.
+
+### Building blobs (serialization)
+
+Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling code that **writes** blobs (see `CMakeLists.txt` in this repo).
+
+**Target API (planned):** a **closure** entry point so building looks like normal C++ struct fills — for example:
+
+```cpp
+zm::Span<char> blob = zm::build<MyRoot>([](MyRoot* root) {
+    root->title = std::string("hello");
+    root->nums = std::vector<int>{1, 2, 3};
+});
+```
+
+(`zm::build` is the intended public wrapper; until it lands, use **`zm::Builder<MyRoot>::create()`** plus **`zm::ScopedBuilder`** around your mutations — see unit tests.)
+
+Assignments into **`zm::`** fields use an **active builder** stored in **thread-local storage** for that call chain. **Do not** assign into zm containers from **other threads** inside the same build (worker threads do not share that TLS). Parallel work is fine if zm mutations stay on the thread that started the build.
+
+Recursive **`std::*` → `zm::*`** conversion is handled by **`zm::assign`** and container **`operator=`** overloads so nested STL shapes map to nested Zmeya containers without hand-writing every combination.
+
+See **`NEXT_STEPS.md`** for the migration plan from the current branch state to this API.
 
 # References
 
