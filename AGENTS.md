@@ -69,6 +69,18 @@ Some tests write files next to the **current working directory** (e.g. `test.zm`
 
 `ZmeyaTest10` uses memory-mapped files on **Windows**; on other platforms it reads the file into a buffer and validates the same layout.
 
+### `build.cmd` (Windows)
+
+Root **`build.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs **`OpenCppCoverage.exe`** when that tool is on `PATH`. If OpenCppCoverage is not installed, it runs **`build\Debug\ZmeyaTest.exe`** directly so the script still validates tests.
+
+### Builder growth and raw pointers
+
+`BuilderBase` stores data in a `std::vector<char>` that can **reallocate** when it grows. Raw pointers returned by **`allocate<T>()`** or captured before a large **`assign`** are only valid while the buffer does not move. Stress tests pass a **large initial size** to **`Builder<>::create(n)`** so the buffer stays stable for that session. A future handle-based or slab builder would remove this constraint.
+
+### Debug vs Release
+
+**`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; it reserves a larger builder buffer in Release so pointer assignments stay valid.
+
 ## Documentation
 
 | File | Purpose |

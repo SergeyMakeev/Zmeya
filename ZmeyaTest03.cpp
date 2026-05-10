@@ -99,7 +99,7 @@ TEST(ZmeyaTestSuite, ArrayTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::unique_ptr<zm::Builder<ArrayTestRoot>> builder = zm::Builder<ArrayTestRoot>::create();
+        std::unique_ptr<zm::Builder<ArrayTestRoot>> builder = zm::Builder<ArrayTestRoot>::create(32 * 1024 * 1024);
         zm::ScopedBuilder scope(builder.get());
 
         zm::Builder<ArrayTestRoot>* b = builder.get();

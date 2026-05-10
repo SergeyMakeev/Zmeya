@@ -8,4 +8,10 @@ cd %builddir%
 cmake ..
 cd ..
 cmake --build .\build\ --config Debug
+where OpenCppCoverage.exe >nul 2>&1
+if errorlevel 1 (
+  echo OpenCppCoverage.exe not found; running ZmeyaTest without coverage.
+  .\build\Debug\ZmeyaTest.exe
+  exit /b %ERRORLEVEL%
+)
 OpenCppCoverage.exe --sources Zmeya*.* --excluded_sources *googletest* --modules *.exe -- .\build\Debug\ZmeyaTest.exe

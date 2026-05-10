@@ -110,7 +110,9 @@ static void generateTestFile(const char* fileName)
 
         for (size_t i = 1; i < root->objects.size(); i++)
         {
-            zm::assign(root->objects[i].parent, &root->objects[i - 1]);
+            Object* cur = root->objects.get_element_ptr_unsafe_can_be_relocated(i);
+            Object* prev = root->objects.get_element_ptr_unsafe_can_be_relocated(i - 1);
+            zm::assign(cur->parent, prev);
         }
 
         std::unordered_set<std::string> hs = {"one", "two", "three"};

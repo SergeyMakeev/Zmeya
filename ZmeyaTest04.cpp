@@ -51,7 +51,11 @@ TEST(ZmeyaTestSuite, ListTest)
 {
     std::vector<char> bytesCopy;
     {
+#ifndef _DEBUG
+        std::unique_ptr<zm::Builder<ListTestRoot>> builder = zm::Builder<ListTestRoot>::create(128 * 1024 * 1024);
+#else
         std::unique_ptr<zm::Builder<ListTestRoot>> builder = zm::Builder<ListTestRoot>::create(4 * 1024 * 1024);
+#endif
         zm::ScopedBuilder scope(builder.get());
 
         zm::Builder<ListTestRoot>* b = builder.get();

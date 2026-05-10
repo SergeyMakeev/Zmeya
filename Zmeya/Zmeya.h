@@ -1710,12 +1710,6 @@ Implements its own memory management and offset calculation.
 class BuilderBase
 {
   public:
-    // consider removing?
-    template <typename T> struct Object
-    {
-        goffset_t offset;
-    };
-
     std::vector<char, BlobBuilderAllocator<char, ZMEYA_MAX_ALIGN>> data;
 
     struct PrivateToken
@@ -1753,14 +1747,13 @@ class BuilderBase
 
     void* get_ptr_unsafe_to_store(goffset_t g_offs) { return &data[g_offs]; }
 
-    template <typename T> Object<T> allocate()
+    template <typename T> T* allocate()
     {
         static_assert(std::is_trivially_copyable<T>::value, "Only trivially copyable types allowed");
         goffset_t g_offs = alloc_aligned(sizeof(T), alignof(T));
-        BuilderBase::placementCtor<T>(get_ptr_unsafe_to_store(g_offs));
-
-        auto obj = Object<T>{g_offs};
-        return obj;
+        void* ptr = get_ptr_unsafe_to_store(g_offs);
+        BuilderBase::placementCtor<T>(ptr);
+        return reinterpret_cast<T*>(ptr);
     }
 
     // Helper methods for assignment functions
@@ -1901,8 +1894,8 @@ ZMEYA_NODISCARD inline std::vector<char> build(Fn&& fn, size_t initialSizeInByte
     std::unique_ptr<Builder<TRoot>> builder = Builder<TRoot>::create(initialSizeInBytes);
     ScopedBuilder scope(builder.get());
     std::forward<Fn>(fn)(builder->getRoot());
-    Span<char> span = builder->finalize(finalizeAlignment);
-    return std::vector<char>(span.data, span.data + span.size());
+    Span<char> blobSpan = builder->finalize(finalizeAlignment);
+    return std::vector<char>(blobSpan.data, blobSpan.data + blobSpan.size);
 }
 
 /*
@@ -2282,8 +2275,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
         
         // Place item at current endIndex and increment
         ItemType* element = &items[bucket.endIndex];
-        BuilderBase::placementCtor<ItemType>(element);
-        
+
         // Assign key and value using the same logic as Array assign
         // Note: element->first is const Key, so we need to cast away const for assignment
         Key* mutableKey = const_cast<Key*>(&element->first);
@@ -2372,7 +2364,10 @@ Usage examples:
 // Optional macro for cleaner syntax
 #define ZM_ASSIGN(zm_var, std_var) zm::assign(zm_var, std_var)
 
-#endif
+#endif // ZMEYA_ENABLE_SERIALIZE_SUPPORT (nested Builder / assign section)
+
+#endif // ZMEYA_ENABLE_SERIALIZE_SUPPORT (serialization helpers: BlobPtr surface, diff*, BlobBuilder stub)
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
