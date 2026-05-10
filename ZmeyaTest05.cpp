@@ -37,23 +37,6 @@ static void validate(const StringTestRoot* root)
     EXPECT_EQ(root->strArr1[1], "second");
     EXPECT_EQ(root->strArr1[2], "third");
     EXPECT_EQ(root->strArr1[3], "fourth");
-
-    /*
-    EXPECT_EQ(root->strArr2.size(), std::size_t(3));
-    EXPECT_EQ(root->strArr2[0], "one");
-    EXPECT_EQ(root->strArr2[1], "two");
-    EXPECT_EQ(root->strArr2[2], "three");
-
-    EXPECT_EQ(root->strArr3.size(), std::size_t(2));
-    EXPECT_EQ(root->strArr3[0], "hello");
-    EXPECT_EQ(root->strArr3[1], "world");
-
-    EXPECT_EQ(root->strArr4.size(), std::size_t(10)); // Updated for debugging
-    for (const zm::String& s : root->strArr4)
-    {
-        EXPECT_EQ(s, root->str1);
-    }
-    */
 }
 
 TEST(ZmeyaTestSuite, StringTest_Debug)

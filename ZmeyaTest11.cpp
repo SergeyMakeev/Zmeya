@@ -10,8 +10,7 @@
 
 /*
 
-Originally exercised BlobBuilder referTo() for shared sub-blobs (small on-disk size).
-The new builder deep-copies those payloads into each node; semantics on read stay the same.
+Deep-copies shared payloads into each node; read-side validation matches prior semantics.
 
 */
 

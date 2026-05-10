@@ -17,7 +17,7 @@
 /*
 
 Stress layout: many nodes, pointers, inheritance, hash containers.
-Previously used BlobBuilder + referTo; now Builder + deep copies of the long description string per node (larger blob, same read validation).
+Shared payload strings are deep-copied per node (larger blob than pointer-sharing would allow).
 
 */
 

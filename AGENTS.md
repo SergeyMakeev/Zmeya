@@ -86,4 +86,4 @@ Root **`build.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs *
 | File | Purpose |
 |------|---------|
 | `README.md` | Library overview and usage |
-| `NEXT_STEPS.md` | Builder API roadmap and migration notes |
+| `NEXT_STEPS.md` | Builder TLS/reallocation notes and follow-ups |

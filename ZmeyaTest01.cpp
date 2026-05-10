@@ -1,62 +1,5 @@
 #include "gtest/gtest.h"
 
-/*
-namespace Memory
-{
-
-size_t mallocCount = 0;
-size_t freeCount = 0;
-
-struct Header
-{
-    void* p;
-    size_t size;
-    size_t magic;
-};
-
-const size_t kMinValidAlignment = 4;
-
-void* malloc(size_t bytesCount, size_t alignment)
-{
-    mallocCount++;
-    if (alignment < kMinValidAlignment)
-    {
-        alignment = kMinValidAlignment;
-    }
-    void* p;
-    void** p2;
-    size_t offset = alignment - 1 + sizeof(Header);
-    if ((p = (void*)std::malloc(bytesCount + offset)) == NULL)
-    {
-        return NULL;
-    }
-    p2 = (void**)(((size_t)(p) + offset) & ~(alignment - 1));
-
-    Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p2) - sizeof(Header));
-    h->p = p;
-    h->size = bytesCount;
-    h->magic = size_t(0x13061979);
-    return p2;
-}
-
-void mfree(void* p)
-{
-    freeCount++;
-    if (!p)
-    {
-        return;
-    }
-    Header* h = reinterpret_cast<Header*>(reinterpret_cast<char*>(p) - sizeof(Header));
-    ASSERT_EQ(h->magic, size_t(0x13061979));
-    std::free(h->p);
-}
-
-} // namespace Memory
-
-#define ZMEYA_ALLOC(sizeInBytes, alignment) Memory::malloc(sizeInBytes, alignment)
-#define ZMEYA_FREE(ptr) Memory::mfree(ptr)
-*/
-
 #include "TestHelper.h"
 #include "Zmeya.h"
 
@@ -131,13 +74,6 @@ TEST(ZmeyaTestSuite, SimpleTest2)
                                             "oceanic", "painter", "quarter", "rescue",  "seventh", "trivial", "umbrella",
                                             "village", "warrior", "xenial",  "yonder",  "zephyr"};
 
-/*
-    Memory::mallocCount = 0;
-    Memory::freeCount = 0;
-    EXPECT_EQ(Memory::mallocCount, size_t(0));
-    EXPECT_EQ(Memory::freeCount, size_t(0));
-*/
-
     struct TempDesc
     {
         std::string name;
@@ -174,12 +110,6 @@ TEST(ZmeyaTestSuite, SimpleTest2)
             }
         });
 
-/*
-    EXPECT_GT(Memory::mallocCount, size_t(0));
-    EXPECT_GT(Memory::freeCount, size_t(0));
-    EXPECT_EQ(Memory::mallocCount, Memory::freeCount);
-*/
-
     // validate
     const TestRoot* rootCopy = (const TestRoot*)(blob.data());
     EXPECT_EQ(rootCopy->arr.size(), names.size());
@@ -191,8 +121,4 @@ TEST(ZmeyaTestSuite, SimpleTest2)
         EXPECT_FLOAT_EQ(desc.v1, (float)(i));
         EXPECT_EQ(desc.v2, (uint32_t)(i));
     }
-
-/*
-    EXPECT_EQ(Memory::mallocCount, Memory::freeCount);
-*/
 }

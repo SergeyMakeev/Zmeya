@@ -11,7 +11,7 @@ Zmeya is not even a serialization library in the usual sense but rather a set of
 # Features
 
 - Cross-platform compatible
-- Single header library (~550 lines of code for deserialization and extra 750 lines of code with serialization support enabled)
+- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for builder and assign APIs)
 - No code generation required: no IDL or metadata, just use your types directly
 - No macros
 - Heavily optimized for performance
@@ -148,7 +148,7 @@ Assignments into **`zm::`** fields use an **active builder** stored in **thread-
 
 Recursive **`std::*` → `zm::*`** conversion is handled by **`zm::assign`** and container **`operator=`** overloads so nested STL shapes map to nested Zmeya containers without hand-writing every combination.
 
-See **`NEXT_STEPS.md`** for the migration plan from the current branch state to this API.
+See **`NEXT_STEPS.md`** for builder limitations and follow-up work (e.g. reallocation).
 
 # References
 

@@ -228,7 +228,6 @@ ZMEYA_NODISCARD inline uintptr_t toAbsoluteAddr(uintptr_t base, roffset_t offset
 }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
-template <typename T> class BlobPtr;
 class BuilderBase;
 #endif
 
@@ -272,10 +271,6 @@ template <typename T> class Pointer
         return reinterpret_cast<T*>(addr);
     }
 
-#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
-    Pointer& operator=(const BlobPtr<T>& other);
-#endif
-
     // Note: implicit conversion operator
     // operator const T*() const noexcept { return get(); }
     // operator T*() noexcept { return get(); }
@@ -291,7 +286,6 @@ template <typename T> class Pointer
     ZMEYA_NODISCARD bool operator==(std::nullptr_t) const noexcept { return relativeOffset == 0; }
     ZMEYA_NODISCARD bool operator!=(std::nullptr_t) const noexcept { return relativeOffset != 0; }
 
-    // friend class BlobBuilder;
 };
 
 /*
@@ -353,8 +347,6 @@ class String
         assign(*this, other);
         return *this;
     }
-
-    // friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     inline friend void assign(String& to, const std::string& from);
@@ -444,8 +436,6 @@ template <typename T> class Array
         assign(*this, other);
         return *this;
     }
-
-    // friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     template <typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
@@ -568,8 +558,6 @@ template <typename Key> class HashSet
         assign(*this, other);
         return *this;
     }
-
-    // friend class BlobBuilder;
 
     // Friend declarations for new Builder API
     template <typename K, typename F> friend void assign(HashSet<K>& to, const std::unordered_set<F>& from);
@@ -741,8 +729,6 @@ template <typename Key, typename Value> class HashMap
         return *this;
     }
 
-    // friend class BlobBuilder;
-
     // Friend declarations for new Builder API
     template <typename K, typename V, typename FK, typename FV>
     friend void assign(HashMap<K, V>& to, const std::unordered_map<FK, FV>& from);
@@ -776,62 +762,11 @@ ZMEYA_NODISCARD inline roffset_t toRelativeOffset(diff_t v)
 
 constexpr bool inline isPowerOfTwo(size_t v) { return v && ((v & (v - 1)) == 0); }
 
-class BlobBuilder;
 
 /*
-    This is a non-serializable pointer to blob internal memory
-    Note: blob is able to relocate its own memory that's is why we cannot use
-   standard pointers or references
+    Aligned allocator for the builder backing buffer (see BuilderBase::data).
 */
-template <typename T> class BlobPtr
-{
-    offset_t absoluteOffset = 0;
-
-    bool isEqual(const BlobPtr<T>& other) const { return absoluteOffset == other.absoluteOffset; }
-
-  public:
-    explicit BlobPtr(offset_t _absoluteOffset)
-        : absoluteOffset(_absoluteOffset)
-    {
-    }
-
-    BlobPtr() = default;
-
-    BlobPtr(BlobPtr&&) = default;
-    BlobPtr& operator=(BlobPtr&&) = default;
-    BlobPtr(const BlobPtr&) = default;
-    BlobPtr& operator=(const BlobPtr&) = default;
-
-    template <typename T2> BlobPtr(const BlobPtr<T2>& other)
-    {
-        static_assert(std::is_convertible<T2*, T*>::value, "Uncompatible types");
-        absoluteOffset = other.absoluteOffset;
-    }
-    template <class T2> friend class BlobPtr;
-
-    offset_t getAbsoluteOffset() const { return absoluteOffset; }
-
-    ZMEYA_NODISCARD T* get() const
-    {
-        BuilderBase* builder = detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
-        return reinterpret_cast<T*>(const_cast<char*>(builder->getRawByAbsoluteOffset(absoluteOffset)));
-    }
-
-    T* operator->() const { return get(); }
-    T& operator*() const { return *(get()); }
-
-    operator bool() const { return get() != nullptr; }
-    bool operator==(const BlobPtr& other) const { return isEqual(other); }
-    bool operator!=(const BlobPtr& other) const { return !isEqual(other); }
-
-    template <typename T2> friend class Pointer;
-};
-
-/*
-    Blob allocator - aligned allocator for internal Blob usage
-*/
-template <typename T, int Alignment> class BlobBuilderAllocator : public std::allocator<T>
+template <typename T, int Alignment> class BufferAllocator : public std::allocator<T>
 {
   public:
     typedef size_t size_type;
@@ -840,7 +775,7 @@ template <typename T, int Alignment> class BlobBuilderAllocator : public std::al
 
     template <typename _Tp1> struct rebind
     {
-        typedef BlobBuilderAllocator<_Tp1, Alignment> other;
+        typedef BufferAllocator<_Tp1, Alignment> other;
     };
 
     pointer allocate(size_type n)
@@ -856,16 +791,16 @@ template <typename T, int Alignment> class BlobBuilderAllocator : public std::al
         ZMEYA_FREE(p);
     }
 
-    BlobBuilderAllocator()
+    BufferAllocator()
         : std::allocator<T>()
     {
     }
-    BlobBuilderAllocator(const BlobBuilderAllocator& a)
+    BufferAllocator(const BufferAllocator& a)
         : std::allocator<T>(a)
     {
     }
     template <class U>
-    BlobBuilderAllocator(const BlobBuilderAllocator<U, Alignment>& a)
+    BufferAllocator(const BufferAllocator<U, Alignment>& a)
         : std::allocator<T>(a)
     {
     }
@@ -889,761 +824,16 @@ template <typename T> struct Span
     }
 };
 
-template <typename T> std::weak_ptr<T> weak_from(T* p)
-{
-    std::shared_ptr<T> shared = p->shared_from_this();
-    return shared;
-}
 
-#if 0
 
 /*
-    Blob - a binary blob of data that is able to store POD types and special
-   "movable" data structures Note: Zmeya containers can be freely moved in
-   memory and deserialize from raw bytes without any extra work.
-*/
-class BlobBuilder : public std::enable_shared_from_this<BlobBuilder>
-{
-    std::vector<char, BlobBuilderAllocator<char, ZMEYA_MAX_ALIGN>> data;
 
-  private:
-    ZMEYA_NODISCARD const char* get(offset_t absoluteOffset) const
-    {
-        ZMEYA_ASSERT(absoluteOffset < data.size());
-        return &data[absoluteOffset];
-    }
+**Builder**
 
-    template <typename T> ZMEYA_NODISCARD BlobPtr<T> getBlobPtr(const T* p) const
-    {
-        ZMEYA_ASSERT(containsPointer(p));
-        offset_t absoluteOffset = diffAddr(uintptr_t(p), uintptr_t(data.data()));
-        return BlobPtr<T>(weak_from(this), absoluteOffset);
-    }
-
-    struct PrivateToken
-    {
-    };
-
-  public:
-    BlobBuilder() = delete;
-
-    BlobBuilder(size_t initialSizeInBytes, PrivateToken)
-    {
-        static_assert(std::is_trivially_copyable<Pointer<int>>::value, "Pointer is_trivially_copyable check failed");
-        static_assert(std::is_trivially_copyable<Array<int>>::value, "Array is_trivially_copyable check failed");
-        static_assert(std::is_trivially_copyable<HashSet<int>>::value, "HashSet is_trivially_copyable check failed");
-        static_assert(std::is_trivially_copyable<Pair<int, float>>::value, "Pair is_trivially_copyable check failed");
-        static_assert(std::is_trivially_copyable<HashMap<int, int>>::value, "HashMap is_trivially_copyable check failed");
-        static_assert(std::is_trivially_copyable<String>::value, "String is_trivially_copyable check failed");
-
-        data.reserve(initialSizeInBytes);
-    }
-
-    ~BlobBuilder() = default;
-
-    bool containsPointer(const void* p) const { return (!data.empty() && (p >= &data.front() && p <= &data.back())); }
-
-    BlobPtr<char> allocate(size_t numBytes, size_t alignment)
-    {
-        ZMEYA_ASSERT(isPowerOfTwo(alignment));
-        ZMEYA_ASSERT(alignment < ZMEYA_MAX_ALIGN);
-        //
-        size_t cursor = data.size();
-
-        // padding / alignment
-        size_t off = cursor & (alignment - 1);
-        size_t padding = 0;
-        if (off != 0)
-        {
-            padding = alignment - off;
-        }
-        size_t absoluteOffset = cursor + padding;
-        size_t numBytesToAllocate = numBytes + padding;
-
-        // Allocate more memory
-        // Note: new memory is filled with zeroes
-        // Zmeya containers rely on this behavior and we want to have all the padding zeroed as well
-        data.resize(data.size() + numBytesToAllocate, char(0));
-
-        // check alignment
-        ZMEYA_ASSERT((uintptr_t(&data[absoluteOffset]) & (alignment - 1)) == 0);
-        ZMEYA_ASSERT(absoluteOffset < size_t(std::numeric_limits<offset_t>::max()));
-        return BlobPtr<char>(weak_from(this), offset_t(absoluteOffset));
-    }
-
-#if 0
-    template <typename T, typename... _Valty> void placementCtor(void* ptr, _Valty&&... _Val)
-    {
-        ::new (const_cast<void*>(static_cast<const volatile void*>(ptr))) T(std::forward<_Valty>(_Val)...);
-    }
-#endif
-
-#if 0
-    template <typename T, typename... _Valty> BlobPtr<T> allocate(_Valty&&... _Val)
-    {
-        // compile time checks
-        static_assert(std::is_trivially_copyable<T>::value, "Only trivially copyable types allowed");
-        constexpr size_t alignOfT = std::alignment_of<T>::value;
-        static_assert(isPowerOfTwo(alignOfT), "Non power of two alignment not supported");
-        static_assert(alignOfT < ZMEYA_MAX_ALIGN, "Unsupported alignment");
-        constexpr size_t sizeOfT = sizeof(T);
-
-        BlobPtr<char> ptr = allocate(sizeOfT, alignOfT);
-
-        placementCtor<T>(ptr.get(), std::forward<_Valty>(_Val)...);
-
-        return BlobPtr<T>(weak_from(this), ptr.getAbsoluteOffset());
-    }
-#endif
-
-#if 0
-
-    template <typename T> T* getDirectMemoryAccessUnsafe(offset_t absoluteOffset)
-    {
-        const char* p = get(absoluteOffset);
-        return const_cast<T*>(reinterpret_cast<const T*>(p));
-    }
-
-    template <typename T> void setArrayOffset(const BlobPtr<Array<T>>& dst, offset_t absoluteOffset)
-    {
-        dst->relativeOffset = toRelativeOffset(diff(absoluteOffset, dst.getAbsoluteOffset()));
-    }
-
-    template <typename T> offset_t resizeArrayWithoutInitialization(Array<T>& _dst, size_t numElements)
-    {
-        constexpr size_t alignOfT = std::alignment_of<T>::value;
-        constexpr size_t sizeOfT = sizeof(T);
-        static_assert((sizeOfT % alignOfT) == 0, "The size must be a multiple of the alignment");
-
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        // An array can be assigned/resized only once (non empty array detected)
-        ZMEYA_ASSERT(dst->relativeOffset == 0 && dst->numElements == 0);
-
-        BlobPtr<char> arrData = allocate(sizeOfT * numElements, alignOfT);
-        ZMEYA_ASSERT(numElements < size_t(std::numeric_limits<uint32_t>::max()));
-        dst->numElements = uint32_t(numElements);
-        setArrayOffset(dst, arrData.getAbsoluteOffset());
-        return arrData.getAbsoluteOffset();
-    }
-
-    // get writeable pointer to array element
-    template <typename T> ZMEYA_NODISCARD BlobPtr<T> getArrayElement(Array<T>& arr, const size_t index) const noexcept
-    {
-        T* rawElementPtr = arr.getData() + index;
-        BlobPtr<T> element = getBlobPtr(rawElementPtr);
-        return element;
-    }
-
-    // resize array (using copy constructor)
-    template <typename T> offset_t resizeArray(Array<T>& _dst, size_t numElements, const T& emptyElement)
-    {
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        offset_t absoluteOffset = resizeArrayWithoutInitialization(_dst, numElements);
-        T* current = getDirectMemoryAccessUnsafe<T>(absoluteOffset);
-        for (size_t i = 0; i < numElements; i++)
-        {
-            // call copy ctor
-            placementCtor<T>(current, emptyElement);
-            current++;
-        }
-        return absoluteOffset;
-    }
-
-    // resize array (using default constructor)
-    template <typename T> offset_t resizeArray(Array<T>& _dst, size_t numElements)
-    {
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        offset_t absoluteOffset = resizeArrayWithoutInitialization(_dst, numElements);
-        T* current = getDirectMemoryAccessUnsafe<T>(absoluteOffset);
-        for (size_t i = 0; i < numElements; i++)
-        {
-            // default ctor
-            placementCtor<T>(current);
-            current++;
-        }
-        return absoluteOffset;
-    }
-#endif
-
-#if 0
-    // copyTo array fast (without using convertor)
-    template <typename T> offset_t copyToArrayFast(BlobPtr<Array<T>> dst, const T* begin, size_t numElements)
-    {
-        static_assert(std::is_trivially_copyable<T>::value, "Only trivially copyable types allowed");
-        offset_t absoluteOffset = resizeArrayWithoutInitialization(*dst, numElements);
-        T* arrData = getDirectMemoryAccessUnsafe<T>(absoluteOffset);
-        std::memcpy(arrData, begin, sizeof(T) * numElements);
-        return absoluteOffset;
-    }
-
-    // copyTo array fast (without using convertor)
-    template <typename T> offset_t copyToArrayFast(Array<T>& _dst, const T* begin, size_t numElements)
-    {
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        return copyToArrayFast(dst, begin, numElements);
-    }
-
-    // copyTo array from range
-    template <typename T, typename Iter, typename ConvertorFunc>
-    offset_t copyToArray(BlobPtr<Array<T>> dst, const Iter begin, const Iter end, int64_t size, ConvertorFunc convertorFunc)
-    {
-        size_t numElements = (size >= 0) ? size_t(size) : std::distance(begin, end);
-        resizeArray(*dst, numElements);
-
-        BlobPtr<T> firstElement = getBlobPtr(dst->data());
-        offset_t absoluteOffset = firstElement.getAbsoluteOffset();
-        offset_t currentIndex = 0;
-        for (Iter cur = begin; cur != end; ++cur)
-        {
-            offset_t currentItemAbsoluteOffset = absoluteOffset + sizeof(T) * currentIndex;
-            convertorFunc(this, currentItemAbsoluteOffset, *cur);
-            currentIndex++;
-        }
-        return absoluteOffset;
-    }
-
-    // copyTo array from range
-    template <typename T, typename Iter, typename ConvertorFunc>
-    offset_t copyToArray(Array<T>& _dst, const Iter begin, const Iter end, int64_t size, ConvertorFunc convertorFunc)
-    {
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        return copyToArray(dst, begin, end, size, convertorFunc);
-    }
-
-    // copyTo hash container
-    template <typename ItemSrcAdapter, typename ItemDstAdapter, typename HashType, typename Iter, typename ConvertorFunc>
-    void copyToHash(HashType& _dst, Iter begin, Iter end, int64_t size, ConvertorFunc convertorFunc)
-    {
-        // Note: this bucketing method relies on the fact that the input data set is (already) unique
-        size_t numElements = (size >= 0) ? size_t(size) : std::distance(begin, end);
-        ZMEYA_ASSERT(numElements > 0);
-        size_t numBuckets = numElements * 2;
-        ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
-        size_t hashMod = numBuckets;
-
-        BlobPtr<HashType> dst = getBlobPtr(&_dst);
-        // allocate buckets & items
-        resizeArray(dst->buckets, numBuckets);
-
-        // 1-st pass count the number of elements per bucket (beginIndex / endIndex)
-        typename HashType::Bucket* buckets = dst->buckets.get_raw_ptr_unsafe_can_be_relocated();
-        for (Iter cur = begin; cur != end; ++cur)
-        {
-            const auto& current = *cur;
-            size_t hash = ItemSrcAdapter::hash(current);
-            size_t bucketIndex = hash % hashMod;
-            buckets[bucketIndex].beginIndex++; // temporary use beginIndex to store the number of items
-        }
-
-        size_t beginIndex = 0;
-        for (size_t bucketIndex = 0; bucketIndex < numBuckets; bucketIndex++)
-        {
-            typename HashType::Bucket& bucket = buckets[bucketIndex];
-            size_t numElementsInBucket = bucket.beginIndex;
-            bucket.beginIndex = uint32_t(beginIndex);
-            bucket.endIndex = bucket.beginIndex;
-            beginIndex += numElementsInBucket;
-        }
-
-        // note: at this point this pointer is no longer valid (resize array can move data)
-        buckets = nullptr;
-
-        // 2-st pass copy items
-        offset_t absoluteOffset = resizeArrayWithoutInitialization(dst->items, numElements);
-        for (Iter cur = begin; cur != end; ++cur)
-        {
-            const auto& current = *cur;
-            size_t hash = ItemSrcAdapter::hash(current);
-            size_t bucketIndex = hash % hashMod;
-            typename HashType::Bucket* bucket = dst->buckets.get_element_ptr_unsafe_can_be_relocated(bucketIndex);
-            uint32_t elementIndex = bucket->endIndex;
-            offset_t currentItemAbsoluteOffset = absoluteOffset + sizeof(typename ItemDstAdapter::ItemType) * offset_t(elementIndex);
-            convertorFunc(this, currentItemAbsoluteOffset, *cur);
-
-            // Note: convertorFunc can allocate additional memory -> reallocate storage
-            //    Hence, we need to reacquire the pointer
-            bucket = dst->buckets.get_element_ptr_unsafe_can_be_relocated(bucketIndex);
-#ifdef ZMEYA_VALIDATE_HASH_DUPLICATES
-            const typename ItemDstAdapter::ItemType* lastItem =
-                getDirectMemoryAccessUnsafe<typename ItemDstAdapter::ItemType>(currentItemAbsoluteOffset);
-            size_t newItemHash = ItemDstAdapter::hash(*lastItem);
-            // inconsistent hashing! hash(srcItem) != hash(dstItem)
-            ZMEYA_ASSERT(hash == newItemHash);
-            for (uint32_t testElementIndex = bucket->beginIndex; testElementIndex < bucket->endIndex; testElementIndex++)
-            {
-                offset_t testItemAbsoluteOffset = absoluteOffset + sizeof(typename ItemDstAdapter::ItemType) * offset_t(testElementIndex);
-                const typename ItemDstAdapter::ItemType* testItem =
-                    getDirectMemoryAccessUnsafe<typename ItemDstAdapter::ItemType>(testItemAbsoluteOffset);
-                ZMEYA_ASSERT(!ItemDstAdapter::eq(*testItem, *lastItem));
-            }
-#endif
-            bucket->endIndex++;
-        }
-    }
-#endif
-
-#if 0
-    // assignTo pointer
-    template <typename T> static void assignTo(Pointer<T>& dst, std::nullptr_t) { dst.relativeOffset = 0; }
-
-    // assignTo pointer from absolute offset
-    template <typename T> void assignTo(Pointer<T>& _dst, offset_t targetAbsoluteOffset)
-    {
-        BlobPtr<Pointer<T>> dst = getBlobPtr(&_dst);
-        roffset_t relativeOffset = toRelativeOffset(diff(targetAbsoluteOffset, dst.getAbsoluteOffset()));
-        ZMEYA_ASSERT(relativeOffset != 0);
-        dst->relativeOffset = relativeOffset;
-    }
-
-    // copyTo pointer from BlobPtr
-    template <typename T> void assignTo(Pointer<T>& dst, const BlobPtr<T>& src) { assignTo(dst, src.getAbsoluteOffset()); }
-
-    // copyTo pointer from RawPointer
-    template <typename T> void assignTo(Pointer<T>& dst, const T* _src)
-    {
-        const BlobPtr<T> src = getBlobPtr(_src);
-        assignTo(dst, src);
-    }
-
-    // copyTo pointer from reference
-    template <typename T> void assignTo(Pointer<T>& dst, const T& src) { assignTo(dst, &src); }
-#endif
-
-#if 0
-    // copyTo array from std::vector
-    template <typename T, typename TAllocator> void copyTo(Array<T>& dst, const std::vector<T, TAllocator>& src)
-    {
-        ZMEYA_ASSERT(src.size() > 0);
-        copyToArrayFast(dst, src.data(), src.size());
-    }
-
-    // specialization for vector of vectors
-    template <typename T, typename TAllocator1, typename TAllocator2>
-    void copyTo(Array<Array<T>>& dst, const std::vector<std::vector<T, TAllocator2>, TAllocator1>& src)
-    {
-        ZMEYA_ASSERT(src.size() > 0);
-        copyToArray(dst, src.begin(), src.end(), src.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const std::vector<T>& src)
-                    {
-                        Array<T>* dst = blobBuilder->getDirectMemoryAccessUnsafe<Array<T>>(dstAbsoluteOffset);
-                        blobBuilder->copyTo(*dst, src);
-                    });
-    }
-
-    // specialization for vector of strings
-    template <typename T, typename TAllocator> void copyTo(Array<String>& dst, const std::vector<T, TAllocator>& src)
-    {
-        ZMEYA_ASSERT(src.size() > 0);
-        copyToArray(dst, src.begin(), src.end(), src.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src)
-                    {
-                        String* dst = blobBuilder->getDirectMemoryAccessUnsafe<String>(dstAbsoluteOffset);
-                        blobBuilder->copyTo(*dst, src);
-                    });
-    }
-
-    // copyTo array from std::initializer_list
-    template <typename T> void copyTo(Array<T>& dst, std::initializer_list<T> list)
-    {
-        ZMEYA_ASSERT(list.size() > 0);
-        copyToArrayFast(dst, list.begin(), list.size());
-    }
-
-    // copyTo array from std::initializer_list
-    template <typename T> void copyTo(BlobPtr<Array<T>> dst, std::initializer_list<T> list)
-    {
-        ZMEYA_ASSERT(list.size() > 0);
-        copyToArrayFast(dst, list.begin(), list.size());
-    }
-
-    // specialization for std::initializer_list<std::string>
-    void copyTo(Array<String>& dst, std::initializer_list<const char*> list)
-    {
-        ZMEYA_ASSERT(list.size() > 0);
-        copyToArray(dst, list.begin(), list.end(), list.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const char* const& src)
-                    {
-                        String* dst = blobBuilder->getDirectMemoryAccessUnsafe<String>(dstAbsoluteOffset);
-                        blobBuilder->copyTo(*dst, src);
-                    });
-    }
-
-    // specialization for std::initializer_list<std::string>
-    void copyTo(BlobPtr<Array<String>> dst, std::initializer_list<const char*> list)
-    {
-        ZMEYA_ASSERT(list.size() > 0);
-        copyToArray(dst, list.begin(), list.end(), list.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const char* const& src)
-                    {
-                        String* dst = blobBuilder->getDirectMemoryAccessUnsafe<String>(dstAbsoluteOffset);
-                        blobBuilder->copyTo(*dst, src);
-                    });
-    }
-
-    // copyTo array from std::array
-    template <typename T, size_t NumElements> void copyTo(Array<T>& dst, const std::array<T, NumElements>& src)
-    {
-        ZMEYA_ASSERT(src.size() > 0);
-        copyToArrayFast(dst, src.data(), src.size());
-    }
-
-    // specialization for array of strings
-    template <typename T, size_t NumElements> void copyTo(Array<String>& dst, const std::array<T, NumElements>& src)
-    {
-        ZMEYA_ASSERT(src.size() > 0);
-        copyToArray(dst, src.begin(), src.end(), src.size(),
-                    [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const T& src)
-                    {
-                        String* dst = blobBuilder->getDirectMemoryAccessUnsafe<String>(dstAbsoluteOffset);
-                        blobBuilder->copyTo(*dst, src);
-                    });
-    }
-
-    // copyTo hash set from std::unordered_set
-    template <typename Key, typename Hasher, typename KeyEq, typename TAllocator>
-    void copyTo(HashSet<Key>& dst, const std::unordered_set<Key, Hasher, KeyEq, TAllocator>& src)
-    {
-        typedef HashKeyAdapterGeneric<Key> DstItemAdapter;
-        typedef HashKeyAdapterGeneric<Key> SrcItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                *dstElem = srcElem;
-            });
-    }
-
-    // copyTo hash set from std::unordered_set (specialization for string key)
-    template <typename Hasher, typename KeyEq, typename TAllocator>
-    void copyTo(HashSet<String>& dst, const std::unordered_set<std::string, Hasher, KeyEq, TAllocator>& src)
-    {
-        typedef HashKeyAdapterStdString SrcItemAdapter;
-        typedef HashKeyAdapterGeneric<String> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                blobBuilder->copyTo(*dstElem, srcElem);
-            });
-    }
-
-    // copyTo hash set from std::initializer_list
-    template <typename Key> void copyTo(HashSet<Key>& dst, std::initializer_list<Key> list)
-    {
-        typedef HashKeyAdapterGeneric<Key> SrcItemAdapter;
-        typedef HashKeyAdapterGeneric<Key> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                *dstElem = srcElem;
-            });
-    }
-
-    // copyTo hash set from std::initializer_list (specialization for string key)
-    void copyTo(HashSet<String>& dst, std::initializer_list<std::string> list)
-    {
-        typedef HashKeyAdapterStdString SrcItemAdapter;
-        typedef HashKeyAdapterGeneric<String> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                blobBuilder->copyTo(*dstElem, srcElem);
-            });
-    }
-
-    // copyTo hash map from std::unordered_map
-    template <typename Key, typename Value, typename Hasher, typename KeyEq, typename TAllocator>
-    void copyTo(HashMap<Key, Value>& dst, const std::unordered_map<Key, Value, Hasher, KeyEq, TAllocator>& src)
-    {
-        typedef HashKeyValueAdapterGeneric<std::pair<const Key, Value>> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<Key, Value>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                dstElem->first = srcElem.first;
-                dstElem->second = srcElem.second;
-            });
-    }
-
-    // copyTo hash set from std::unordered_map (specialization for string key)
-    template <typename Value, typename Hasher, typename KeyEq, typename TAllocator>
-    void copyTo(HashMap<String, Value>& dst, const std::unordered_map<std::string, Value, Hasher, KeyEq, TAllocator>& src)
-    {
-        typedef HashKeyValueAdapterStdString<Value> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<String, Value>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                dstElem->second = srcElem.second;
-                blobBuilder->copyTo(dstElem->first, srcElem.first);
-            });
-    }
-
-    // copyTo hash set from std::unordered_map (specialization for string value)
-    template <typename Key, typename Hasher, typename KeyEq, typename TAllocator>
-    void copyTo(HashMap<Key, String>& dst, const std::unordered_map<Key, std::string, Hasher, KeyEq, TAllocator>& src)
-    {
-        typedef HashKeyValueAdapterGeneric<std::pair<const Key, std::string>> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<Key, String>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                dstElem->first = srcElem.first;
-                blobBuilder->copyTo(dstElem->second, srcElem.second);
-            });
-    }
-
-    // copyTo hash set from std::unordered_map (specialization for string key/value)
-    template <typename Hasher, typename KeyEq, typename TAllocator>
-    void copyTo(HashMap<String, String>& dst, const std::unordered_map<std::string, std::string, Hasher, KeyEq, TAllocator>& src)
-    {
-        typedef HashKeyValueAdapterStdString<std::string> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<String, String>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, src.begin(), src.end(), src.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                blobBuilder->copyTo(dstElem->first, srcElem.first);
-
-                dstElem = blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                blobBuilder->copyTo(dstElem->second, srcElem.second);
-            });
-    }
-
-    // copyTo hash map from std::initializer_list
-    template <typename Key, typename Value> void copyTo(HashMap<Key, Value>& dst, std::initializer_list<std::pair<const Key, Value>> list)
-    {
-        typedef HashKeyValueAdapterGeneric<std::pair<const Key, Value>> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<Key, Value>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                dstElem->first = srcElem.first;
-                dstElem->second = srcElem.second;
-            });
-    }
-
-    // copyTo hash map from std::initializer_list (specialization for string key)
-    template <typename Value> void copyTo(HashMap<String, Value>& dst, std::initializer_list<std::pair<const std::string, Value>> list)
-    {
-        typedef HashKeyValueAdapterStdString<Value> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<String, Value>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                dstElem->second = srcElem.second;
-                blobBuilder->copyTo(dstElem->first, srcElem.first);
-            });
-    }
-
-    // copyTo hash map from std::initializer_list (specialization for string value)
-    template <typename Key> void copyTo(HashMap<Key, String>& dst, std::initializer_list<std::pair<const Key, std::string>> list)
-    {
-        typedef HashKeyValueAdapterGeneric<std::pair<const Key, std::string>> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<Key, String>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                dstElem->first = srcElem.first;
-                blobBuilder->copyTo(dstElem->second, srcElem.second);
-            });
-    }
-
-    // copyTo hash map from std::initializer_list (specialization for string key)
-    void copyTo(HashMap<String, String>& dst, std::initializer_list<std::pair<const std::string, std::string>> list)
-    {
-        typedef HashKeyValueAdapterStdString<std::string> SrcItemAdapter;
-        typedef HashKeyValueAdapterGeneric<Pair<String, String>> DstItemAdapter;
-
-        copyToHash<SrcItemAdapter, DstItemAdapter>(
-            dst, list.begin(), list.end(), list.size(),
-            [](BlobBuilder* blobBuilder, offset_t dstAbsoluteOffset, const typename SrcItemAdapter::ItemType& srcElem)
-            {
-                typename DstItemAdapter::ItemType* dstElem =
-                    blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                blobBuilder->copyTo(dstElem->first, srcElem.first);
-
-                dstElem = blobBuilder->getDirectMemoryAccessUnsafe<typename DstItemAdapter::ItemType>(dstAbsoluteOffset);
-                blobBuilder->copyTo(dstElem->second, srcElem.second);
-            });
-    }
-
-    // copyTo string from const char* and size
-    void copyTo(BlobPtr<String> dst, const char* src, size_t len)
-    {
-        ZMEYA_ASSERT(src != nullptr && len > 0);
-        BlobPtr<char> stringData = allocate<char>(src[0]);
-        if (len > 0)
-        {
-            for (size_t i = 1; i < len; i++)
-            {
-                allocate<char>(src[i]);
-            }
-            allocate<char>('\0');
-        }
-        assignTo(dst->data, stringData);
-    }
-
-    void copyTo(String& _dst, const char* src, size_t len)
-    {
-        BlobPtr<String> dst(getBlobPtr(&_dst));
-        copyTo(dst, src, len);
-    }
-
-    // copyTo string from std::string
-    void copyTo(String& dst, const std::string& src) { copyTo(dst, src.c_str(), src.size()); }
-
-    // copyTo string from null teminated c-string
-    void copyTo(String& _dst, const char* src)
-    {
-        ZMEYA_ASSERT(src != nullptr);
-        size_t len = std::strlen(src);
-        copyTo(_dst, src, len);
-    }
-#endif
-
-#if 0
-    void referTo(BlobPtr<String> dst, const String& src)
-    {
-        BlobPtr<char> stringData = getBlobPtr(src.c_str());
-        assignTo(dst->data, stringData);
-    }
-
-    // referTo another String (it is not a copy, the destination string will refer to the same data)
-    void referTo(String& dst, const String& src)
-    {
-        BlobPtr<char> stringData = getBlobPtr(src.c_str());
-        assignTo(dst.data, stringData);
-    }
-
-    // referTo another Array (it is not a copy, the destination string will refer to the same data)
-    template <typename T> void referTo(Array<T>& _dst, const Array<T>& src)
-    {
-        BlobPtr<Array<T>> dst = getBlobPtr(&_dst);
-        BlobPtr<T> arrData = getBlobPtr(src.data());
-        dst->numElements = uint32_t(src.size());
-        setArrayOffset(dst, arrData.getAbsoluteOffset());
-    }
-
-    // referTo another HashSet (it is not a copy, the destination string will refer to the same data)
-    template <typename Key> void referTo(HashSet<Key>& dst, const HashSet<Key>& src)
-    {
-        referTo(dst.buckets, src.buckets);
-        referTo(dst.items, src.items);
-    }
-
-    // referTo another HashMap (it is not a copy, the destination string will refer to the same data)
-    template <typename Key, typename Value> void referTo(HashMap<Key, Value>& dst, const HashMap<Key, Value>& src)
-    {
-        referTo(dst.buckets, src.buckets);
-        referTo(dst.items, src.items);
-    }
-#endif
-
-    Span<char> finalize(size_t desiredSizeShouldBeMultipleOf = 4)
-    {
-        size_t numPaddingBytes = desiredSizeShouldBeMultipleOf - (data.size() % desiredSizeShouldBeMultipleOf);
-        allocate(numPaddingBytes, 1);
-
-        ZMEYA_ASSERT((data.size() % desiredSizeShouldBeMultipleOf) == 0);
-        return Span<char>(data.data(), data.size());
-    }
-
-    ZMEYA_NODISCARD static std::shared_ptr<BlobBuilder> create(size_t initialSizeInBytes = 2048)
-    {
-        BlobBuilderAllocator<BlobBuilder, ZMEYA_MAX_ALIGN> allocator;
-        return std::allocate_shared<BlobBuilder>(allocator, initialSizeInBytes, PrivateToken{});
-    }
-
-    template <typename T> friend class BlobPtr;
-};
-
-template <typename T> ZMEYA_NODISCARD T* BlobPtr<T>::get() const
-{
-    std::shared_ptr<const BlobBuilder> p = blob.lock();
-    if (!p)
-    {
-        return nullptr;
-    }
-    return reinterpret_cast<T*>(const_cast<char*>(p->get(absoluteOffset)));
-}
-
-template <typename T> Pointer<T>& Pointer<T>::operator=(const BlobPtr<T>& other)
-{
-    Pointer<T>& self = *this;
-    std::shared_ptr<const BlobBuilder> p = other.blob.lock();
-    BlobBuilder* blobBuilder = const_cast<BlobBuilder*>(p.get());
-    if (!blobBuilder)
-    {
-        BlobBuilder::assignTo(self, nullptr);
-    }
-    else
-    {
-        blobBuilder->assignTo(self, other);
-    }
-    return self;
-}
-
-#endif
-
-/*
-
-**Builder - Simplified blob building API using deep-copy adapters**
-
-This is the new simplified API that replaces the verbose BlobBuilder approach.
-Uses TLS to manage builder context and global assignment operators for seamless
-conversion between std::* and zm::* types.
-
-Key features:
-- Simple TLS-based context management
-- Global assignment operators (separate from zm types)
-- Deep-copy adapters for automatic nested conversion
-- Assertion-based error handling (no exceptions)
+Serialization uses TLS (**ScopedBuilder**) for the active builder, **`zm::assign`**, and container **`operator=`**
+to copy STL-shaped values into **`zm::*`** containers inside the same thread.
 
 */
-
-#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
 
 namespace detail
 {
@@ -1698,19 +888,10 @@ template <typename T> constexpr T highest_bit()
 
 using goffset_t = roffset_t;
 
-/*
-
-**Standalone Builder Implementation**
-
-Completely independent blob builder that doesn't rely on BlobBuilder.
-Implements its own memory management and offset calculation.
-
-*/
-
 class BuilderBase
 {
   public:
-    std::vector<char, BlobBuilderAllocator<char, ZMEYA_MAX_ALIGN>> data;
+    std::vector<char, BufferAllocator<char, ZMEYA_MAX_ALIGN>> data;
 
     struct PrivateToken
     {
@@ -1778,14 +959,6 @@ class BuilderBase
         return goffset_t(allocOffset);
     }
 
-#if 0
-    ZMEYA_NODISCARD const char* getRawByAbsoluteOffset(offset_t absoluteOffset) const
-    {
-        ZMEYA_ASSERT(absoluteOffset < data.size());
-        return &data[absoluteOffset];
-    }
-#endif
-
     explicit BuilderBase(size_t initialSizeInBytes, PrivateToken)
     {
         // 16 bytes minimum
@@ -1838,24 +1011,6 @@ class BuilderBase
     }
 
 
-#if 0
-    char* allocate_array_data(size_t elementSize, size_t alignment, size_t numElements)
-    {
-        return allocate_raw(elementSize * numElements, alignment);
-    }
-
-    // Make allocation methods public for assign functions
-    char* allocate_raw_public(size_t numBytes, size_t alignment) { return allocate_raw(numBytes, alignment); }
-#endif
-
-#if 0
-    // Helper method to set array data (for friend access)
-    template <typename T> void set_array_data(Array<T>& arr, void* data, uint32_t numElements)
-    {
-        arr.numElements = numElements;
-        arr.relativeOffset = calculate_relative_offset(&arr, data);
-    }
-#endif
 };
 
 template <typename TRoot> class Builder : public BuilderBase
@@ -1872,7 +1027,6 @@ template <typename TRoot> class Builder : public BuilderBase
     static std::unique_ptr<TSelf> create(size_t initialSizeInBytes = 2048)
     {
         std::unique_ptr<TSelf> res = std::make_unique<TSelf>(initialSizeInBytes, PrivateToken{});
-        //res->allocate<TRoot>();
         return res;
     }
 
@@ -2161,45 +1315,6 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
     to->buckets.relativeOffset = builder->get_relative_offset(&to->buckets, bucketsDataOffset);
     to->items.numElements = uint32_t(numElements);
     to->items.relativeOffset = builder->get_relative_offset(&to->items, itemsDataOffset);
-#if 0
-    if (from.empty())
-    {
-        return; // HashSet is already default-initialized as empty
-    }
-
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-
-    // Allocate array data for items
-    constexpr size_t alignOfKey = std::alignment_of<Key>::value;
-    constexpr size_t sizeOfKey = sizeof(Key);
-
-    ZMEYA_ASSERT(builder->contains_pointer(&to) && "This object does not belong to zm::Builder");
-
-    zm::goffset_t itemsDataOffset = builder->alloc_aligned(sizeOfKey * from.size(), alignOfKey);
-    to.items.numElements = uint32_t(from.size());
-    to.items.relativeOffset = builder->get_relative_offset(&to, itemsData);
-
-
-
-    // Initialize and fill items array elements
-    Key* items = reinterpret_cast<Key*>(itemsData);
-    size_t index = 0;
-    for (const auto& item : from)
-    {
-        // Use placement new and deep-copy
-        new (&items[index]) Key{};
-        deep_copy(item, items[index]);
-        ++index;
-    }
-
-    // Create a simple bucket structure (1 bucket for now)
-    std::vector<typename HashSet<Key>::Bucket> buckets_vec(1);
-    buckets_vec[0].beginIndex = 0;
-    buckets_vec[0].endIndex = uint32_t(from.size());
-
-    assign(to.buckets, buckets_vec);
-#endif
 }
 
 // HashMap conversions - standalone implementation
@@ -2295,43 +1410,6 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
     to->buckets.relativeOffset = builder->get_relative_offset(&to->buckets, bucketsDataOffset);
     to->items.numElements = uint32_t(numElements);
     to->items.relativeOffset = builder->get_relative_offset(&to->items, itemsDataOffset);
-#if 0
-    if (from.empty())
-    {
-        return; // HashMap is already default-initialized as empty
-    }
-
-    BuilderBase* builder = detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
-
-    // Allocate array data for items
-    constexpr size_t alignOfItem = std::alignment_of<Pair<Key, Value>>::value;
-    constexpr size_t sizeOfItem = sizeof(Pair<Key, Value>);
-
-    char* itemsData = builder->allocate_array_data(sizeOfItem, alignOfItem, from.size());
-
-    // Set items array metadata using helper method
-    builder->set_array_data(to.items, itemsData, uint32_t(from.size()));
-
-    // Initialize and fill items array elements
-    Pair<Key, Value>* items = reinterpret_cast<Pair<Key, Value>*>(itemsData);
-    size_t index = 0;
-    for (const auto& [key, value] : from)
-    {
-        // Use placement new and deep-copy
-        new (&items[index]) Pair<Key, Value>{};
-        deep_copy(key, items[index].first);
-        deep_copy(value, items[index].second);
-        ++index;
-    }
-
-    // Create a simple bucket structure (1 bucket for now)
-    std::vector<typename HashMap<Key, Value>::Bucket> buckets_vec(1);
-    buckets_vec[0].beginIndex = 0;
-    buckets_vec[0].endIndex = uint32_t(from.size());
-
-    assign(to.buckets, buckets_vec);
-#endif
 }
 
 // Deep-copy adapter implementations
@@ -2364,9 +1442,7 @@ Usage examples:
 // Optional macro for cleaner syntax
 #define ZM_ASSIGN(zm_var, std_var) zm::assign(zm_var, std_var)
 
-#endif // ZMEYA_ENABLE_SERIALIZE_SUPPORT (nested Builder / assign section)
-
-#endif // ZMEYA_ENABLE_SERIALIZE_SUPPORT (serialization helpers: BlobPtr surface, diff*, BlobBuilder stub)
+#endif // ZMEYA_ENABLE_SERIALIZE_SUPPORT
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
