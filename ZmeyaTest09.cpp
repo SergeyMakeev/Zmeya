@@ -2,9 +2,9 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-// this test is still using the old API
-#if 0
-
+#include <cstdio>
+#include <unordered_map>
+#include <unordered_set>
 
 struct Vec2
 {
@@ -24,11 +24,23 @@ struct Node
     zm::String name;
 };
 
-// as long as inheritance = aggregation it is supported (but beware of different compilers paddings!)
+struct ObjectFlat
+{
+    std::string name;
+    Vec2 position;
+};
+
 struct Object : public Node
 {
     zm::Pointer<Object> parent;
     Vec2 position;
+
+    Object& operator=(const ObjectFlat& o)
+    {
+        name = o.name;
+        position = o.position;
+        return *this;
+    }
 };
 
 struct SimpleFileTestRoot
@@ -83,29 +95,33 @@ static void generateTestFile(const char* fileName)
     {
         std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
-        zm::BlobPtr<SimpleFileTestRoot> root = blobBuilder->allocate<SimpleFileTestRoot>();
+        std::unique_ptr<zm::Builder<SimpleFileTestRoot>> builder = zm::Builder<SimpleFileTestRoot>::create(256 * 1024);
+        zm::ScopedBuilder scope(builder.get());
+        SimpleFileTestRoot* root = builder->getRoot();
         root->magic = 0x59454D5A;
-        blobBuilder->resizeArray(root->objects, 6);
-        for (size_t i = 0; i < root->objects.size(); i++)
-        {
-            zm::BlobPtr<Object> object = blobBuilder->getArrayElement(root->objects, i);
-            blobBuilder->copyTo(object->name, objectNames[i]);
-            object->position = Vec2(float(i), float(i + 4));
 
-            if (i > 0)
-            {
-                const Object& parentObject = root->objects[i - 1];
-                blobBuilder->assignTo(object->parent, parentObject);
-            }
+        std::vector<ObjectFlat> objs;
+        objs.reserve(objectNames.size());
+        for (size_t i = 0; i < objectNames.size(); i++)
+        {
+            objs.push_back(ObjectFlat{objectNames[i], Vec2(float(i), float(i + 4))});
+        }
+        zm::assign(root->objects, objs);
+
+        for (size_t i = 1; i < root->objects.size(); i++)
+        {
+            zm::assign(root->objects[i].parent, &root->objects[i - 1]);
         }
 
-        blobBuilder->copyTo(root->hashSet, {"one", "two", "three"});
-        blobBuilder->copyTo(root->hashMap, {{"1", 1.0f}, {"2", 2.0f}, {"3", 3.0f}});
+        std::unordered_set<std::string> hs = {"one", "two", "three"};
+        zm::assign(root->hashSet, hs);
 
-        validate(root.get());
+        std::unordered_map<std::string, float> hm = {{"1", 1.0f}, {"2", 2.0f}, {"3", 3.0f}};
+        zm::assign(root->hashMap, hm);
 
-        zm::Span<char> bytes = blobBuilder->finalize(32);
+        validate(root);
+
+        zm::Span<char> bytes = builder->finalize(32);
         EXPECT_TRUE((bytes.size % 32) == 0);
 
         bytesCopy = utils::copyBytes(bytes);
@@ -128,18 +144,15 @@ TEST(ZmeyaTestSuite, SimpleFileTest)
 
     std::vector<char> content;
 
-    // read file
     FILE* file = fopen(fileName, "rb");
     ASSERT_TRUE(file != nullptr);
     fseek(file, 0L, SEEK_END);
     long fileSize = ftell(file);
     fseek(file, 0L, SEEK_SET);
-    content.resize(fileSize);
-    fread(content.data(), fileSize, 1, file);
+    content.resize(size_t(fileSize));
+    fread(content.data(), size_t(fileSize), 1, file);
     fclose(file);
 
     const SimpleFileTestRoot* fileRoot = (const SimpleFileTestRoot*)(content.data());
     validate(fileRoot);
 }
-
-#endif

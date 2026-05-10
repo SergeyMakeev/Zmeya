@@ -2,8 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-#if 0
-
 struct StringTestRoot
 {
     zm::String str1;
@@ -40,7 +38,6 @@ static void validate(const StringTestRoot* root)
     EXPECT_EQ(root->strArr1[2], "third");
     EXPECT_EQ(root->strArr1[3], "fourth");
 
-    // Comment out validation for arrays we're not testing
     /*
     EXPECT_EQ(root->strArr2.size(), std::size_t(3));
     EXPECT_EQ(root->strArr2[0], "one");
@@ -59,25 +56,18 @@ static void validate(const StringTestRoot* root)
     */
 }
 
-// Temporary minimal test to debug the issue
 TEST(ZmeyaTestSuite, StringTest_Debug)
 {
-    std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-    zm::ScopedBuilder scope(_builder.get());
-    
-    zm::Builder* builder = zm::detail::get_global_builder();
-    ZMEYA_ASSERT(builder != nullptr);
+    std::unique_ptr<zm::Builder<StringTestRoot>> builder = zm::Builder<StringTestRoot>::create();
+    zm::ScopedBuilder scope(builder.get());
 
-    StringTestRoot* root = builder->allocate_root<StringTestRoot>();
-    
-    // Just test if the root is properly allocated
+    StringTestRoot* root = builder->getRoot();
+
     EXPECT_TRUE(builder->contains_pointer(root));
     EXPECT_TRUE(builder->contains_pointer(&root->strArr1));
-    
-    // Try a simple string assignment first
+
     zm::assign(root->str1, "test");
-    
-    // Now try array assignment
+
     std::vector<std::string> arr1 = {"first"};
     zm::assign(root->strArr1, arr1);
 }
@@ -86,40 +76,33 @@ TEST(ZmeyaTestSuite, StringTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::Builder> _builder = zm::Builder::create(1024 * 1024); // 1MB initial size
-        zm::ScopedBuilder scope(_builder.get());
-        
-        zm::Builder* builder = zm::detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
+        std::unique_ptr<zm::Builder<StringTestRoot>> builder = zm::Builder<StringTestRoot>::create(1024 * 1024);
+        zm::ScopedBuilder scope(builder.get());
 
-        StringTestRoot* root = builder->allocate_root<StringTestRoot>();
+        zm::Builder<StringTestRoot>* b = builder.get();
+        StringTestRoot* root = b->getRoot();
 
-        // assign from null-terminated c string (74 bytes long)
         zm::assign(root->str1, "Hello World - This is a very long test string. Expected 1000000 instances");
 
-        // assign from std::string
         std::string testStr("Hello World 2");
         zm::assign(root->str2, testStr);
 
-        // assign range (substring)
-        std::string substr("Hello World 3", 7); // "Hello W"
+        std::string substr("Hello World 3", 7);
         zm::assign(root->str3, substr);
 
-        // assign existing string (reference same data - TODO: implement referTo for new API)
         zm::assign(root->str4, "Hello World - This is a very long test string. Expected 1000000 instances");
 
         zm::assign(root->str5, "Hello World 2");
 
         std::vector<std::string> arr1 = {"first", "second", "third", "fourth"};
         zm::assign(root->strArr1, arr1);
-        
+
         std::vector<std::string> arr2 = {"one", "two", "three"};
         zm::assign(root->strArr2, arr2);
 
         std::vector<std::string> arr3 = {"hello", "world"};
         zm::assign(root->strArr3, arr3);
 
-        // Small array for now
         size_t numStrings = 10;
         std::vector<std::string> arr4(numStrings, "Hello World - This is a very long test string. Expected 1000000 instances");
         zm::assign(root->strArr4, arr4);
@@ -136,6 +119,3 @@ TEST(ZmeyaTestSuite, StringTest)
 
     validate(rootCopy);
 }
-
-
-#endif

@@ -2,7 +2,7 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-// this test is still using the old API
+// Blocked: uses zm::BlobBuilder and referTo (shared sub-blobs). Not portable to the new builder without referTo.
 #if 0
 
 struct ReferToTestNode

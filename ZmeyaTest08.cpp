@@ -2,8 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-#if 0
-
 struct IteratorsTestRoot
 {
     zm::Array<int> arr;
@@ -57,27 +55,24 @@ TEST(ZmeyaTestSuite, IteratorsTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-        zm::ScopedBuilder scope(_builder.get());
-        
-        zm::Builder* builder = zm::detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
+        std::unique_ptr<zm::Builder<IteratorsTestRoot>> builder = zm::Builder<IteratorsTestRoot>::create();
+        zm::ScopedBuilder scope(builder.get());
 
-        IteratorsTestRoot* root = builder->allocate_root<IteratorsTestRoot>();
+        IteratorsTestRoot* root = builder->getRoot();
 
         std::vector<int> arr_data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
         zm::assign(root->arr, arr_data);
-        
+
         std::unordered_set<int> set_data = {0, 1, 4, 3, 5, 2};
         zm::assign(root->set, set_data);
-        
+
         std::unordered_map<int, int> map_data = {{0, 1}, {3, 2}, {4, 5}};
         zm::assign(root->map, map_data);
 
         validate(root);
 
         zm::Span<char> bytes = builder->finalize();
-        
+
         bytesCopy = utils::copyBytes(bytes);
         std::memset(bytes.data, 0xFF, bytes.size);
     }
@@ -86,6 +81,3 @@ TEST(ZmeyaTestSuite, IteratorsTest)
 
     validate(rootCopy);
 }
-
-
-#endif

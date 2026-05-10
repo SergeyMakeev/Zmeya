@@ -2,8 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-#if 0
-
 struct Payload
 {
     float a;
@@ -101,41 +99,33 @@ TEST(ZmeyaTestSuite, ArrayTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-        zm::ScopedBuilder scope(_builder.get());
-        
-        zm::Builder* builder = zm::detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
+        std::unique_ptr<zm::Builder<ArrayTestRoot>> builder = zm::Builder<ArrayTestRoot>::create();
+        zm::ScopedBuilder scope(builder.get());
 
-        ArrayTestRoot* root = builder->allocate_root<ArrayTestRoot>();
+        zm::Builder<ArrayTestRoot>* b = builder.get();
+        ArrayTestRoot* root = b->getRoot();
 
-        // assign from std::vector
         std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
         zm::assign(root->arr1, vec);
 
-        // assign from std::initializer_list (convert to vector first)
         std::vector<int32_t> vec2 = {2, 4, 6, 10, 14, 32};
         zm::assign(root->arr2, vec2);
 
-        // assign from std::array (convert to vector first)
         std::vector<float> vec3 = {67.0f, 82.0f, 11.0f, 54.0f};
         zm::assign(root->arr3, vec3);
 
-        // nested arrays
         std::vector<std::vector<float>> vec4 = {
-            {1.2f, 2.3f}, 
-            {7.1f, 8.8f, 3.2f}, 
-            {16.0f, 12.0f, 99.5f, -143.0f}, 
-            {-1.0f}
-        };
+            {1.2f, 2.3f},
+            {7.1f, 8.8f, 3.2f},
+            {16.0f, 12.0f, 99.5f, -143.0f},
+            {-1.0f}};
         zm::assign(root->arr4, vec4);
 
-        // array of pointers - need to create individual objects and assign pointers
         std::vector<Payload*> vec5;
         vec5.reserve(793);
         for (size_t i = 0; i < 793; i++)
         {
-            Payload* payload = builder->allocate<Payload>();
+            Payload* payload = b->allocate<Payload>();
             payload->a = 1.3f + float(i) * 0.4f;
             payload->b = uint32_t(i) + 3;
             vec5.push_back(payload);
@@ -155,6 +145,3 @@ TEST(ZmeyaTestSuite, ArrayTest)
     const ArrayTestRoot* rootCopy = (const ArrayTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
-
-
-#endif

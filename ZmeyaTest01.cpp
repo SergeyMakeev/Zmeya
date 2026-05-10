@@ -83,38 +83,21 @@ static void validate(const SimpleTestRoot* root)
 
 TEST(ZmeyaTestSuite, SimpleTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        // create builder using new API
-        std::unique_ptr<zm::Builder<SimpleTestRoot>> builder = zm::Builder<SimpleTestRoot>::create();
-        zm::ScopedBuilder scope(builder.get());
-
-        // get root object (automatically allocated)
-        SimpleTestRoot* root = builder->getRoot();
-
-        // fill with data
-        root->a = 13.0f;
-        root->b = 1979;
-        root->c = 6;
-        root->d = -9;
-        for (size_t i = 0; i < 32; i++)
+    std::vector<char> bytesCopy = zm::build<SimpleTestRoot>(
+        [](SimpleTestRoot* root)
         {
-            root->arr[i] = uint32_t(i + 3);
-        }
+            root->a = 13.0f;
+            root->b = 1979;
+            root->c = 6;
+            root->d = -9;
+            for (size_t i = 0; i < 32; i++)
+            {
+                root->arr[i] = uint32_t(i + 3);
+            }
 
-        validate(root);
+            validate(root);
+        });
 
-        // finalize blob
-        zm::Span<char> bytes = builder->finalize();
-
-        // copy resulting bytes
-        bytesCopy = utils::copyBytes(bytes);
-
-        // fill original memory with 0xff
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
-
-    // "deserialize" and test results
     const SimpleTestRoot* rootCopy = (const SimpleTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
@@ -155,50 +138,41 @@ TEST(ZmeyaTestSuite, SimpleTest2)
     EXPECT_EQ(Memory::freeCount, size_t(0));
 */
 
-    std::vector<char> blob;
+    struct TempDesc
     {
-        // create builder using new API
-        std::unique_ptr<zm::Builder<TestRoot>> builder = zm::Builder<TestRoot>::create();
-        zm::ScopedBuilder scope(builder.get());
-        
-        TestRoot* root = builder->getRoot();
+        std::string name;
+        float v1;
+        uint32_t v2;
+    };
 
-        // Create temporary structure for conversion
-        struct TempDesc {
-            std::string name;
-            float v1;
-            uint32_t v2;
-        };
-        
-        std::vector<TempDesc> tempDescs;
-        tempDescs.reserve(names.size());
-        
-        for (size_t i = 0; i < names.size(); i++)
+    std::vector<char> blob = zm::build<TestRoot>(
+        [&](TestRoot* root)
         {
-            TempDesc desc{};
-            desc.name = names[i];
-            desc.v1 = (float)(i);
-            desc.v2 = (uint32_t)(i);
-            tempDescs.push_back(desc);
-        }
-        
-        root->arr = tempDescs;
-        
-        EXPECT_EQ(root->arr.size(), names.size());
+            std::vector<TempDesc> tempDescs;
+            tempDescs.reserve(names.size());
 
-        // Validate data during build
-        for (size_t i = 0; i < names.size(); i++)
-        {
-            const char* s1 = root->arr[i].name.c_str();
-            const char* s2 = names[i].c_str();
-            EXPECT_STREQ(s1, s2);
-            EXPECT_FLOAT_EQ(root->arr[i].v1, (float)(i));
-            EXPECT_EQ(root->arr[i].v2, (uint32_t)(i));
-        }
-        
-        zm::Span<char> bytes = builder->finalize();
-        blob = std::vector<char>(bytes.data, bytes.data + bytes.size);
-    }
+            for (size_t i = 0; i < names.size(); i++)
+            {
+                TempDesc desc{};
+                desc.name = names[i];
+                desc.v1 = (float)(i);
+                desc.v2 = (uint32_t)(i);
+                tempDescs.push_back(desc);
+            }
+
+            root->arr = tempDescs;
+
+            EXPECT_EQ(root->arr.size(), names.size());
+
+            for (size_t i = 0; i < names.size(); i++)
+            {
+                const char* s1 = root->arr[i].name.c_str();
+                const char* s2 = names[i].c_str();
+                EXPECT_STREQ(s1, s2);
+                EXPECT_FLOAT_EQ(root->arr[i].v1, (float)(i));
+                EXPECT_EQ(root->arr[i].v2, (uint32_t)(i));
+            }
+        });
 
 /*
     EXPECT_GT(Memory::mallocCount, size_t(0));

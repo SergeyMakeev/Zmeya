@@ -57,37 +57,26 @@ struct TestRoot
 
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
-    std::unique_ptr<zm::Builder<TestRoot>> builder = zm::Builder<TestRoot>::create();
-    zm::ScopedBuilder scope(builder.get());
+    std::vector<char> blob = zm::build<TestRoot>(
+        [](TestRoot* root)
+        {
+            std::string srcDesc = "Test description";
+            root->description = srcDesc;
 
-    // Allocate root
-    TestRoot* root = builder->getRoot();
+            std::vector<int32_t> srcInts = {1, 2, 3, 4, 5};
+            root->intArray = srcInts;
 
-    // Test basic string assignment
-    std::string srcDesc = "Test description";
-    root->description = srcDesc;
+            std::vector<std::string> srcStrings = {"hello", "world", "test"};
+            root->stringArray = srcStrings;
 
-    // Test array of primitives
-    std::vector<int32_t> srcInts = {1, 2, 3, 4, 5};
-    root->intArray =  srcInts;
+            std::unordered_map<std::string, int32_t> srcMap = {{"one", 1}, {"two", 2}, {"three", 3}};
+            root->hashMap = srcMap;
 
-    // Test array of strings
-    std::vector<std::string> srcStrings = {"hello", "world", "test"};
-    root->stringArray =  srcStrings;
+            std::unordered_set<std::string> srcSet = {"alpha", "beta", "gamma"};
+            root->hashSet = srcSet;
+        });
 
-    // Test HashMap
-    std::unordered_map<std::string, int32_t> srcMap = {{"one", 1}, {"two", 2}, {"three", 3}};
-    root->hashMap =  srcMap;
-
-    // Test HashSet
-    std::unordered_set<std::string> srcSet = {"alpha", "beta", "gamma"};
-    root->hashSet =  srcSet;
-
-    // Get result
-    zm::Span<char> bytes = builder->finalize();
-
-    // Validate the serialized data
-    const TestRoot* fileRoot = reinterpret_cast<const TestRoot*>(bytes.data);
+    const TestRoot* fileRoot = reinterpret_cast<const TestRoot*>(blob.data());
 
     EXPECT_EQ(fileRoot->description, "Test description");
 
@@ -113,20 +102,14 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
-    std::unique_ptr<zm::Builder<TestRoot>> builder = zm::Builder<TestRoot>::create();
-    zm::ScopedBuilder scope(builder.get());
+    std::vector<char> blob = zm::build<TestRoot>(
+        [](TestRoot* root)
+        {
+            std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
+            root->nestedArray = srcNested;
+        });
 
-    TestRoot* root = builder->getRoot();
-
-    // Test nested array conversion
-    std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
-    root->nestedArray = srcNested;
-
-    // Get result
-    zm::Span<char> bytes = builder->finalize();
-
-    // Validate nested structure
-    const TestRoot* fileRoot = reinterpret_cast<const TestRoot*>(bytes.data);
+    const TestRoot* fileRoot = reinterpret_cast<const TestRoot*>(blob.data());
 
     EXPECT_EQ(fileRoot->nestedArray.size(), 3);
 

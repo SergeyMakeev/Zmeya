@@ -1643,6 +1643,8 @@ Key features:
 
 */
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+
 namespace detail
 {
 // TLS variable for active builder (inline to avoid ODR violations)
@@ -1654,13 +1656,17 @@ inline void set_global_builder(BuilderBase* builder) noexcept { g_tls_active_bui
 
 inline bool is_stack_pointer(const void* ptr)
 {
-    // Retrieves the stack limits for the current thread
+#if defined(_WIN32)
     PVOID stack_low = nullptr;
     PVOID stack_high = nullptr;
     GetCurrentThreadStackLimits(reinterpret_cast<PULONG_PTR>(&stack_low), reinterpret_cast<PULONG_PTR>(&stack_high));
 
     auto p = reinterpret_cast<uintptr_t>(ptr);
     return p >= reinterpret_cast<uintptr_t>(stack_low) && p < reinterpret_cast<uintptr_t>(stack_high);
+#else
+    (void)ptr;
+    return false;
+#endif
 }
 
 } // namespace detail
@@ -1716,7 +1722,7 @@ class BuilderBase
     {
     };
 
-    goffset_t alloc_algined(size_t numBytes, size_t alignment)
+    goffset_t alloc_aligned(size_t numBytes, size_t alignment)
     {
         ZMEYA_ASSERT(isPowerOfTwo(alignment));
         ZMEYA_ASSERT(alignment <= ZMEYA_MAX_ALIGN);
@@ -1750,7 +1756,7 @@ class BuilderBase
     template <typename T> Object<T> allocate()
     {
         static_assert(std::is_trivially_copyable<T>::value, "Only trivially copyable types allowed");
-        goffset_t g_offs = alloc_algined(sizeof(T), alignof(T));
+        goffset_t g_offs = alloc_aligned(sizeof(T), alignof(T));
         BuilderBase::placementCtor<T>(get_ptr_unsafe_to_store(g_offs));
 
         auto obj = Object<T>{g_offs};
@@ -1882,6 +1888,25 @@ template <typename TRoot> class Builder : public BuilderBase
 
 /*
 
+**build**
+
+Closure entry point: installs `ScopedBuilder`, runs `fn` with the root pointer, then finalizes.
+Returns an owning byte vector so the blob stays valid after the builder is destroyed.
+
+*/
+
+template <typename TRoot, typename Fn>
+ZMEYA_NODISCARD inline std::vector<char> build(Fn&& fn, size_t initialSizeInBytes = 2048, size_t finalizeAlignment = 4)
+{
+    std::unique_ptr<Builder<TRoot>> builder = Builder<TRoot>::create(initialSizeInBytes);
+    ScopedBuilder scope(builder.get());
+    std::forward<Fn>(fn)(builder->getRoot());
+    Span<char> span = builder->finalize(finalizeAlignment);
+    return std::vector<char>(span.data, span.data + span.size());
+}
+
+/*
+
 **Global assignment operators for deep-copy conversion**
 
 These operators enable seamless conversion between std::* and zm::* types.
@@ -1945,7 +1970,7 @@ template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<
     constexpr size_t alignOfPtr = std::alignment_of<zm::Pointer<T>>::value;
     constexpr size_t sizeOfPtr = sizeof(zm::Pointer<T>);
 
-    zm::goffset_t arrayDataOffset = builder->alloc_algined(sizeOfPtr * from.size(), alignOfPtr);
+    zm::goffset_t arrayDataOffset = builder->alloc_aligned(sizeOfPtr * from.size(), alignOfPtr);
 
     // Update array metadata
     to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
@@ -1981,7 +2006,7 @@ inline void assign(String& _to, const std::string& from)
     }
 
     size_t len = from.size();
-    zm::goffset_t stringDataOffset = builder->alloc_algined(len + 1, 1);
+    zm::goffset_t stringDataOffset = builder->alloc_aligned(len + 1, 1);
 
     // Copy string data without storing pointer
     char* stringData = (char*)builder->get_ptr_unsafe_to_store(stringDataOffset);
@@ -2007,7 +2032,7 @@ inline void assign(String& _to, const char* from)
         return;
     }
 
-    zm::goffset_t stringDataOffset = builder->alloc_algined(len + 1, 1);
+    zm::goffset_t stringDataOffset = builder->alloc_aligned(len + 1, 1);
 
     // Copy string data without storing pointer
     char* stringData = (char*)builder->get_ptr_unsafe_to_store(stringDataOffset);
@@ -2043,7 +2068,7 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
     constexpr size_t alignOfT = std::alignment_of<T>::value;
     constexpr size_t sizeOfT = sizeof(T);
 
-    zm::goffset_t arrayDataOffset = builder->alloc_algined(sizeOfT * from.size(), alignOfT);
+    zm::goffset_t arrayDataOffset = builder->alloc_aligned(sizeOfT * from.size(), alignOfT);
 
     // Update array metadata
     to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
@@ -2078,7 +2103,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
     // Allocate buckets array
     constexpr size_t alignOfBucket = std::alignment_of<typename HashSet<Key>::Bucket>::value;
     constexpr size_t sizeOfBucket = sizeof(typename HashSet<Key>::Bucket);
-    zm::goffset_t bucketsDataOffset = builder->alloc_algined(sizeOfBucket * numBuckets, alignOfBucket);
+    zm::goffset_t bucketsDataOffset = builder->alloc_aligned(sizeOfBucket * numBuckets, alignOfBucket);
 
     // Initialize buckets to zero
     typename HashSet<Key>::Bucket* buckets = reinterpret_cast<typename HashSet<Key>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
@@ -2111,7 +2136,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
     // Allocate items array
     constexpr size_t alignOfKey = std::alignment_of<Key>::value;
     constexpr size_t sizeOfKey = sizeof(Key);
-    zm::goffset_t itemsDataOffset = builder->alloc_algined(sizeOfKey * numElements, alignOfKey);
+    zm::goffset_t itemsDataOffset = builder->alloc_aligned(sizeOfKey * numElements, alignOfKey);
 
     // Second pass: copy items to their buckets
     Key* items = reinterpret_cast<Key*>(builder->get_ptr_unsafe_to_store(itemsDataOffset));
@@ -2158,7 +2183,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
 
     ZMEYA_ASSERT(builder->contains_pointer(&to) && "This object does not belong to zm::Builder");
 
-    zm::goffset_t itemsDataOffset = builder->alloc_algined(sizeOfKey * from.size(), alignOfKey);
+    zm::goffset_t itemsDataOffset = builder->alloc_aligned(sizeOfKey * from.size(), alignOfKey);
     to.items.numElements = uint32_t(from.size());
     to.items.relativeOffset = builder->get_relative_offset(&to, itemsData);
 
@@ -2205,7 +2230,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
     // Allocate buckets array
     constexpr size_t alignOfBucket = std::alignment_of<typename HashMap<Key, Value>::Bucket>::value;
     constexpr size_t sizeOfBucket = sizeof(typename HashMap<Key, Value>::Bucket);
-    zm::goffset_t bucketsDataOffset = builder->alloc_algined(sizeOfBucket * numBuckets, alignOfBucket);
+    zm::goffset_t bucketsDataOffset = builder->alloc_aligned(sizeOfBucket * numBuckets, alignOfBucket);
 
     // Initialize buckets to zero
     typename HashMap<Key, Value>::Bucket* buckets = reinterpret_cast<typename HashMap<Key, Value>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
@@ -2239,7 +2264,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
     using ItemType = Pair<const Key, Value>;
     constexpr size_t alignOfItem = std::alignment_of<ItemType>::value;
     constexpr size_t sizeOfItem = sizeof(ItemType);
-    zm::goffset_t itemsDataOffset = builder->alloc_algined(sizeOfItem * numElements, alignOfItem);
+    zm::goffset_t itemsDataOffset = builder->alloc_aligned(sizeOfItem * numElements, alignOfItem);
 
     // Second pass: copy items to their buckets
     ItemType* items = reinterpret_cast<ItemType*>(builder->get_ptr_unsafe_to_store(itemsDataOffset));

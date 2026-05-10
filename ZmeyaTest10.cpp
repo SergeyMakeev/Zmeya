@@ -3,7 +3,8 @@
 #include "gtest/gtest.h"
 
 
-// this test is still using the old API
+// Blocked: depends on removed zm::BlobBuilder, zm::BlobPtr, resizeArray, and referTo.
+// Re-enable after porting to zm::Builder<TRoot> + zm::assign (and referTo semantics or deep copies).
 #if 0
 
 

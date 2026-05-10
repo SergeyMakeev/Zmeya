@@ -2,8 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-#if 0
-
 struct PointerTestNode
 {
     int32_t payload;
@@ -37,13 +35,11 @@ TEST(ZmeyaTestSuite, PointerTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-        zm::ScopedBuilder scope(_builder.get());
-        
-        zm::Builder* builder = zm::detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
+        std::unique_ptr<zm::Builder<PointerTestRoot>> builder = zm::Builder<PointerTestRoot>::create();
+        zm::ScopedBuilder scope(builder.get());
 
-        PointerTestRoot* root = builder->allocate_root<PointerTestRoot>();
+        PointerTestRoot* root = builder->getRoot();
+
         PointerTestNode* nodeLeft = builder->allocate<PointerTestNode>();
         PointerTestNode* nodeRight = builder->allocate<PointerTestNode>();
 
@@ -59,7 +55,6 @@ TEST(ZmeyaTestSuite, PointerTest)
         validate(root);
 
         zm::Span<char> bytes = builder->finalize(16);
-        // check (optional) blob size alignment
         EXPECT_TRUE((bytes.size % 16) == 0);
 
         bytesCopy = utils::copyBytes(bytes);
@@ -69,6 +64,3 @@ TEST(ZmeyaTestSuite, PointerTest)
     const PointerTestRoot* rootCopy = (const PointerTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
-
-
-#endif

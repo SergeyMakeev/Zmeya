@@ -2,8 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-#if 0
-
 struct ListTestNode
 {
     uint32_t payload;
@@ -53,14 +51,11 @@ TEST(ZmeyaTestSuite, ListTest)
 {
     std::vector<char> bytesCopy;
     {
-        // create builder with 4MB initial size
-        std::shared_ptr<zm::Builder> _builder = zm::Builder::create(4 * 1024 * 1024);
-        zm::ScopedBuilder scope(_builder.get());
-        
-        zm::Builder* builder = zm::detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
+        std::unique_ptr<zm::Builder<ListTestRoot>> builder = zm::Builder<ListTestRoot>::create(4 * 1024 * 1024);
+        zm::ScopedBuilder scope(builder.get());
 
-        ListTestRoot* root = builder->allocate_root<ListTestRoot>();
+        zm::Builder<ListTestRoot>* b = builder.get();
+        ListTestRoot* root = b->getRoot();
 
 #ifdef _DEBUG
         uint32_t numNodes = 3000;
@@ -72,7 +67,7 @@ TEST(ZmeyaTestSuite, ListTest)
         ListTestNode* prevNode = nullptr;
         for (uint32_t i = 0; i < numNodes; i++)
         {
-            ListTestNode* node = builder->allocate<ListTestNode>();
+            ListTestNode* node = b->allocate<ListTestNode>();
             node->payload = 13 + i;
             zm::assign(node->prev, prevNode);
             if (prevNode)
@@ -98,6 +93,3 @@ TEST(ZmeyaTestSuite, ListTest)
     const ListTestRoot* rootCopy = (const ListTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
-
-
-#endif

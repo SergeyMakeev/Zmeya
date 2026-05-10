@@ -58,8 +58,8 @@ A single mutex around “the” builder serializes all builders across the proce
 |------|--------|
 | **BlobBuilder** | Implementation largely `#if 0` — legacy path retired |
 | **Builder / BuilderBase** | Growing `std::vector<char>` buffer; **`zm::assign`** + container **`operator=`**; TLS via **`ScopedBuilder`** |
-| **`zm::build`** | Not implemented yet — users still **manually** create `zm::Builder<Root>::create()` + **`ScopedBuilder`** |
-| **Tests** | Many suites wrapped in **`#if 0`**; active coverage is mainly **`ZmeyaTest01`** + **`ZmeyaTestNewAPI`** |
+| **`zm::build`** | Implemented (returns **`std::vector<char>`**); **`ScopedBuilder`** remains the TLS mechanism inside **`build`** |
+| **Tests** | **`ZmeyaTest01`** … **`ZmeyaTest09`** enabled on **`ZmeyaTest`**; **`ZmeyaTest10`** / **`ZmeyaTest11`** still **`#if 0`** (legacy **`BlobBuilder`** / **`referTo`** — needs a dedicated port) |
 | **Reallocation** | Documented issue: growth can invalidate offsets — **handle-based build** or other stable-addressing strategy still **planned** (see appendix) |
 | **README** | Previously referenced **`BlobBuilder`** — updated to describe the new direction |
 
@@ -79,21 +79,21 @@ A single mutex around “the” builder serializes all builders across the proce
 
 ### Phase 1 — Closure API (UX)
 
-1. Add **`zm::build<TRoot>(Fn&&)`** (and overloads as needed: initial reserve size, alignment).
-2. Implement by **constructing `Builder<TRoot>`**, installing **`ScopedBuilder`**, invoking lambda with **`getRoot()`**, then **`finalize()`** and returning **`Span<char>`** (or owning blob type if lifetime requires it).
-3. Migrate **`ZmeyaTestNewAPI`** / **`ZmeyaTest01`** to **`zm::build`** as the primary pattern.
-4. Document **`ScopedBuilder` + manual `Builder`** as **advanced / legacy** (still useful for non-closure control flow).
+1. ~~Add **`zm::build<TRoot>(Fn&&)`**~~ **Done** — returns **`std::vector<char>`** (owning blob); optional args: initial reserve size, finalize alignment.
+2. Implemented with **`Builder<TRoot>`**, **`ScopedBuilder`**, **`getRoot()`**, **`finalize()`**, then a copy into **`std::vector<char>`**.
+3. **`ZmeyaTestNewAPI`** / **`ZmeyaTest01`** migrated to **`zm::build`** where the flow is a single closure.
+4. **`README`** documents **`zm::build`**; manual **`Builder`** + **`ScopedBuilder`** documented for advanced control flow.
 
-**Exit criteria:** Examples and tests prefer **`zm::build`**; no duplicate TLS setup in user code.
+**Exit criteria:** Examples and tests prefer **`zm::build`** where it fits; manual TLS pairing only when needed.
 
 ### Phase 2 — Tests and narrative cleanup
 
-1. For each file **`ZmeyaTest02` … `ZmeyaTest11`**: remove file-level **`#if 0`**, port tests to **`Builder<>` + `zm::build`** (or keep explicit **`ScopedBuilder`** only where necessary).
-2. Fix **`allocate` / root patterns** where old tests assumed **`BlobBuilder`** APIs.
-3. Refresh **`NEXT_STEPS`** testing section with **commands that match real test case names**.
-4. Align **`README`** “see unit tests” with actually enabled suites.
+1. ~~**`ZmeyaTest02` … `ZmeyaTest09`**~~ ported off **`allocate_root` / non-template `Builder`**; **`ZmeyaTest10`** / **`ZmeyaTest11`** still need **`BlobBuilder`** + **`referTo`** replacements.
+2. ~~Root pattern~~: **`Builder<TRoot>::create()`** + **`getRoot()`** (or **`zm::build`**).
+3. Local validation: build **`ZmeyaTest`** and run **`ZmeyaTest.exe --gtest_list_tests`** (or **`ctest`**) on your machine; replace filters in the appendix after you confirm names.
+4. **`README`** / this file updated to match which suites compile.
 
-**Exit criteria:** CI runs a **meaningful** suite; doc claims match reality.
+**Exit criteria:** CI runs a **meaningful** suite; remaining **`#if 0`** files are explicitly called out (mmap / referTo tests).
 
 ### Phase 3 — Stable addressing (reallocation)
 
@@ -111,7 +111,7 @@ Direction (pick one or combine):
 
 1. **`referTo` / sharing** — reintroduce semantics compatible with final blob layout, or document omission.
 2. **`BlobPtr`** / **`getRawByAbsoluteOffset`** — align or remove dead surfaces so headers compile cleanly for all intended uses.
-3. **`alloc_algined` typo**, **`#if 0`** blocks inside **`assign`**, portable **`is_stack_pointer`** if non-Windows matters.
+3. **`#if 0`** blocks inside **`assign`**, further **`BlobPtr`** / **`getRawByAbsoluteOffset`** cleanup (Windows **`is_stack_pointer`** now has a non-Windows fallback).
 4. Optional: **`BuildSession::assign`** overloads for advanced MT-safe paths (explicit context) — only if needed.
 
 ---

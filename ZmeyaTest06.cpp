@@ -2,8 +2,6 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-#if 0
-
 struct HashSetTestRoot
 {
     zm::HashSet<int32_t> set1;
@@ -72,27 +70,20 @@ TEST(ZmeyaTestSuite, HashSetTest)
 {
     std::vector<char> bytesCopy;
     {
-        std::shared_ptr<zm::Builder> _builder = zm::Builder::create();
-        zm::ScopedBuilder scope(_builder.get());
-        
-        zm::Builder* builder = zm::detail::get_global_builder();
-        ZMEYA_ASSERT(builder != nullptr);
+        std::unique_ptr<zm::Builder<HashSetTestRoot>> builder = zm::Builder<HashSetTestRoot>::create();
+        zm::ScopedBuilder scope(builder.get());
 
-        HashSetTestRoot* root = builder->allocate_root<HashSetTestRoot>();
+        HashSetTestRoot* root = builder->getRoot();
 
-        // assign from std::unordered_set
         std::unordered_set<int> testSet1 = {5, 7, 3, 11, 99};
         zm::assign(root->set1, testSet1);
 
-        // assign from std::initializer_list (convert to unordered_set first)
         std::unordered_set<int32_t> testSet2 = {1, 2, 3, 4, 0, 99, 6};
         zm::assign(root->set2, testSet2);
 
-        // assign from std::unordered_set of strings
         std::unordered_set<std::string> strSet1 = {"one", "two", "three", "four", "123456", "1234567"};
         zm::assign(root->strSet1, strSet1);
 
-        // assign from std::initializer_list of strings (convert to unordered_set first)
         std::unordered_set<std::string> strSet2 = {"five", "six", "seven", "eight", "this-is-a-very-very-long-key-to-test-hasher"};
         zm::assign(root->strSet2, strSet2);
 
@@ -107,6 +98,3 @@ TEST(ZmeyaTestSuite, HashSetTest)
 
     validate(rootCopy);
 }
-
-
-#endif
