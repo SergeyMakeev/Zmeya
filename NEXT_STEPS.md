@@ -47,6 +47,7 @@ A single mutex around “the” builder serializes all builders across the proce
 |----------|------|
 | Quick overview + read path | `README.md` |
 | Roadmap and migration | This file (`NEXT_STEPS.md`) |
+| Build commands, tree layout, agents | `AGENTS.md` |
 
 ---
 
@@ -59,7 +60,7 @@ A single mutex around “the” builder serializes all builders across the proce
 | **BlobBuilder** | Implementation largely `#if 0` — legacy path retired |
 | **Builder / BuilderBase** | Growing `std::vector<char>` buffer; **`zm::assign`** + container **`operator=`**; TLS via **`ScopedBuilder`** |
 | **`zm::build`** | Implemented (returns **`std::vector<char>`**); **`ScopedBuilder`** remains the TLS mechanism inside **`build`** |
-| **Tests** | **`ZmeyaTest01`** … **`ZmeyaTest09`** enabled on **`ZmeyaTest`**; **`ZmeyaTest10`** / **`ZmeyaTest11`** still **`#if 0`** (legacy **`BlobBuilder`** / **`referTo`** — needs a dedicated port) |
+| **Tests** | All **`ZmeyaTest01`** … **`ZmeyaTest11`** sources are built into **`ZmeyaTest`**; **`ZmeyaTest10`**/**`11`** use deep copies instead of legacy **`referTo`** (larger blobs, same read semantics) |
 | **Reallocation** | Documented issue: growth can invalidate offsets — **handle-based build** or other stable-addressing strategy still **planned** (see appendix) |
 | **README** | Previously referenced **`BlobBuilder`** — updated to describe the new direction |
 
@@ -88,7 +89,7 @@ A single mutex around “the” builder serializes all builders across the proce
 
 ### Phase 2 — Tests and narrative cleanup
 
-1. ~~**`ZmeyaTest02` … `ZmeyaTest09`**~~ ported off **`allocate_root` / non-template `Builder`**; **`ZmeyaTest10`** / **`ZmeyaTest11`** still need **`BlobBuilder`** + **`referTo`** replacements.
+1. ~~**`ZmeyaTest02` … `ZmeyaTest11`**~~ ported off **`allocate_root` / non-template `Builder`** and **`BlobBuilder`**; **`referTo`**-style sharing replaced by deep copies where needed (**`ZmeyaTest10`**/**`11`**).
 2. ~~Root pattern~~: **`Builder<TRoot>::create()`** + **`getRoot()`** (or **`zm::build`**).
 3. Local validation: build **`ZmeyaTest`** and run **`ZmeyaTest.exe --gtest_list_tests`** (or **`ctest`**) on your machine; replace filters in the appendix after you confirm names.
 4. **`README`** / this file updated to match which suites compile.

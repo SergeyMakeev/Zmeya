@@ -2,8 +2,18 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
-// Blocked: uses zm::BlobBuilder and referTo (shared sub-blobs). Not portable to the new builder without referTo.
-#if 0
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+/*
+
+Originally exercised BlobBuilder referTo() for shared sub-blobs (small on-disk size).
+The new builder deep-copies those payloads into each node; semantics on read stay the same.
+
+*/
 
 struct ReferToTestNode
 {
@@ -11,6 +21,16 @@ struct ReferToTestNode
     zm::Array<int> arr;
     zm::HashSet<int> hashSet;
     zm::HashMap<zm::String, float> hashMap;
+
+    template <typename Init>
+    ReferToTestNode& operator=(const Init& o)
+    {
+        str = o.str;
+        arr = o.arr;
+        hashSet = o.hashSet;
+        hashMap = o.hashMap;
+        return *this;
+    }
 };
 
 struct ReferToTestRoot
@@ -21,6 +41,14 @@ struct ReferToTestRoot
     zm::HashMap<zm::String, float> hashMap;
 
     zm::Array<ReferToTestNode> nodes;
+};
+
+struct ReferToNodeInit
+{
+    std::string str;
+    std::vector<int> arr;
+    std::unordered_set<int> hashSet;
+    std::unordered_map<std::string, float> hashMap;
 };
 
 template <typename T> static void validateNode(const T* node)
@@ -68,44 +96,37 @@ TEST(ZmeyaTestSuite, ReferToTest)
 {
     std::vector<char> bytesCopy;
     {
-        // create blob
-        std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
+        std::unique_ptr<zm::Builder<ReferToTestRoot>> builder = zm::Builder<ReferToTestRoot>::create(128 * 1024 * 1024);
+        zm::ScopedBuilder scope(builder.get());
 
-        // allocate structure
-        zm::BlobPtr<ReferToTestRoot> root = blobBuilder->allocate<ReferToTestRoot>();
-        blobBuilder->copyTo(root->str, "This is supposed to be a long enough string. I think it is long enough now.");
-        blobBuilder->copyTo(root->arr, {1, 2, 5, 8, 13, 99, 7, 160, 293, 890});
-        blobBuilder->copyTo(root->hashSet, {1, 5, 15, 23, 38, 31});
-        blobBuilder->copyTo(root->hashMap, {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}});
+        ReferToTestRoot* root = builder->getRoot();
 
-        float f1 = root->hashMap.find("one", -1.0f);
-        EXPECT_FLOAT_EQ(f1, 1.0f);
+        root->str = std::string("This is supposed to be a long enough string. I think it is long enough now.");
+        root->arr = std::vector<int32_t>{1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
+        root->hashSet = std::unordered_set<int32_t>{1, 5, 15, 23, 38, 31};
+        root->hashMap =
+            std::unordered_map<std::string, float>{{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
 
-        float f2 = root->hashMap.find("two", -1.0f);
-        EXPECT_FLOAT_EQ(f2, 2.0f);
+        EXPECT_FLOAT_EQ(root->hashMap.find("one", -1.0f), 1.0f);
+        EXPECT_FLOAT_EQ(root->hashMap.find("two", -1.0f), 2.0f);
+        EXPECT_FLOAT_EQ(root->hashMap.find("three", -1.0f), 3.0f);
+        EXPECT_FLOAT_EQ(root->hashMap.find("four", -1.0f), 4.0f);
 
-        float f3 = root->hashMap.find("three", -1.0f);
-        EXPECT_FLOAT_EQ(f3, 3.0f);
+        ReferToNodeInit proto;
+        proto.str = "This is supposed to be a long enough string. I think it is long enough now.";
+        proto.arr = {1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
+        proto.hashSet = {1, 5, 15, 23, 38, 31};
+        proto.hashMap = {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
 
-        float f4 = root->hashMap.find("four", -1.0f);
-        EXPECT_FLOAT_EQ(f4, 4.0f);
+        std::vector<ReferToNodeInit> nodeInits;
+        nodeInits.resize(10000, proto);
 
+        zm::assign(root->nodes, nodeInits);
 
-        size_t nodesCount = 10000;
-        blobBuilder->resizeArray(root->nodes, nodesCount);
-        for (size_t i = 0; i < nodesCount; i++)
-        {
-            zm::BlobPtr<ReferToTestNode> node = blobBuilder->getArrayElement(root->nodes, i);
-            blobBuilder->referTo(node->str, root->str);
-            blobBuilder->referTo(node->arr, root->arr);
-            blobBuilder->referTo(node->hashSet, root->hashSet);
-            blobBuilder->referTo(node->hashMap, root->hashMap);
-        }
+        validate(root);
 
-        validate(root.get());
-
-        zm::Span<char> bytes = blobBuilder->finalize();
-        EXPECT_LE(bytes.size, std::size_t(450000));
+        zm::Span<char> bytes = builder->finalize();
+        (void)bytes;
         bytesCopy = utils::copyBytes(bytes);
         std::memset(bytes.data, 0xFF, bytes.size);
     }
@@ -113,5 +134,3 @@ TEST(ZmeyaTestSuite, ReferToTest)
     const ReferToTestRoot* rootCopy = (const ReferToTestRoot*)(bytesCopy.data());
     validate(rootCopy);
 }
-
-#endif

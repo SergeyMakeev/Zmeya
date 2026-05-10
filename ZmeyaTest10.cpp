@@ -2,22 +2,22 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-// Blocked: depends on removed zm::BlobBuilder, zm::BlobPtr, resizeArray, and referTo.
-// Re-enable after porting to zm::Builder<TRoot> + zm::assign (and referTo semantics or deep copies).
-#if 0
-
-
-
-#if _WIN32
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <Windows.h>
 #endif
 
 /*
 
-This test is a nightmare for any serialization system (not for Zmeya)
-a ton of different objects, everything is linked by pointers,
-plus inheritance and different hash containers.
+Stress layout: many nodes, pointers, inheritance, hash containers.
+Previously used BlobBuilder + referTo; now Builder + deep copies of the long description string per node (larger blob, same read validation).
 
 */
 
@@ -62,6 +62,9 @@ struct MMapTestNode2 : public MMapTestNode
     zm::HashSet<int32_t> hashSet;
 };
 
+static const char kLongDesc[] =
+    "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.";
+
 static void validateChildren(const MMapTestNode* parent, size_t count, size_t startIndex)
 {
     EXPECT_EQ(parent->children.size(), count);
@@ -88,11 +91,12 @@ static void validateNode1(const MMapTestNode* nodeBase, size_t index)
     ZMEYA_ASSERT(nodeBase->nodeType == NodeType::NodeType1);
 
     const MMapTestNode1* node = reinterpret_cast<const MMapTestNode1*>(nodeBase);
-    EXPECT_EQ(node->str1, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
+    EXPECT_EQ(node->str1, kLongDesc);
     EXPECT_EQ(node->idx, uint32_t(index));
     size_t numChildrenNodes = 1 + (index % 6);
     validateChildren(node, numChildrenNodes, index);
 }
+
 static void validateNode2(const MMapTestNode* nodeBase, size_t index)
 {
     EXPECT_EQ(nodeBase->nodeType, NodeType::NodeType2);
@@ -101,7 +105,7 @@ static void validateNode2(const MMapTestNode* nodeBase, size_t index)
     ZMEYA_ASSERT(nodeBase->nodeType == NodeType::NodeType2);
 
     const MMapTestNode2* node = reinterpret_cast<const MMapTestNode2*>(nodeBase);
-    EXPECT_EQ(node->str1, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
+    EXPECT_EQ(node->str1, kLongDesc);
 
     EXPECT_EQ(node->hashSet.size(), std::size_t(3));
     EXPECT_TRUE(node->hashSet.contains(int32_t(index + 1)));
@@ -114,7 +118,7 @@ static void validateNode2(const MMapTestNode* nodeBase, size_t index)
 static void validate(const MMapTestRoot* root)
 {
     EXPECT_EQ(root->magic, 0x59454D5Au);
-    EXPECT_EQ(root->desc, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
+    EXPECT_EQ(root->desc, kLongDesc);
 
     EXPECT_EQ(root->hashMap.size(), std::size_t(6));
     EXPECT_FLOAT_EQ(root->hashMap.find("one", 0.0f), 1.0f);
@@ -139,73 +143,83 @@ static void validate(const MMapTestRoot* root)
     }
 }
 
-void createChildren(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestNode>& parent, size_t count, size_t startIndex)
+static void createChildren(zm::Builder<MMapTestRoot>* builder, MMapTestNode* parent, size_t count, size_t startIndex)
 {
+    std::vector<MMapTestNode*> childPtrs;
+    childPtrs.reserve(count);
     for (size_t i = 0; i < count; i++)
     {
-        zm::BlobPtr<MMapTestLeafNode> node = blobBuilder->allocate<MMapTestLeafNode>();
-        node->nodeType = NodeType::Leaf;
-        blobBuilder->copyTo(node->name, "leaf_" + std::to_string(startIndex + i));
-        node->payload = uint32_t(count + startIndex * 13);
-        node->parent = parent;
-        zm::BlobPtr<zm::Pointer<MMapTestNode>> ch = blobBuilder->getArrayElement(parent->children, i);
-        *ch = node;
+        MMapTestLeafNode* leaf = builder->allocate<MMapTestLeafNode>();
+        leaf->nodeType = NodeType::Leaf;
+        leaf->name = std::string("leaf_") + std::to_string(startIndex + i);
+        leaf->payload = uint32_t(count + startIndex * 13);
+        zm::assign(leaf->parent, parent);
+        childPtrs.push_back(leaf);
     }
+    zm::assign(parent->children, childPtrs);
 }
 
-zm::BlobPtr<MMapTestNode> allocateNode1(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestRoot>& root, size_t index)
+static MMapTestNode* allocateNode1(zm::Builder<MMapTestRoot>* builder, MMapTestRoot* root, size_t index)
 {
-    zm::BlobPtr<MMapTestNode1> node = blobBuilder->allocate<MMapTestNode1>();
+    MMapTestNode1* node = builder->allocate<MMapTestNode1>();
     node->nodeType = NodeType::NodeType1;
-    blobBuilder->copyTo(node->name, "node_" + std::to_string(index));
-    blobBuilder->referTo(node->str1, root->desc);
+    node->name = std::string("node_") + std::to_string(index);
+    node->str1 = std::string(kLongDesc);
     node->idx = uint32_t(index);
+    zm::assign(node->root, root);
+
     size_t numChildrenNodes = 1 + (index % 6);
-    blobBuilder->resizeArray(node->children, numChildrenNodes);
-    createChildren(blobBuilder, node, numChildrenNodes, index);
+    createChildren(builder, node, numChildrenNodes, index);
     return node;
 }
 
-zm::BlobPtr<MMapTestNode> allocateNode2(zm::BlobBuilder* blobBuilder, const zm::BlobPtr<MMapTestRoot>& root, size_t index)
+static MMapTestNode* allocateNode2(zm::Builder<MMapTestRoot>* builder, size_t index)
 {
-    zm::BlobPtr<MMapTestNode2> node = blobBuilder->allocate<MMapTestNode2>();
+    MMapTestNode2* node = builder->allocate<MMapTestNode2>();
     node->nodeType = NodeType::NodeType2;
-    blobBuilder->copyTo(node->name, "item_" + std::to_string(index));
-    blobBuilder->referTo(node->str1, root->desc);
-    blobBuilder->copyTo(node->hashSet, {int32_t(index + 1), int32_t(index + 2), int32_t(index + 3)});
+    node->name = std::string("item_") + std::to_string(index);
+    node->str1 = std::string(kLongDesc);
+
+    std::unordered_set<int32_t> hs = {int32_t(index + 1), int32_t(index + 2), int32_t(index + 3)};
+    node->hashSet = hs;
+
     size_t numChildrenNodes = 2;
-    blobBuilder->resizeArray(node->children, numChildrenNodes);
-    createChildren(blobBuilder, node, numChildrenNodes, index);
+    createChildren(builder, node, numChildrenNodes, index);
     return node;
 }
 
 static void generateTestFile(const char* fileName)
 {
-    std::shared_ptr<zm::BlobBuilder> blobBuilder = zm::BlobBuilder::create(1);
-    zm::BlobPtr<MMapTestRoot> root = blobBuilder->allocate<MMapTestRoot>();
+    std::unique_ptr<zm::Builder<MMapTestRoot>> builder = zm::Builder<MMapTestRoot>::create(64 * 1024 * 1024);
+    zm::ScopedBuilder scope(builder.get());
+
+    MMapTestRoot* root = builder->getRoot();
     root->magic = 0x59454D5A;
-    blobBuilder->copyTo(root->desc, "Zmyea test file. This is supposed to be a long enough string. I think it is long enough now.");
-    blobBuilder->copyTo(root->hashMap, {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}, {"five", 5.0f}, {"six", 6.0f}});
-    size_t numRoots = 512;
-    blobBuilder->resizeArray(root->roots, numRoots);
-    for (size_t i = 0; i < 512; i++)
+    root->desc = std::string(kLongDesc);
+
+    std::unordered_map<std::string, float> hm = {
+        {"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}, {"five", 5.0f}, {"six", 6.0f}};
+    root->hashMap = hm;
+
+    constexpr size_t numRoots = 512;
+    std::vector<MMapTestNode*> rootNodes;
+    rootNodes.reserve(numRoots);
+    for (size_t i = 0; i < numRoots; i++)
     {
-        zm::BlobPtr<MMapTestNode> rootNode;
         if ((i & 1) == 0)
         {
-            rootNode = allocateNode1(blobBuilder.get(), root, i);
+            rootNodes.push_back(allocateNode1(builder.get(), root, i));
         }
         else
         {
-            rootNode = allocateNode2(blobBuilder.get(), root, i);
+            rootNodes.push_back(allocateNode2(builder.get(), i));
         }
-        zm::BlobPtr<zm::Pointer<MMapTestNode>> rt = blobBuilder->getArrayElement(root->roots, i);
-        *rt = rootNode;
     }
+    zm::assign(root->roots, rootNodes);
 
-    validate(root.get());
+    validate(root);
 
-    zm::Span<char> bytes = blobBuilder->finalize(32);
+    zm::Span<char> bytes = builder->finalize(32);
     EXPECT_TRUE((bytes.size % 32) == std::size_t(0));
 
     FILE* file = fopen(fileName, "wb");
@@ -219,8 +233,7 @@ TEST(ZmeyaTestSuite, MMapTest)
     const char* fileName = "mmaptest.zm";
     generateTestFile(fileName);
 
-#if _WIN32
-    // use memory mapped file view to access the data
+#if defined(_WIN32)
     HANDLE hFile = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     ASSERT_TRUE(hFile != INVALID_HANDLE_VALUE);
 
@@ -228,10 +241,12 @@ TEST(ZmeyaTestSuite, MMapTest)
     BOOL res = GetFileSizeEx(hFile, &fileSizeInBytes);
     ASSERT_TRUE(res);
 
-    HANDLE hMapping = CreateFileMapping(hFile, 0, PAGE_READONLY | SEC_COMMIT, fileSizeInBytes.HighPart, fileSizeInBytes.LowPart, 0);
+    HANDLE hMapping =
+        CreateFileMapping(hFile, 0, PAGE_READONLY | SEC_COMMIT, fileSizeInBytes.HighPart, fileSizeInBytes.LowPart, 0);
     ASSERT_TRUE(hMapping != NULL);
 
-    const MMapTestRoot* fileRoot = (const MMapTestRoot*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, size_t(fileSizeInBytes.QuadPart));
+    const MMapTestRoot* fileRoot =
+        (const MMapTestRoot*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, size_t(fileSizeInBytes.QuadPart));
     ASSERT_TRUE(fileRoot != nullptr);
 
     validate(fileRoot);
@@ -239,8 +254,17 @@ TEST(ZmeyaTestSuite, MMapTest)
     UnmapViewOfFile(fileRoot);
     CloseHandle(hMapping);
     CloseHandle(hFile);
+#else
+    FILE* file = fopen(fileName, "rb");
+    ASSERT_TRUE(file != nullptr);
+    fseek(file, 0L, SEEK_END);
+    long fileSize = ftell(file);
+    fseek(file, 0L, SEEK_SET);
+    std::vector<char> buffer(size_t(fileSize));
+    ASSERT_EQ(fread(buffer.data(), size_t(fileSize), 1, file), size_t(1));
+    fclose(file);
+
+    const MMapTestRoot* fileRoot = reinterpret_cast<const MMapTestRoot*>(buffer.data());
+    validate(fileRoot);
 #endif
 }
-
-
-#endif
