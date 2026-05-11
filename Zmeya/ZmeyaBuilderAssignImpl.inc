@@ -84,19 +84,25 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
     note_dead_hashset_if_any<Key>(to);
     if (from.empty())
     {
+        to->live_count_ = 0;
+        to->free_head_ = ZMEYA_HASH_CHAIN_NIL;
         to->buckets.numElements = 0;
         to->buckets.relativeOffset = 0;
-        to->items.numElements = 0;
-        to->items.relativeOffset = 0;
+        to->nodes.numElements = 0;
+        to->nodes.relativeOffset = 0;
         register_roffset_slot(get_global_offset(&to->buckets), goffset_t(0));
-        register_roffset_slot(get_global_offset(&to->items), goffset_t(0));
+        register_roffset_slot(get_global_offset(&to->nodes), goffset_t(0));
         return;
     }
 
-    size_t numElements = from.size();
+    const size_t numElements = from.size();
     size_t numBuckets = numElements * 2;
     ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
-    size_t hashMod = numBuckets;
+    if (numBuckets == 0)
+    {
+        numBuckets = 1;
+    }
+    const size_t hashMod = numBuckets;
 
     constexpr size_t alignOfBucket = std::alignment_of<typename zm::HashSet<Key>::Bucket>::value;
     constexpr size_t sizeOfBucket = sizeof(typename zm::HashSet<Key>::Bucket);
@@ -105,11 +111,18 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
     typename zm::HashSet<Key>::Bucket* buckets = reinterpret_cast<typename zm::HashSet<Key>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
     for (size_t i = 0; i < numBuckets; ++i)
     {
-        BuilderBase::placementCtor<typename zm::HashSet<Key>::Bucket>(&buckets[i], typename zm::HashSet<Key>::Bucket{0, 0});
+        BuilderBase::placementCtor<typename zm::HashSet<Key>::Bucket>(&buckets[i], typename zm::HashSet<Key>::Bucket{ZMEYA_HASH_CHAIN_NIL});
     }
 
-    std::vector<size_t> item_hashes;
-    item_hashes.reserve(from.size());
+    constexpr size_t alignOfNode = std::alignment_of<typename zm::HashSet<Key>::Node>::value;
+    constexpr size_t sizeOfNode = sizeof(typename zm::HashSet<Key>::Node);
+    zm::goffset_t nodesDataOffset = alloc_aligned(sizeOfNode * numElements, alignOfNode);
+    buckets = reinterpret_cast<typename zm::HashSet<Key>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
+    typename zm::HashSet<Key>::Node* nodes = reinterpret_cast<typename zm::HashSet<Key>::Node*>(get_ptr_unsafe_to_store(nodesDataOffset));
+
+    // Re-resolve buckets/nodes from offsets after each growth; do not hold a Node& across String assign.
+
+    size_t idx = 0;
     for (const auto& item : from)
     {
         size_t h;
@@ -121,52 +134,25 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
         {
             h = HashUtils::hasher(item);
         }
-        item_hashes.push_back(h);
-    }
-    for (size_t hi = 0; hi < item_hashes.size(); ++hi)
-    {
-        size_t bucketIndex = item_hashes[hi] % hashMod;
-        buckets[bucketIndex].beginIndex++;
-    }
-
-    size_t beginIndex = 0;
-    for (size_t bucketIndex = 0; bucketIndex < numBuckets; bucketIndex++)
-    {
-        typename zm::HashSet<Key>::Bucket& bucket = buckets[bucketIndex];
-        size_t numElementsInBucket = bucket.beginIndex;
-        bucket.beginIndex = uint32_t(beginIndex);
-        bucket.endIndex = bucket.beginIndex;
-        beginIndex += numElementsInBucket;
-    }
-
-    constexpr size_t alignOfKey = std::alignment_of<Key>::value;
-    constexpr size_t sizeOfKey = sizeof(Key);
-    zm::goffset_t itemsDataOffset = alloc_aligned(sizeOfKey * numElements, alignOfKey);
-
-    Key* items = reinterpret_cast<Key*>(get_ptr_unsafe_to_store(itemsDataOffset));
-    buckets = reinterpret_cast<typename zm::HashSet<Key>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
-
-    size_t hi = 0;
-    for (const auto& item : from)
-    {
-        size_t bucketIndex = item_hashes[hi++] % hashMod;
-        typename zm::HashSet<Key>::Bucket& bucket = buckets[bucketIndex];
-
-        Key* element = &items[bucket.endIndex];
-        BuilderBase::placementCtor<Key>(element);
-
-        *element = item;
-
-        bucket.endIndex++;
+        const size_t bucketIndex = h % hashMod;
+        BuilderBase::placementCtor<Key>(&nodes[idx].key);
+        nodes[idx].key = item;
+        buckets = reinterpret_cast<typename zm::HashSet<Key>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
+        nodes = reinterpret_cast<typename zm::HashSet<Key>::Node*>(get_ptr_unsafe_to_store(nodesDataOffset));
+        nodes[idx].next = buckets[bucketIndex].head;
+        buckets[bucketIndex].head = uint32_t(idx);
+        ++idx;
     }
 
     to = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(to_offset));
+    to->live_count_ = uint32_t(numElements);
+    to->free_head_ = ZMEYA_HASH_CHAIN_NIL;
     to->buckets.numElements = uint32_t(numBuckets);
     to->buckets.relativeOffset = get_relative_offset(&to->buckets, bucketsDataOffset);
-    to->items.numElements = uint32_t(numElements);
-    to->items.relativeOffset = get_relative_offset(&to->items, itemsDataOffset);
+    to->nodes.numElements = uint32_t(numElements);
+    to->nodes.relativeOffset = get_relative_offset(&to->nodes, nodesDataOffset);
     register_roffset_slot(get_global_offset(&to->buckets), bucketsDataOffset);
-    register_roffset_slot(get_global_offset(&to->items), itemsDataOffset);
+    register_roffset_slot(get_global_offset(&to->nodes), nodesDataOffset);
 }
 
 template <typename Key, typename Value, typename FK, typename FV>
@@ -178,19 +164,25 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
     note_dead_hashmap_if_any<Key, Value>(to);
     if (from.empty())
     {
+        to->live_count_ = 0;
+        to->free_head_ = ZMEYA_HASH_CHAIN_NIL;
         to->buckets.numElements = 0;
         to->buckets.relativeOffset = 0;
-        to->items.numElements = 0;
-        to->items.relativeOffset = 0;
+        to->nodes.numElements = 0;
+        to->nodes.relativeOffset = 0;
         register_roffset_slot(get_global_offset(&to->buckets), goffset_t(0));
-        register_roffset_slot(get_global_offset(&to->items), goffset_t(0));
+        register_roffset_slot(get_global_offset(&to->nodes), goffset_t(0));
         return;
     }
 
-    size_t numElements = from.size();
+    const size_t numElements = from.size();
     size_t numBuckets = numElements * 2;
     ZMEYA_ASSERT(numBuckets < size_t(std::numeric_limits<uint32_t>::max()));
-    size_t hashMod = numBuckets;
+    if (numBuckets == 0)
+    {
+        numBuckets = 1;
+    }
+    const size_t hashMod = numBuckets;
 
     constexpr size_t alignOfBucket = std::alignment_of<typename zm::HashMap<Key, Value>::Bucket>::value;
     constexpr size_t sizeOfBucket = sizeof(typename zm::HashMap<Key, Value>::Bucket);
@@ -199,14 +191,23 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
     typename zm::HashMap<Key, Value>::Bucket* buckets = reinterpret_cast<typename zm::HashMap<Key, Value>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
     for (size_t i = 0; i < numBuckets; ++i)
     {
-        BuilderBase::placementCtor<typename zm::HashMap<Key, Value>::Bucket>(&buckets[i], typename zm::HashMap<Key, Value>::Bucket{0, 0});
+        BuilderBase::placementCtor<typename zm::HashMap<Key, Value>::Bucket>(&buckets[i], typename zm::HashMap<Key, Value>::Bucket{ZMEYA_HASH_CHAIN_NIL});
     }
 
-    std::vector<size_t> key_hashes;
-    key_hashes.reserve(from.size());
+    using NodeType = typename zm::HashMap<Key, Value>::Node;
+    constexpr size_t alignOfNode = std::alignment_of<NodeType>::value;
+    constexpr size_t sizeOfNode = sizeof(NodeType);
+    zm::goffset_t nodesDataOffset = alloc_aligned(sizeOfNode * numElements, alignOfNode);
+    buckets = reinterpret_cast<typename zm::HashMap<Key, Value>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
+    NodeType* nodes = reinterpret_cast<NodeType*>(get_ptr_unsafe_to_store(nodesDataOffset));
+
+    // Re-resolve buckets/nodes from offsets after each growth; do not hold a Node& across key/value assigns.
+
+    size_t idx = 0;
     for (const auto& kv : from)
     {
         const FK& key = kv.first;
+        const FV& value = kv.second;
         size_t h;
         if constexpr (std::is_same_v<FK, std::string>)
         {
@@ -216,59 +217,27 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
         {
             h = HashUtils::hasher(key);
         }
-        key_hashes.push_back(h);
-    }
-    size_t khi = 0;
-    for (const auto& kv : from)
-    {
-        (void)kv;
-        size_t bucketIndex = key_hashes[khi++] % hashMod;
-        buckets[bucketIndex].beginIndex++;
-    }
-
-    size_t beginIndex = 0;
-    for (size_t bucketIndex = 0; bucketIndex < numBuckets; bucketIndex++)
-    {
-        typename zm::HashMap<Key, Value>::Bucket& bucket = buckets[bucketIndex];
-        size_t numElementsInBucket = bucket.beginIndex;
-        bucket.beginIndex = uint32_t(beginIndex);
-        bucket.endIndex = bucket.beginIndex;
-        beginIndex += numElementsInBucket;
-    }
-
-    using ItemType = zm::Pair<const Key, Value>;
-    constexpr size_t alignOfItem = std::alignment_of<ItemType>::value;
-    constexpr size_t sizeOfItem = sizeof(ItemType);
-    zm::goffset_t itemsDataOffset = alloc_aligned(sizeOfItem * numElements, alignOfItem);
-
-    ItemType* items = reinterpret_cast<ItemType*>(get_ptr_unsafe_to_store(itemsDataOffset));
-    buckets = reinterpret_cast<typename zm::HashMap<Key, Value>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
-
-    khi = 0;
-    for (const auto& kv : from)
-    {
-        const FK& key = kv.first;
-        const FV& value = kv.second;
-        size_t bucketIndex = key_hashes[khi++] % hashMod;
-        typename zm::HashMap<Key, Value>::Bucket& bucket = buckets[bucketIndex];
-
-        ItemType* element = &items[bucket.endIndex];
-
-        Key* mutableKey = const_cast<Key*>(&element->first);
-        BuilderBase::placementCtor<Key>(mutableKey);
-        BuilderBase::placementCtor<Value>(&element->second);
-
-        *mutableKey = key;
-        element->second = value;
-
-        bucket.endIndex++;
+        const size_t bucketIndex = h % hashMod;
+        BuilderBase::placementCtor<Key>(&nodes[idx].key);
+        nodes[idx].key = key;
+        buckets = reinterpret_cast<typename zm::HashMap<Key, Value>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
+        nodes = reinterpret_cast<NodeType*>(get_ptr_unsafe_to_store(nodesDataOffset));
+        BuilderBase::placementCtor<Value>(&nodes[idx].value);
+        nodes[idx].value = value;
+        buckets = reinterpret_cast<typename zm::HashMap<Key, Value>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
+        nodes = reinterpret_cast<NodeType*>(get_ptr_unsafe_to_store(nodesDataOffset));
+        nodes[idx].next = buckets[bucketIndex].head;
+        buckets[bucketIndex].head = uint32_t(idx);
+        ++idx;
     }
 
     to = reinterpret_cast<zm::HashMap<Key, Value>*>(get_ptr_unsafe_to_store(to_offset));
+    to->live_count_ = uint32_t(numElements);
+    to->free_head_ = ZMEYA_HASH_CHAIN_NIL;
     to->buckets.numElements = uint32_t(numBuckets);
     to->buckets.relativeOffset = get_relative_offset(&to->buckets, bucketsDataOffset);
-    to->items.numElements = uint32_t(numElements);
-    to->items.relativeOffset = get_relative_offset(&to->items, itemsDataOffset);
+    to->nodes.numElements = uint32_t(numElements);
+    to->nodes.relativeOffset = get_relative_offset(&to->nodes, nodesDataOffset);
     register_roffset_slot(get_global_offset(&to->buckets), bucketsDataOffset);
-    register_roffset_slot(get_global_offset(&to->items), itemsDataOffset);
+    register_roffset_slot(get_global_offset(&to->nodes), nodesDataOffset);
 }

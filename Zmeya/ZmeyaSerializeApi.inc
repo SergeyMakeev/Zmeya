@@ -16,7 +16,7 @@ inline void deep_copy(const char* from, zm::goffset_t to_ofs);
 template <typename F, typename T> void deep_copy(const std::vector<F>& from, zm::goffset_t to_ofs);
 template <typename F, typename Key> void deep_copy(const std::unordered_set<F>& from, zm::goffset_t to_ofs);
 template <typename FK, typename FV, typename Key, typename Value> void deep_copy(const std::unordered_map<FK, FV>& from, zm::goffset_t to_ofs);
-template <typename F1, typename F2, typename T1, typename T2> void deep_copy(const Pair<F1, F2>& from, zm::goffset_t to_ofs);
+template <typename F1, typename F2, typename T1, typename T2> void deep_copy(const zm::Pair<F1, F2>& from, zm::goffset_t to_ofs);
 template <typename F, typename T> void deep_copy(detail::BuilderBase& builder, const F& from, zm::goffset_t to_ofs);
 
 namespace detail
@@ -202,8 +202,31 @@ void assign(detail::BuilderBase& builder, HashMap<Key, Value>& _to, const std::u
     builder.impl_assign_hashmap(_to, from);
 }
 
+// Incremental hash: slab-safe keys use Option C chain APIs in ZmeyaBuilderHashChain.inc; String (and other
+// non-slab-safe) keys still resnapshot through STL and impl_assign_* per the audit tradeoff.
+
 template <typename Key, typename F> void hashset_insert(detail::BuilderBase& builder, HashSet<Key>& hs, const F& item)
 {
+    if constexpr (zm_hashset_chain_incremental_ok<Key>::value)
+    {
+        if constexpr (std::is_same_v<Key, F>)
+        {
+            if (hs.contains(item))
+            {
+                return;
+            }
+        }
+        else
+        {
+            const Key k = static_cast<Key>(item);
+            if (hs.contains(k))
+            {
+                return;
+            }
+        }
+        builder.hashset_chain_insert(hs, item);
+        return;
+    }
     if constexpr (std::is_same_v<Key, String> && std::is_same_v<F, std::string>)
     {
         if (hs.contains(item.c_str()))
@@ -237,6 +260,11 @@ template <typename Key, typename F> void hashset_insert(detail::BuilderBase& bui
 
 template <typename Key, typename F> void hashset_erase(detail::BuilderBase& builder, HashSet<Key>& hs, const F& key)
 {
+    if constexpr (zm_hashset_chain_incremental_ok<Key>::value)
+    {
+        builder.hashset_chain_erase(hs, key);
+        return;
+    }
     std::unordered_set<F> tmp;
     tmp.reserve(hs.size());
     for (const Key& k : hs)
@@ -268,6 +296,11 @@ template <typename Key, typename F> void hashset_erase(detail::BuilderBase& buil
 
 template <typename Key> void hashset_clear(detail::BuilderBase& builder, HashSet<Key>& hs)
 {
+    if constexpr (zm_hashset_chain_incremental_ok<Key>::value)
+    {
+        builder.hashset_chain_clear(hs);
+        return;
+    }
     if constexpr (std::is_same<Key, String>::value)
     {
         builder.impl_assign_hashset(hs, std::unordered_set<std::string>{});
@@ -296,6 +329,11 @@ template <typename K, typename V, typename FK, typename FV> void hashmap_insert(
             return;
         }
     }
+    if constexpr (zm_hashmap_chain_incremental_ok<K, V>::value)
+    {
+        builder.hashmap_chain_insert(hm, key, val);
+        return;
+    }
     // Snapshot the full map and re-assign each call (O(hm.size())); large batches should use bulk assign instead.
     if constexpr (std::is_same<K, String>::value)
     {
@@ -323,6 +361,11 @@ template <typename K, typename V, typename FK, typename FV> void hashmap_insert(
 
 template <typename K, typename V, typename FK> void hashmap_erase(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key)
 {
+    if constexpr (zm_hashmap_chain_incremental_ok<K, V>::value)
+    {
+        builder.hashmap_chain_erase(hm, key);
+        return;
+    }
     if constexpr (std::is_same<K, String>::value)
     {
         std::unordered_map<std::string, V> tmp;
@@ -353,6 +396,11 @@ template <typename K, typename V, typename FK> void hashmap_erase(detail::Builde
 
 template <typename K, typename V> void hashmap_clear(detail::BuilderBase& builder, HashMap<K, V>& hm)
 {
+    if constexpr (zm_hashmap_chain_incremental_ok<K, V>::value)
+    {
+        builder.hashmap_chain_clear(hm);
+        return;
+    }
     if constexpr (std::is_same<K, String>::value)
     {
         builder.impl_assign_hashmap(hm, std::unordered_map<std::string, V>{});

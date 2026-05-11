@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ZmeyaHashSet.h"
+#include <iterator>
+#include <utility>
 
 namespace zm
 {
@@ -21,42 +23,159 @@ template <typename T1, typename T2> struct Pair
 
 /*
 
-**Open-addressed hash map (read side)**
+**Chained hash map (read side)**
 
-`Item` is `Pair<const Key, Value>` so keys stay read-only in the blob while values remain mutable in memory.
+Same bucket + index chain model as `HashSet`. Each `Node` stores `key` and `value` separately so the table
+can be built incrementally without a default-constructed `Pair<const Key, Value>`.
+
+Iteration exposes `std::pair<const Key&, const Value&>` so `zm::String` keys are not shallow-copied (their
+`Pointer` offsets are relative to the slot address inside the blob).
+
+**Invalidation (same idea as `std::unordered_map`)**
+
+During `write_blob` / `BlobWriter`, do not keep raw pointers or iterators across `hashmap_insert` /
+`hashmap_erase` / `hashmap_clear` on the same map. Use `w.root()->...` each time. After finalize, the
+blob is read-only and pointers from `const` views are stable for that buffer.
 
 */
 
 template <typename Key, typename Value> class HashMap
 {
     typedef Pair<const Key, Value> Item;
+
     struct Bucket
     {
-        uint32_t beginIndex;
-        uint32_t endIndex;
+        uint32_t head;
     };
+
+    struct Node
+    {
+        Key key;
+        Value value;
+        uint32_t next;
+    };
+
+    class const_iterator
+    {
+        const HashMap* m = nullptr;
+        size_t bi = 0;
+        uint32_t ni = ZMEYA_HASH_CHAIN_NIL;
+
+        void mark_end() noexcept
+        {
+            if (!m)
+            {
+                return;
+            }
+            bi = m->buckets.size();
+            ni = ZMEYA_HASH_CHAIN_NIL;
+        }
+
+        void seek_first() noexcept
+        {
+            if (!m || m->buckets.size() == 0)
+            {
+                mark_end();
+                return;
+            }
+            for (bi = 0; bi < m->buckets.size(); ++bi)
+            {
+                ni = m->buckets[bi].head;
+                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                {
+                    return;
+                }
+            }
+            mark_end();
+        }
+
+      public:
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = Item;
+        using reference = std::pair<const Key&, const Value&>;
+
+        const_iterator() noexcept = default;
+
+        const_iterator(const HashMap* p, bool at_begin) noexcept
+            : m(p)
+        {
+            if (at_begin)
+            {
+                seek_first();
+            }
+            else
+            {
+                mark_end();
+            }
+        }
+
+        reference operator*() const noexcept { return reference(m->nodes[ni].key, m->nodes[ni].value); }
+
+        const_iterator& operator++() noexcept
+        {
+            if (!m)
+            {
+                return *this;
+            }
+            if (ni != ZMEYA_HASH_CHAIN_NIL)
+            {
+                ni = m->nodes[ni].next;
+                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                {
+                    return *this;
+                }
+                ++bi;
+            }
+            for (; bi < m->buckets.size(); ++bi)
+            {
+                ni = m->buckets[bi].head;
+                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                {
+                    return *this;
+                }
+            }
+            mark_end();
+            return *this;
+        }
+
+        const_iterator operator++(int) noexcept
+        {
+            const_iterator t = *this;
+            ++*this;
+            return t;
+        }
+
+        bool operator==(const const_iterator& o) const noexcept { return m == o.m && bi == o.bi && ni == o.ni; }
+
+        bool operator!=(const const_iterator& o) const noexcept { return !(*this == o); }
+    };
+
+    using iterator = const_iterator;
+
+  private:
+    uint32_t live_count_ = 0;
+    uint32_t free_head_ = ZMEYA_HASH_CHAIN_NIL;
     Array<Bucket> buckets;
-    Array<Item> items;
+    Array<Node> nodes;
 
     friend class detail::BuilderBase;
 
     template <typename Adapter, typename Key2> ZMEYA_NODISCARD const Value* findImpl(const Key2& key) const noexcept
     {
-        size_t numBuckets = buckets.size();
+        const size_t numBuckets = buckets.size();
         if (numBuckets == 0)
         {
             return nullptr;
         }
-        size_t hashMod = numBuckets;
-        size_t hash = Adapter::hash(key);
-        size_t bucketIndex = hash % hashMod;
-        const Bucket& bucket = buckets[bucketIndex];
-        for (size_t i = bucket.beginIndex; i < bucket.endIndex; i++)
+        const size_t hashMod = numBuckets;
+        const size_t hash = Adapter::hash(key);
+        const size_t bucketIndex = hash % hashMod;
+        for (uint32_t i = buckets[bucketIndex].head; i != ZMEYA_HASH_CHAIN_NIL; i = nodes[i].next)
         {
-            const Item& item = items[i];
-            if (Adapter::eq(item.first, key))
+            if (Adapter::eq(nodes[i].key, key))
             {
-                return &item.second;
+                return &nodes[i].value;
             }
         }
         return nullptr;
@@ -65,13 +184,13 @@ template <typename Key, typename Value> class HashMap
   public:
     HashMap() noexcept = default;
 
-    ZMEYA_NODISCARD size_t size() const noexcept { return items.size(); }
+    ZMEYA_NODISCARD size_t size() const noexcept { return size_t(live_count_); }
 
-    ZMEYA_NODISCARD bool empty() const noexcept { return items.empty(); }
+    ZMEYA_NODISCARD bool empty() const noexcept { return live_count_ == 0; }
 
-    ZMEYA_NODISCARD const Item* begin() const noexcept { return items.begin(); }
+    ZMEYA_NODISCARD const_iterator begin() const noexcept { return const_iterator(this, true); }
 
-    ZMEYA_NODISCARD const Item* end() const noexcept { return items.end(); }
+    ZMEYA_NODISCARD const_iterator end() const noexcept { return const_iterator(this, false); }
 
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return find(key) != nullptr; }
 
@@ -79,7 +198,7 @@ template <typename Key, typename Value> class HashMap
     {
         typedef HashKeyAdapterGeneric<Key> Adapter;
 
-        const Value* res = findImpl<Adapter>(key);
+        const Value* res = findImpl<Adapter, Key>(key);
         if (!res)
         {
             return nullptr;
@@ -90,14 +209,14 @@ template <typename Key, typename Value> class HashMap
     {
         typedef HashKeyAdapterGeneric<Key> Adapter;
 
-        return findImpl<Adapter>(key);
+        return findImpl<Adapter, Key>(key);
     }
 
     ZMEYA_NODISCARD const Value& find(const Key& key, const Value& valueIfNotFound) const noexcept
     {
         typedef HashKeyAdapterGeneric<Key> Adapter;
 
-        const Value* res = findImpl<Adapter>(key);
+        const Value* res = findImpl<Adapter, Key>(key);
         if (res)
         {
             return *res;
@@ -116,7 +235,7 @@ template <typename Key, typename Value> class HashMap
         static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
         typedef HashKeyAdapterCStr Adapter;
 
-        const Value* res = findImpl<Adapter>(key);
+        const Value* res = findImpl<Adapter, const char*>(key);
         if (!res)
         {
             return nullptr;
@@ -128,7 +247,7 @@ template <typename Key, typename Value> class HashMap
         static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
         typedef HashKeyAdapterCStr Adapter;
 
-        return findImpl<Adapter>(key);
+        return findImpl<Adapter, const char*>(key);
     }
 
     ZMEYA_NODISCARD const Value& find(const char* key, const Value& valueIfNotFound) const noexcept
@@ -136,7 +255,7 @@ template <typename Key, typename Value> class HashMap
         static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
         typedef HashKeyAdapterCStr Adapter;
 
-        const Value* res = findImpl<Adapter>(key);
+        const Value* res = findImpl<Adapter, const char*>(key);
         if (res)
         {
             return *res;
@@ -149,7 +268,7 @@ template <typename Key, typename Value> class HashMap
         static_assert(std::is_same<Value, String>::value, "To use this function, the value type must be Zmeya::String");
         typedef HashKeyAdapterGeneric<Key> Adapter;
 
-        const Value* res = findImpl<Adapter>(key);
+        const Value* res = findImpl<Adapter, Key>(key);
         if (res)
         {
             return res->c_str();
@@ -163,7 +282,7 @@ template <typename Key, typename Value> class HashMap
         static_assert(std::is_same<Value, String>::value, "To use this function, the value type must be Zmeya::String");
         typedef HashKeyAdapterCStr Adapter;
 
-        const Value* res = findImpl<Adapter>(key);
+        const Value* res = findImpl<Adapter, const char*>(key);
         if (res)
         {
             return res->c_str();
@@ -185,6 +304,12 @@ template <typename Key, typename Value> class HashMap
 
     template <typename K, typename V, typename FK, typename FV>
     friend void assign(HashMap<K, V>& to, const std::unordered_map<FK, FV>& from);
+};
+
+template <typename Key, typename Value>
+struct zm_hashmap_chain_incremental_ok
+    : std::integral_constant<bool, detail::zm_array_push_back_ok<Key>::value && detail::zm_array_push_back_ok<Value>::value>
+{
 };
 
 } // namespace zm

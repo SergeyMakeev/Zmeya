@@ -2,10 +2,13 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#include <algorithm>
 #include <cstring>
 #include <dbghelp.h>
 #include <iostream>
 #include <memory>
+#include <unordered_map>
+#include <vector>
 #include <windows.h>
 
 #pragma comment(lib, "dbghelp.lib")
@@ -170,7 +173,76 @@ static void FillBasicTestRootFresh(BlobWriterT& w)
     w.root()->hashSet = srcSet;
 }
 
-// Verifies zm::assign(BuilderBase&, ...) produces the same bytes as write_blob with the same logical content.
+static std::unordered_map<std::string, int32_t> ReadLogicalStringIntMap(const zm::HashMap<zm::String, int32_t>& m)
+{
+    std::unordered_map<std::string, int32_t> out;
+    out.reserve(m.size());
+    for (const auto& kv : m)
+    {
+        out.emplace(std::string(kv.first.c_str()), kv.second);
+    }
+    return out;
+}
+
+static std::vector<std::string> ReadSortedStringSet(const zm::HashSet<zm::String>& hs)
+{
+    std::vector<std::string> v;
+    v.reserve(hs.size());
+    for (const zm::String& s : hs)
+    {
+        v.emplace_back(s.c_str());
+    }
+    std::sort(v.begin(), v.end());
+    return v;
+}
+
+static void ExpectUnorderedStringIntMapsEqual(const std::unordered_map<std::string, int32_t>& a,
+    const std::unordered_map<std::string, int32_t>& b)
+{
+    ASSERT_EQ(a.size(), b.size());
+    for (const auto& kv : a)
+    {
+        const auto it = b.find(kv.first);
+        ASSERT_NE(it, b.end()) << kv.first;
+        EXPECT_EQ(it->second, kv.second);
+    }
+}
+
+static void ExpectTestRootLogicalEqual(const std::vector<char>& a, const std::vector<char>& b)
+{
+    ASSERT_EQ(a.size(), b.size());
+    const TestRoot* ra = reinterpret_cast<const TestRoot*>(a.data());
+    const TestRoot* rb = reinterpret_cast<const TestRoot*>(b.data());
+
+    EXPECT_STREQ(ra->description.c_str(), rb->description.c_str());
+
+    ASSERT_EQ(ra->intArray.size(), rb->intArray.size());
+    for (size_t i = 0; i < ra->intArray.size(); ++i)
+    {
+        EXPECT_EQ(ra->intArray[i], rb->intArray[i]);
+    }
+
+    ASSERT_EQ(ra->stringArray.size(), rb->stringArray.size());
+    for (size_t i = 0; i < ra->stringArray.size(); ++i)
+    {
+        EXPECT_STREQ(ra->stringArray[i].c_str(), rb->stringArray[i].c_str());
+    }
+
+    ExpectUnorderedStringIntMapsEqual(ReadLogicalStringIntMap(ra->hashMap), ReadLogicalStringIntMap(rb->hashMap));
+    EXPECT_EQ(ReadSortedStringSet(ra->hashSet), ReadSortedStringSet(rb->hashSet));
+
+    ASSERT_EQ(ra->nestedArray.size(), rb->nestedArray.size());
+    for (size_t i = 0; i < ra->nestedArray.size(); ++i)
+    {
+        ASSERT_EQ(ra->nestedArray[i].size(), rb->nestedArray[i].size());
+        for (size_t j = 0; j < ra->nestedArray[i].size(); ++j)
+        {
+            EXPECT_STREQ(ra->nestedArray[i][j].c_str(), rb->nestedArray[i][j].c_str());
+        }
+    }
+}
+
+// Verifies zm::assign(BuilderBase&, ...) matches write_blob logical content for the same TestRoot fields.
 TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
 {
     std::unique_ptr<zm::detail::Builder<TestRoot>> builder = zm::detail::Builder<TestRoot>::create();
@@ -199,8 +271,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
             FillBasicTestRoot(w.root());
         });
 
-    ASSERT_EQ(blobA.size(), blobB.size());
-    EXPECT_EQ(std::memcmp(blobA.data(), blobB.data(), blobA.size()), 0);
+    ExpectTestRootLogicalEqual(blobA, blobB);
 }
 
 // Verifies default arena sizing matches a deliberately tiny arena (realloc + patch correctness).
@@ -222,8 +293,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
         kTinyArenaBytes,
         4);
 
-    ASSERT_EQ(golden.size(), stressed.size());
-    EXPECT_EQ(std::memcmp(golden.data(), stressed.data(), golden.size()), 0);
+    ExpectTestRootLogicalEqual(golden, stressed);
 }
 
 // Verifies BlobWriter exposes a live builder_base and that the root pointer lies inside the builder arena.

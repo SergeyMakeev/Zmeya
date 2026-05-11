@@ -10,7 +10,7 @@ namespace zm
 
 **Hash table key adapters**
 
-Open addressing in `HashSet` / `HashMap` is implemented indirectly via bucket ranges; these adapters
+`HashSet` / `HashMap` use index-based chaining (per-bucket head plus `next` in a node pool); these adapters
 normalize hashing and equality for native keys, `std::string`, and C-string probes into `String` keys.
 
 */

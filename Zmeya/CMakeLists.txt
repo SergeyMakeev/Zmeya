@@ -12,6 +12,7 @@ set(HEADERS
     ZmeyaSerializeFoundation.h
     ZmeyaBuilderBase.h
     ZmeyaBuilderBase.inc
+    ZmeyaBuilderHashChain.inc
     ZmeyaBuilderAssignImpl.h
     ZmeyaBuilderAssignImpl.inc
     ZmeyaBuilder.h

@@ -315,14 +315,14 @@ class BuilderBase
     template <typename Key> void note_dead_hashset_if_any(HashSet<Key>* hs)
     {
         note_dead_array_slab_if_any<typename HashSet<Key>::Bucket>(&hs->buckets);
-        note_dead_array_slab_if_any<Key>(&hs->items);
+        note_dead_array_slab_if_any<typename HashSet<Key>::Node>(&hs->nodes);
     }
 
     template <typename K, typename V> void note_dead_hashmap_if_any(HashMap<K, V>* hm)
     {
         note_dead_array_slab_if_any<typename HashMap<K, V>::Bucket>(&hm->buckets);
-        using ItemType = Pair<const K, V>;
-        note_dead_array_slab_if_any<ItemType>(&hm->items);
+        using NodeType = typename HashMap<K, V>::Node;
+        note_dead_array_slab_if_any<NodeType>(&hm->nodes);
     }
 
     // Helper methods for assignment functions
@@ -357,7 +357,7 @@ class BuilderBase
         static_assert(std::is_trivially_copyable<Pointer<int>>::value, "Pointer is_trivially_copyable check failed");
         static_assert(std::is_trivially_copyable<Array<int>>::value, "Array is_trivially_copyable check failed");
         static_assert(std::is_trivially_copyable<HashSet<int>>::value, "HashSet is_trivially_copyable check failed");
-        static_assert(std::is_trivially_copyable<Pair<int, float>>::value, "Pair is_trivially_copyable check failed");
+        static_assert(std::is_trivially_copyable<zm::Pair<int, float>>::value, "Pair is_trivially_copyable check failed");
         static_assert(std::is_trivially_copyable<HashMap<int, int>>::value, "HashMap is_trivially_copyable check failed");
         static_assert(std::is_trivially_copyable<String>::value, "String is_trivially_copyable check failed");
     }
@@ -638,6 +638,22 @@ class BuilderBase
         ZMEYA_ASSERT(byte_delta <= diff_t(std::numeric_limits<roffset_t>::max()));
         return roffset_t(byte_delta);
     }
+
+    template <typename Key, typename F> void hashset_chain_insert(zm::HashSet<Key>& hs, const F& item);
+
+    template <typename Key, typename F> void hashset_chain_erase(zm::HashSet<Key>& hs, const F& key);
+
+    template <typename Key> void hashset_chain_clear(zm::HashSet<Key>& hs);
+
+    template <typename Key> void hashset_rehash_impl(zm::HashSet<Key>& hs, size_t new_num_buckets);
+
+    template <typename K, typename V, typename FK, typename FV> void hashmap_chain_insert(zm::HashMap<K, V>& hm, const FK& key, const FV& val);
+
+    template <typename K, typename V, typename FK> void hashmap_chain_erase(zm::HashMap<K, V>& hm, const FK& key);
+
+    template <typename K, typename V> void hashmap_chain_clear(zm::HashMap<K, V>& hm);
+
+    template <typename K, typename V> void hashmap_rehash_impl(zm::HashMap<K, V>& hm, size_t new_num_buckets);
 
 
 };

@@ -793,7 +793,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_SingleElementMapAndSet)
     ASSERT_EQ(r->s.size(), 1u);
     EXPECT_TRUE(r->s.contains(7));
     int count = 0;
-    for (const zm::Pair<const int32_t, int32_t>& p : r->m)
+    for (const auto& p : r->m)
     {
         EXPECT_EQ(p.first, 42);
         EXPECT_EQ(p.second, 43);
@@ -1408,7 +1408,7 @@ TEST(ZmeyaTestSuite, Coverage_P8_EmptyContainerIteration)
     }
     EXPECT_EQ(nHs, 0u);
     size_t nHm = 0;
-    for (const zm::Pair<const int32_t, int32_t>& p : r->hm)
+    for (const auto& p : r->hm)
     {
         (void)p;
         ++nHm;

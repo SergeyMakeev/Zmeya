@@ -40,7 +40,7 @@ static void validate(const IteratorsTestRoot* root)
     EXPECT_EQ(root->map.size(), std::size_t(3));
     temp.clear();
     temp.resize(root->map.size() * 2, 0);
-    for (const zm::Pair<const int, int>& val : root->map)
+    for (const auto& val : root->map)
     {
         temp[val.first] += 1;
         temp[val.second] += 1;

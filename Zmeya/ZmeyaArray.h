@@ -12,6 +12,12 @@ namespace zm
 The header stores count plus an offset to the first element. Incremental mutation APIs exist only
 when `ZMEYA_ENABLE_SERIALIZE_SUPPORT` is enabled.
 
+**Invalidation (same idea as `std::vector`)**
+
+During `write_blob` / `BlobWriter`, do not cache raw pointers or iterators into this array's elements
+across `push_back` / `resize` / `erase_at` / similar on the same array. Use `w.root()->...` each time.
+After finalize, a `const` view over the returned blob is stable for that buffer.
+
 */
 
 template <typename T> class Array
@@ -95,7 +101,6 @@ template <typename T> class Array
     friend class detail::BuilderBase;
 };
 
-#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
 namespace detail
 {
 
@@ -120,6 +125,5 @@ template <typename A> struct zm_array_push_back_ok<Array<A>> : std::false_type
 {
 };
 } // namespace detail
-#endif
 
 } // namespace zm

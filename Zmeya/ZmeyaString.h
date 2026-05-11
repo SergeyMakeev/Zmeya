@@ -14,6 +14,12 @@ void assign(String& to, const char* from);
 
 Payload is referenced through `Pointer<char>` so the character data can live elsewhere in the blob.
 
+**Invalidation (same idea as `std::string`)**
+
+During `write_blob` / `BlobWriter`, do not keep a `const char*` from `c_str()` across `append` /
+`operator+=` / `clear` on the same `String`. Use `w.root()->...` each time. After finalize, a `const`
+view over the returned blob is stable for that buffer.
+
 */
 
 class String
