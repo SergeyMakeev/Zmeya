@@ -19,12 +19,6 @@ using offset_t = std::uintptr_t;
 using diff_t = std::ptrdiff_t;
 using roffset_t = int32_t;
 
-ZMEYA_NODISCARD inline offset_t toAbsolute(offset_t base, roffset_t offset)
-{
-    offset_t res = base + diff_t(offset);
-    return res;
-}
-
 ZMEYA_NODISCARD inline uintptr_t toAbsoluteAddr(uintptr_t base, roffset_t offset)
 {
     uintptr_t res = base + ptrdiff_t(offset);

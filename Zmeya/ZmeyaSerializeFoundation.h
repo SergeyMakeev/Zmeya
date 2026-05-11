@@ -12,12 +12,6 @@
 namespace zm
 {
 
-ZMEYA_NODISCARD inline diff_t diff(offset_t a, offset_t b) noexcept
-{
-    diff_t res = a - b;
-    return res;
-}
-
 ZMEYA_NODISCARD inline offset_t diffAddr(uintptr_t a, uintptr_t b)
 {
     ZMEYA_ASSERT(a >= b);
@@ -118,9 +112,11 @@ template <typename T> struct Span
 
 /*
 
-**Global offsets inside the arena**
+**Arena byte indices for patching**
 
-`goffset_t` aliases `roffset_t` but reads as "offset into the serialized blob buffer" at patch time.
+`goffset_t` is the same width as `roffset_t` (32-bit). The name marks values that are **absolute byte
+indices** into the arena buffer at finalize/patch time, as opposed to self-relative `roffset_t` words
+stored in blob fields.
 
 */
 

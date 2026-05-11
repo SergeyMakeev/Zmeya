@@ -13,7 +13,7 @@ Zmeya is not even a serialization library in the usual sense but rather a set of
 - Cross-platform compatible
 - Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::write_blob`** / serialization)
 - No code generation required: no IDL or metadata, just use your types directly
-- No macros
+- No IDL/codegen macros; small integration macros in `ZmeyaConfig.h` (asserts, allocators, attributes)
 - Heavily optimized for performance
 - No dependencies
 - Zmeya pointers are always 32-bits (configurable) regardless of the target platform pointer size
@@ -31,7 +31,7 @@ Zmeya types are meant to live in **one contiguous byte range** (memory-mapped fi
 
 **Read path:** treat the blob as bytes, cast to **`const YourRoot*`** (or offset to your root), then use **`zm::`** fields like ordinary nested data. No separate deserialize step.
 
-**Write path:** **`zm::write_blob<YourRoot>(...)`** runs your lambda while a **blob writer** is active in **thread-local storage**. Inside that lambda, **`zm::`** fields behave like **mutable value-like objects**: assign from **`std::vector`**, **`std::string`**, **`std::unordered_*`**, or assign **`zm::Pointer<T> = T*`** where **`T`** is already allocated in the same blob via **`BlobWriter::allocate`**. The library copies data into the growing buffer and wires relative offsets for you. Think of the lambda as a **scoped write** into one blob, not a separate serialization API surface.
+**Write path:** **`zm::write_blob<YourRoot>(...)`** runs your lambda while a **blob writer** is active in **thread-local storage**. Inside that lambda, **`zm::`** fields behave like **mutable value-like objects**: assign from **`std::vector`**, **`std::string`**, **`std::unordered_*`**, or assign **`zm::Pointer<T> = T*`** where **`T`** is already allocated in the same blob via **`BlobWriter::allocate`**. The library copies data into the growing buffer and wires relative offsets for you. Prefer **`w.root()`** and **`w.*`** helpers so the builder is explicit at the call site; use **`zm::assign(detail::BuilderBase&, ...)`** when TLS alone is insufficient (see **`AGENTS.md`**). Think of the lambda as a **scoped write** into one blob, not a separate serialization API surface.
 
 **Threading:** all **`zm::`** mutations for one blob must run on the **same thread** as the **`zm::write_blob`** call (TLS is not shared with worker threads).
 

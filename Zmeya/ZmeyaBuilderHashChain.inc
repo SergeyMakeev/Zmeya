@@ -11,8 +11,8 @@ Wire format stays chained through finalize (no flatten-to-flat-items pass).
 
 `HashMap& hm` and `HashSet& hs` point into `BuilderBase::data`. Any `alloc_aligned` may reallocate that
 vector, so those references can dangle for the rest of the call. Always capture `hm_g` / `hs_g` up front,
-then re-derive `p` via `get_ptr_unsafe_to_store(hm_g)` after growth. Never call `get_global_offset(&hm...)`
-or `get_global_offset(&hs...)` after a growth step in the same function unless you re-bound `hm`/`hs`
+then re-derive `p` via `get_ptr_unsafe_to_store(hm_g)` after growth. Never call `arena_byte_offset_of(&hm...)`
+or `arena_byte_offset_of(&hs...)` after a growth step in the same function unless you re-bound `hm`/`hs`
 from `p` (prefer `&p->nodes` etc.).
 
 */
@@ -59,7 +59,7 @@ template <typename Key> void BuilderBase::hashset_rehash_impl(zm::HashSet<Key>& 
     ZMEYA_ASSERT(new_num_buckets < size_t(std::numeric_limits<uint32_t>::max()));
 
     // Capture before any alloc in this function; never use &hs after growth here (use hs_g + p).
-    goffset_t hs_g = get_global_offset(&hs);
+    goffset_t hs_g = arena_byte_offset_of(&hs);
     zm::HashSet<Key>* p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
 
     std::vector<uint32_t> ord;
@@ -99,13 +99,13 @@ template <typename Key> void BuilderBase::hashset_rehash_impl(zm::HashSet<Key>& 
     if (oldB > 0)
     {
         typename zm::HashSet<Key>::Bucket* oldBuck = reinterpret_cast<typename zm::HashSet<Key>::Bucket*>(p->buckets.get_raw_ptr_unsafe_can_be_relocated());
-        note_dead_range(get_global_offset(oldBuck), oldB * sizeof(typename zm::HashSet<Key>::Bucket));
+        note_dead_range(arena_byte_offset_of(oldBuck), oldB * sizeof(typename zm::HashSet<Key>::Bucket));
     }
 
     p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
     p->buckets.numElements = uint32_t(new_num_buckets);
     p->buckets.relativeOffset = get_relative_offset(&p->buckets, newBucketsOffset);
-    register_roffset_slot(get_global_offset(&p->buckets), newBucketsOffset);
+    register_roffset_slot(arena_byte_offset_of(&p->buckets), newBucketsOffset);
 }
 
 template <typename K, typename V> void BuilderBase::hashmap_rehash_impl(zm::HashMap<K, V>& hm, size_t new_num_buckets)
@@ -114,7 +114,7 @@ template <typename K, typename V> void BuilderBase::hashmap_rehash_impl(zm::Hash
     ZMEYA_ASSERT(new_num_buckets < size_t(std::numeric_limits<uint32_t>::max()));
 
     // Capture before any alloc in this function; never use &hm after growth here (use hm_g + p).
-    goffset_t hm_g = get_global_offset(&hm);
+    goffset_t hm_g = arena_byte_offset_of(&hm);
     zm::HashMap<K, V>* p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
 
     std::vector<uint32_t> ord;
@@ -154,19 +154,19 @@ template <typename K, typename V> void BuilderBase::hashmap_rehash_impl(zm::Hash
     if (oldB > 0)
     {
         typename zm::HashMap<K, V>::Bucket* oldBuck = reinterpret_cast<typename zm::HashMap<K, V>::Bucket*>(p->buckets.get_raw_ptr_unsafe_can_be_relocated());
-        note_dead_range(get_global_offset(oldBuck), oldB * sizeof(typename zm::HashMap<K, V>::Bucket));
+        note_dead_range(arena_byte_offset_of(oldBuck), oldB * sizeof(typename zm::HashMap<K, V>::Bucket));
     }
 
     p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
     p->buckets.numElements = uint32_t(new_num_buckets);
     p->buckets.relativeOffset = get_relative_offset(&p->buckets, newBucketsOffset);
-    register_roffset_slot(get_global_offset(&p->buckets), newBucketsOffset);
+    register_roffset_slot(arena_byte_offset_of(&p->buckets), newBucketsOffset);
 }
 
 template <typename Key, typename F> void BuilderBase::hashset_chain_insert(zm::HashSet<Key>& hs, const F& item)
 {
     ScopedBuilder tls(this);
-    goffset_t hs_g = get_global_offset(&hs);
+    goffset_t hs_g = arena_byte_offset_of(&hs);
     zm::HashSet<Key>* p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
 
     if (p->buckets.size() == 0)
@@ -183,7 +183,7 @@ template <typename Key, typename F> void BuilderBase::hashset_chain_insert(zm::H
         p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
         p->buckets.numElements = uint32_t(initialB);
         p->buckets.relativeOffset = get_relative_offset(&p->buckets, buckOfs);
-        register_roffset_slot(get_global_offset(&p->buckets), buckOfs);
+        register_roffset_slot(arena_byte_offset_of(&p->buckets), buckOfs);
     }
 
     p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
@@ -217,7 +217,7 @@ template <typename Key, typename F> void BuilderBase::hashset_chain_insert(zm::H
         node.next = ZMEYA_HASH_CHAIN_NIL;
         // `hs` may dangle after bucket init alloc above; use p from hs_g for any member address.
         p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
-        goffset_t nodes_hdr_g = get_global_offset(&p->nodes);
+        goffset_t nodes_hdr_g = arena_byte_offset_of(&p->nodes);
         array_push_back(*reinterpret_cast<Array<typename zm::HashSet<Key>::Node>*>(get_ptr_unsafe_to_store(nodes_hdr_g)), node);
         p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
         idx = uint32_t(p->nodes.size() - 1);
@@ -236,7 +236,7 @@ template <typename Key, typename F> void BuilderBase::hashset_chain_insert(zm::H
 template <typename Key, typename F> void BuilderBase::hashset_chain_erase(zm::HashSet<Key>& hs, const F& key)
 {
     ScopedBuilder tls(this);
-    goffset_t hs_g = get_global_offset(&hs);
+    goffset_t hs_g = arena_byte_offset_of(&hs);
     zm::HashSet<Key>* p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
     const size_t B = p->buckets.size();
     if (B == 0 || p->live_count_ == 0)
@@ -277,7 +277,7 @@ template <typename Key, typename F> void BuilderBase::hashset_chain_erase(zm::Ha
 template <typename Key> void BuilderBase::hashset_chain_clear(zm::HashSet<Key>& hs)
 {
     ScopedBuilder tls(this);
-    goffset_t hs_g = get_global_offset(&hs);
+    goffset_t hs_g = arena_byte_offset_of(&hs);
     zm::HashSet<Key>* p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
     note_dead_hashset_if_any<Key>(p);
     p->live_count_ = 0;
@@ -286,15 +286,18 @@ template <typename Key> void BuilderBase::hashset_chain_clear(zm::HashSet<Key>& 
     p->buckets.relativeOffset = 0;
     p->nodes.numElements = 0;
     p->nodes.relativeOffset = 0;
-    register_roffset_slot(get_global_offset(&p->buckets), goffset_t(0));
-    register_roffset_slot(get_global_offset(&p->nodes), goffset_t(0));
+    register_roffset_slot(arena_byte_offset_of(&p->buckets), goffset_t(0));
+    register_roffset_slot(arena_byte_offset_of(&p->nodes), goffset_t(0));
 }
 
 template <typename K, typename V, typename FK, typename FV> void BuilderBase::hashmap_chain_insert(zm::HashMap<K, V>& hm, const FK& key, const FV& val)
 {
     ScopedBuilder tls(this);
-    goffset_t hm_g = get_global_offset(&hm);
-    zm::HashMap<K, V>* p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    goffset_t hm_g = arena_byte_offset_of(&hm);
+    auto reload_hm = [this, hm_g]() -> zm::HashMap<K, V>* {
+        return reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    };
+    zm::HashMap<K, V>* p = reload_hm();
 
     if (p->buckets.size() == 0)
     {
@@ -307,13 +310,13 @@ template <typename K, typename V, typename FK, typename FV> void BuilderBase::ha
         {
             BuilderBase::placementCtor<typename zm::HashMap<K, V>::Bucket>(&buckets[i], typename zm::HashMap<K, V>::Bucket{ZMEYA_HASH_CHAIN_NIL});
         }
-        p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+        p = reload_hm();
         p->buckets.numElements = uint32_t(initialB);
         p->buckets.relativeOffset = get_relative_offset(&p->buckets, buckOfs);
-        register_roffset_slot(get_global_offset(&p->buckets), buckOfs);
+        register_roffset_slot(arena_byte_offset_of(&p->buckets), buckOfs);
     }
 
-    p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    p = reload_hm();
     const size_t B0 = p->buckets.size();
     const size_t probeBi = zm_hash_bucket_index_from_f(key, B0);
     typename zm::HashMap<K, V>::Node* nodePtr0 = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
@@ -327,7 +330,7 @@ template <typename K, typename V, typename FK, typename FV> void BuilderBase::ha
         }
     }
 
-    p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    p = reload_hm();
     const size_t B = p->buckets.size();
     if (p->live_count_ >= B)
     {
@@ -335,7 +338,7 @@ template <typename K, typename V, typename FK, typename FV> void BuilderBase::ha
         hashmap_rehash_impl<K, V>(hm, newB);
     }
 
-    p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    p = reload_hm();
     const size_t B2 = p->buckets.size();
     const size_t bi = zm_hash_bucket_index_from_f(key, B2);
 
@@ -360,16 +363,16 @@ template <typename K, typename V, typename FK, typename FV> void BuilderBase::ha
         node.value = val;
         node.next = ZMEYA_HASH_CHAIN_NIL;
         // `hm` may dangle after bucket init alloc above; use p from hm_g for any member address.
-        p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
-        goffset_t nodes_hdr_g = get_global_offset(&p->nodes);
+        p = reload_hm();
+        goffset_t nodes_hdr_g = arena_byte_offset_of(&p->nodes);
         array_push_back(*reinterpret_cast<Array<typename zm::HashMap<K, V>::Node>*>(get_ptr_unsafe_to_store(nodes_hdr_g)), node);
-        p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+        p = reload_hm();
         idx = uint32_t(p->nodes.size() - 1);
         nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
         bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
     }
 
-    p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    p = reload_hm();
     nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
     bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
     nodePtr[idx].next = bucketPtr[bi].head;
@@ -380,7 +383,7 @@ template <typename K, typename V, typename FK, typename FV> void BuilderBase::ha
 template <typename K, typename V, typename FK> void BuilderBase::hashmap_chain_erase(zm::HashMap<K, V>& hm, const FK& key)
 {
     ScopedBuilder tls(this);
-    goffset_t hm_g = get_global_offset(&hm);
+    goffset_t hm_g = arena_byte_offset_of(&hm);
     zm::HashMap<K, V>* p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
     const size_t B = p->buckets.size();
     if (B == 0 || p->live_count_ == 0)
@@ -421,7 +424,7 @@ template <typename K, typename V, typename FK> void BuilderBase::hashmap_chain_e
 template <typename K, typename V> void BuilderBase::hashmap_chain_clear(zm::HashMap<K, V>& hm)
 {
     ScopedBuilder tls(this);
-    goffset_t hm_g = get_global_offset(&hm);
+    goffset_t hm_g = arena_byte_offset_of(&hm);
     zm::HashMap<K, V>* p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
     note_dead_hashmap_if_any<K, V>(p);
     p->live_count_ = 0;
@@ -430,6 +433,6 @@ template <typename K, typename V> void BuilderBase::hashmap_chain_clear(zm::Hash
     p->buckets.relativeOffset = 0;
     p->nodes.numElements = 0;
     p->nodes.relativeOffset = 0;
-    register_roffset_slot(get_global_offset(&p->buckets), goffset_t(0));
-    register_roffset_slot(get_global_offset(&p->nodes), goffset_t(0));
+    register_roffset_slot(arena_byte_offset_of(&p->buckets), goffset_t(0));
+    register_roffset_slot(arena_byte_offset_of(&p->nodes), goffset_t(0));
 }

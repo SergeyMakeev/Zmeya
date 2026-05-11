@@ -79,7 +79,7 @@ TEST(ZmeyaTestSuite, ListTest)
                     EXPECT_TRUE(w.root()->root == nullptr);
                     w.root()->root = node;
                 }
-                prev_g = bb->get_global_offset(node);
+                prev_g = bb->arena_byte_offset_of(node);
             }
 
             validate(w.root());

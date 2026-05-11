@@ -530,7 +530,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_DeepCopyBuilderScopedNestedString)
         [](zm::BlobWriter<CovDeepCopyRoot>& w)
         {
             CovDeepCopyRoot* root = w.root();
-            zm::goffset_t go = w.builder_base()->get_global_offset(&root->s);
+            zm::goffset_t go = w.builder_base()->arena_byte_offset_of(&root->s);
             zm::deep_copy<std::string, zm::String>(*w.builder_base(), std::string("nested_value"), go);
         }, 256, 4);
 
@@ -550,7 +550,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_AllocatePointerGraphManyNodes)
             for (int i = 0; i < kN; ++i)
             {
                 CovPointerChainNode* p = w.allocate<CovPointerChainNode>();
-                g[i] = bb->get_global_offset(p);
+                g[i] = bb->arena_byte_offset_of(p);
                 p->id = i;
                 p->next = nullptr;
             }
@@ -1077,7 +1077,7 @@ TEST(ZmeyaTestSuite, Coverage_P4_PointerChainThousandNodes)
             for (int i = 0; i < kN; ++i)
             {
                 CovPointerChainNode* p = w.allocate<CovPointerChainNode>();
-                g[i] = bb->get_global_offset(p);
+                g[i] = bb->arena_byte_offset_of(p);
                 p->id = i;
                 p->next = nullptr;
             }
@@ -1369,7 +1369,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ListChainSmokeTenNodes)
                 {
                     w.root()->head = node;
                 }
-                prev_g = bb->get_global_offset(node);
+                prev_g = bb->arena_byte_offset_of(node);
             }
         },
         8);
