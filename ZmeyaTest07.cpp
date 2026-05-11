@@ -85,43 +85,37 @@ static void validate(const HashMapTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashMapTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<HashMapTestRoot>> builder = zm::Builder<HashMapTestRoot>::create();
-        zm::ScopedBuilder scope(builder.get());
+    std::vector<char> bytesCopy = zm::build<HashMapTestRoot>(
+        [](zm::BuildSession<HashMapTestRoot>& session)
+        {
+            HashMapTestRoot* root = session.root();
 
-        HashMapTestRoot* root = builder->getRoot();
+            std::unordered_map<int, float> testMap = {{3, 7.0f}, {4, 17.0f}, {9, 79.0f}, {11, 13.0f}, {77, 13.0f}};
+            root->hashMap1 = testMap;
 
-        std::unordered_map<int, float> testMap = {{3, 7.0f}, {4, 17.0f}, {9, 79.0f}, {11, 13.0f}, {77, 13.0f}};
-        zm::assign(root->hashMap1, testMap);
+            std::unordered_map<int32_t, float> testMap2 = {{1, -1.0f}, {2, -2.0f}, {3, -3.0f}};
+            root->hashMap2 = testMap2;
 
-        std::unordered_map<int32_t, float> testMap2 = {{1, -1.0f}, {2, -2.0f}, {3, -3.0f}};
-        zm::assign(root->hashMap2, testMap2);
+            std::unordered_map<std::string, float> strMap1 = {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}};
+            root->strHashMap1 = strMap1;
 
-        std::unordered_map<std::string, float> strMap1 = {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}};
-        zm::assign(root->strHashMap1, strMap1);
+            std::unordered_map<std::string, float> strMap2 = {{"five", -5.0f}, {"six", -6.0f}};
+            root->strHashMap2 = strMap2;
 
-        std::unordered_map<std::string, float> strMap2 = {{"five", -5.0f}, {"six", -6.0f}};
-        zm::assign(root->strHashMap2, strMap2);
+            std::unordered_map<int, std::string> strMap3 = {{1, "one"}, {2, "two"}, {3, "three"}, {5, "five"}, {10, "ten"}};
+            root->strHashMap3 = strMap3;
 
-        std::unordered_map<int, std::string> strMap3 = {{1, "one"}, {2, "two"}, {3, "three"}, {5, "five"}, {10, "ten"}};
-        zm::assign(root->strHashMap3, strMap3);
+            std::unordered_map<int32_t, std::string> strMap4 = {{5, "five"}, {7, "seven"}};
+            root->strHashMap4 = strMap4;
 
-        std::unordered_map<int32_t, std::string> strMap4 = {{5, "five"}, {7, "seven"}};
-        zm::assign(root->strHashMap4, strMap4);
+            std::unordered_map<std::string, std::string> strMap5 = {{"1", "one"}, {"2", "two"}, {"3", "three"}, {"5", "five"}, {"10", "ten"}};
+            root->strHashMap5 = strMap5;
 
-        std::unordered_map<std::string, std::string> strMap5 = {{"1", "one"}, {"2", "two"}, {"3", "three"}, {"5", "five"}, {"10", "ten"}};
-        zm::assign(root->strHashMap5, strMap5);
+            std::unordered_map<std::string, std::string> strMap6 = {{"5", "five"}, {"7", "seven"}};
+            root->strHashMap6 = strMap6;
 
-        std::unordered_map<std::string, std::string> strMap6 = {{"5", "five"}, {"7", "seven"}};
-        zm::assign(root->strHashMap6, strMap6);
-
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize();
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            validate(root);
+        });
 
     const HashMapTestRoot* rootCopy = (const HashMapTestRoot*)(bytesCopy.data());
 

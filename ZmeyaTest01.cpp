@@ -27,8 +27,9 @@ static void validate(const SimpleTestRoot* root)
 TEST(ZmeyaTestSuite, SimpleTest)
 {
     std::vector<char> bytesCopy = zm::build<SimpleTestRoot>(
-        [](SimpleTestRoot* root)
+        [](zm::BuildSession<SimpleTestRoot>& session)
         {
+            SimpleTestRoot* root = session.root();
             root->a = 13.0f;
             root->b = 1979;
             root->c = 6;
@@ -82,8 +83,9 @@ TEST(ZmeyaTestSuite, SimpleTest2)
     };
 
     std::vector<char> blob = zm::build<TestRoot>(
-        [&](TestRoot* root)
+        [&](zm::BuildSession<TestRoot>& session)
         {
+            TestRoot* root = session.root();
             std::vector<TempDesc> tempDescs;
             tempDescs.reserve(names.size());
 

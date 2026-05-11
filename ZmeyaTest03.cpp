@@ -97,50 +97,44 @@ static void validate(const ArrayTestRoot* root)
 
 TEST(ZmeyaTestSuite, ArrayTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<ArrayTestRoot>> builder = zm::Builder<ArrayTestRoot>::create(32 * 1024 * 1024);
-        zm::ScopedBuilder scope(builder.get());
-
-        zm::Builder<ArrayTestRoot>* b = builder.get();
-        ArrayTestRoot* root = b->getRoot();
-
-        std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
-        zm::assign(root->arr1, vec);
-
-        std::vector<int32_t> vec2 = {2, 4, 6, 10, 14, 32};
-        zm::assign(root->arr2, vec2);
-
-        std::vector<float> vec3 = {67.0f, 82.0f, 11.0f, 54.0f};
-        zm::assign(root->arr3, vec3);
-
-        std::vector<std::vector<float>> vec4 = {
-            {1.2f, 2.3f},
-            {7.1f, 8.8f, 3.2f},
-            {16.0f, 12.0f, 99.5f, -143.0f},
-            {-1.0f}};
-        zm::assign(root->arr4, vec4);
-
-        std::vector<Payload*> vec5;
-        vec5.reserve(793);
-        for (size_t i = 0; i < 793; i++)
+    std::vector<char> bytesCopy = zm::build<ArrayTestRoot>(
+        [](zm::BuildSession<ArrayTestRoot>& session)
         {
-            Payload* payload = b->allocate<Payload>();
-            payload->a = 1.3f + float(i) * 0.4f;
-            payload->b = uint32_t(i) + 3;
-            vec5.push_back(payload);
-        }
-        zm::assign(root->arr5, vec5);
+            ArrayTestRoot* root = session.root();
 
-        std::vector<std::vector<uint32_t>> vec6 = {{1, 2}, {2, 7, 11, 9, 141}, {15, 9, 33, 7}};
-        zm::assign(root->arr6, vec6);
+            std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
+            root->arr1 = vec;
 
-        validate(root);
+            std::vector<int32_t> vec2 = {2, 4, 6, 10, 14, 32};
+            root->arr2 = vec2;
 
-        zm::Span<char> bytes = builder->finalize();
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            std::vector<float> vec3 = {67.0f, 82.0f, 11.0f, 54.0f};
+            root->arr3 = vec3;
+
+            std::vector<std::vector<float>> vec4 = {
+                {1.2f, 2.3f},
+                {7.1f, 8.8f, 3.2f},
+                {16.0f, 12.0f, 99.5f, -143.0f},
+                {-1.0f}};
+            root->arr4 = vec4;
+
+            std::vector<Payload*> vec5;
+            vec5.reserve(793);
+            for (size_t i = 0; i < 793; i++)
+            {
+                Payload* payload = session.allocate<Payload>();
+                payload->a = 1.3f + float(i) * 0.4f;
+                payload->b = uint32_t(i) + 3;
+                vec5.push_back(payload);
+            }
+            root->arr5 = vec5;
+
+            std::vector<std::vector<uint32_t>> vec6 = {{1, 2}, {2, 7, 11, 9, 141}, {15, 9, 33, 7}};
+            root->arr6 = vec6;
+
+            validate(root);
+        },
+        32 * 1024 * 1024);
 
     const ArrayTestRoot* rootCopy = (const ArrayTestRoot*)(bytesCopy.data());
     validate(rootCopy);

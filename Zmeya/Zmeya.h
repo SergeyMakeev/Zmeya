@@ -228,12 +228,21 @@ ZMEYA_NODISCARD inline uintptr_t toAbsoluteAddr(uintptr_t base, roffset_t offset
 }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+namespace detail
+{
 class BuilderBase;
+}
 #endif
 
 // Forward declarations for friend functions
 template <typename Key> class HashSet;
 template <typename Key, typename Value> class HashMap;
+
+template <typename T> class Pointer;
+
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+template <typename T> void assign(Pointer<T>& _to, T* from);
+#endif
 
 /*
     Pointer - self-relative pointer relative to its own memory address
@@ -285,6 +294,14 @@ template <typename T> class Pointer
     operator bool() const noexcept { return relativeOffset != 0; }
     ZMEYA_NODISCARD bool operator==(std::nullptr_t) const noexcept { return relativeOffset == 0; }
     ZMEYA_NODISCARD bool operator!=(std::nullptr_t) const noexcept { return relativeOffset != 0; }
+
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    Pointer& operator=(T* from)
+    {
+        assign(*this, from);
+        return *this;
+    }
+#endif
 
 };
 
@@ -443,7 +460,7 @@ template <typename T> class Array
     template <typename Key, typename Value, typename FK, typename FV>
     friend void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from);
     template <typename T> friend void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from);
-    friend class BuilderBase;
+    friend class detail::BuilderBase;
 };
 
 /*
@@ -764,7 +781,7 @@ constexpr bool inline isPowerOfTwo(size_t v) { return v && ((v & (v - 1)) == 0);
 
 
 /*
-    Aligned allocator for the builder backing buffer (see BuilderBase::data).
+    Aligned allocator for the detail builder backing buffer.
 */
 template <typename T, int Alignment> class BufferAllocator : public std::allocator<T>
 {
@@ -824,21 +841,26 @@ template <typename T> struct Span
     }
 };
 
-
-
 /*
 
-**Builder**
+**Serialization backing types**
 
-Serialization uses TLS (**ScopedBuilder**) for the active builder, **`zm::assign`**, and container **`operator=`**
-to copy STL-shaped values into **`zm::*`** containers inside the same thread.
+**`goffset_t`** is defined before **`zm::detail`** builder types that use it.
 
 */
 
+using goffset_t = roffset_t;
+
+template <typename T> constexpr T highest_bit()
+{
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
+    using U = std::make_unsigned_t<T>;
+    return T(U(1) << (std::numeric_limits<U>::digits - 1));
+}
+
 namespace detail
 {
-// TLS variable for active builder (inline to avoid ODR violations)
-inline thread_local class BuilderBase* g_tls_active_builder = nullptr;
+inline thread_local BuilderBase* g_tls_active_builder = nullptr;
 
 inline BuilderBase* get_global_builder() noexcept { return g_tls_active_builder; }
 
@@ -859,18 +881,16 @@ inline bool is_stack_pointer(const void* ptr)
 #endif
 }
 
-} // namespace detail
-
 class ScopedBuilder
 {
   public:
     explicit ScopedBuilder(BuilderBase* builder)
     {
-        prev = detail::get_global_builder();
-        detail::set_global_builder(builder);
+        prev = get_global_builder();
+        set_global_builder(builder);
     }
 
-    ~ScopedBuilder() { detail::set_global_builder(prev); }
+    ~ScopedBuilder() { set_global_builder(prev); }
 
     ScopedBuilder(const ScopedBuilder&) = delete;
     ScopedBuilder& operator=(const ScopedBuilder&) = delete;
@@ -878,15 +898,6 @@ class ScopedBuilder
   private:
     BuilderBase* prev;
 };
-
-template <typename T> constexpr T highest_bit()
-{
-    static_assert(std::is_integral_v<T>, "T must be an integral type");
-    using U = std::make_unsigned_t<T>;
-    return T(U(1) << (std::numeric_limits<U>::digits - 1));
-}
-
-using goffset_t = roffset_t;
 
 class BuilderBase
 {
@@ -999,7 +1010,7 @@ class BuilderBase
 
     template <typename T> roffset_t get_relative_offset(const T* base, goffset_t ofs) const
     {
-        ZMEYA_ASSERT(detail::is_stack_pointer(base) == false && "Stack pointer detected!");
+        ZMEYA_ASSERT(is_stack_pointer(base) == false && "Stack pointer detected!");
         ZMEYA_ASSERT(contains_pointer(base) && "A pointer should belong to the builder");
 
         goffset_t baseOffset = get_global_offset(base);
@@ -1033,21 +1044,58 @@ template <typename TRoot> class Builder : public BuilderBase
     TRoot* getRoot() { return reinterpret_cast<TRoot*>(get_ptr_unsafe_to_store(0)); }
 };
 
+} // namespace detail
+
+/*
+
+**Serialization session**
+
+User-facing entry is **`zm::build`** and **`BuildSession`** only. Implementation types live in **`zm::detail`**.
+
+*/
+
+template <typename TRoot, typename Fn>
+std::vector<char> build(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
+
+template <typename TRoot>
+class BuildSession
+{
+    struct Private {};
+
+    template <typename R, typename Fn>
+    friend std::vector<char> build(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
+
+    explicit BuildSession(detail::Builder<TRoot>* impl, Private)
+        : impl_(impl)
+    {
+    }
+
+    detail::Builder<TRoot>* impl_;
+
+  public:
+    ZMEYA_NODISCARD TRoot* root() const noexcept { return impl_->getRoot(); }
+
+    template <typename T>
+    ZMEYA_NODISCARD T* allocate() { return impl_->template allocate<T>(); }
+
+    ZMEYA_NODISCARD bool contains_pointer(const void* ptr) const { return impl_->contains_pointer(ptr); }
+};
+
 /*
 
 **build**
 
-Closure entry point: installs `ScopedBuilder`, runs `fn` with the root pointer, then finalizes.
-Returns an owning byte vector so the blob stays valid after the builder is destroyed.
+Installs TLS, invokes **`fn(session)`**, then finalizes. **`BuildSession`** is the stable handle so internals can evolve without changing call sites.
 
 */
 
 template <typename TRoot, typename Fn>
 ZMEYA_NODISCARD inline std::vector<char> build(Fn&& fn, size_t initialSizeInBytes = 2048, size_t finalizeAlignment = 4)
 {
-    std::unique_ptr<Builder<TRoot>> builder = Builder<TRoot>::create(initialSizeInBytes);
-    ScopedBuilder scope(builder.get());
-    std::forward<Fn>(fn)(builder->getRoot());
+    std::unique_ptr<detail::Builder<TRoot>> builder = detail::Builder<TRoot>::create(initialSizeInBytes);
+    detail::ScopedBuilder scope(builder.get());
+    BuildSession<TRoot> session(builder.get(), typename BuildSession<TRoot>::Private{});
+    std::forward<Fn>(fn)(session);
     Span<char> blobSpan = builder->finalize(finalizeAlignment);
     return std::vector<char>(blobSpan.data, blobSpan.data + blobSpan.size);
 }
@@ -1073,7 +1121,7 @@ template <typename F1, typename F2, typename T1, typename T2> void deep_copy(con
 // Pointer assignment function
 template <typename T> void assign(zm::Pointer<T>& _to, T* from)
 {
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1101,7 +1149,7 @@ template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<
         return; // Array is already default-initialized as empty
     }
 
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1132,7 +1180,7 @@ template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<
         
         // Get pointer to element and initialize it
         zm::Pointer<T>* element = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(elementOffset));
-        BuilderBase::placementCtor<zm::Pointer<T>>(element);
+        detail::BuilderBase::placementCtor<zm::Pointer<T>>(element);
         
         // Assign the pointer value
         assign(*element, from[i]);
@@ -1142,7 +1190,7 @@ template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<
 // String conversions - standalone implementation
 inline void assign(String& _to, const std::string& from)
 {
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1168,7 +1216,7 @@ inline void assign(String& _to, const char* from)
 {
     ZMEYA_ASSERT(from != nullptr);
 
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1199,7 +1247,7 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
         return; // Array is already default-initialized as empty
     }
 
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1238,7 +1286,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
         return; // HashSet is already default-initialized as empty
     }
 
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1255,7 +1303,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
     // Initialize buckets to zero
     typename HashSet<Key>::Bucket* buckets = reinterpret_cast<typename HashSet<Key>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
     for (size_t i = 0; i < numBuckets; ++i) {
-        BuilderBase::placementCtor<typename HashSet<Key>::Bucket>(&buckets[i], HashSet<Key>::Bucket{0, 0});
+        detail::BuilderBase::placementCtor<typename HashSet<Key>::Bucket>(&buckets[i], HashSet<Key>::Bucket{0, 0});
     }
 
     // First pass: count elements per bucket
@@ -1301,7 +1349,7 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
         
         // Place item at current endIndex and increment
         Key* element = &items[bucket.endIndex];
-        BuilderBase::placementCtor<Key>(element);
+        detail::BuilderBase::placementCtor<Key>(element);
         
         // Assign the item using operator= (automatic conversion)
         *element = item;
@@ -1326,7 +1374,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
         return; // HashMap is already default-initialized as empty
     }
 
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
 
@@ -1343,7 +1391,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
     // Initialize buckets to zero
     typename HashMap<Key, Value>::Bucket* buckets = reinterpret_cast<typename HashMap<Key, Value>::Bucket*>(builder->get_ptr_unsafe_to_store(bucketsDataOffset));
     for (size_t i = 0; i < numBuckets; ++i) {
-        BuilderBase::placementCtor<typename HashMap<Key, Value>::Bucket>(&buckets[i], HashMap<Key, Value>::Bucket{0, 0});
+        detail::BuilderBase::placementCtor<typename HashMap<Key, Value>::Bucket>(&buckets[i], HashMap<Key, Value>::Bucket{0, 0});
     }
 
     // First pass: count elements per bucket
@@ -1394,8 +1442,8 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
         // Assign key and value using the same logic as Array assign
         // Note: element->first is const Key, so we need to cast away const for assignment
         Key* mutableKey = const_cast<Key*>(&element->first);
-        BuilderBase::placementCtor<Key>(mutableKey);
-        BuilderBase::placementCtor<Value>(&element->second);
+        detail::BuilderBase::placementCtor<Key>(mutableKey);
+        detail::BuilderBase::placementCtor<Value>(&element->second);
         
         // Assign key and value using operator= (automatic conversion)
         *mutableKey = key;
@@ -1417,10 +1465,10 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 // Universal deep_copy - works for all types thanks to operator= overloads
 template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs)
 {
-    BuilderBase* builder = detail::get_global_builder();
+    detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     T* p_to = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(to_ofs));
-    BuilderBase::placementCtor<T>(p_to);
+    detail::BuilderBase::placementCtor<T>(p_to);
     *p_to = from; // This will call the appropriate operator= automatically!
 }
 
@@ -1428,19 +1476,14 @@ template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to
 
 **Helper syntax for clean assignments**
 
-Since MSVC doesn't allow global operator= overloads, we provide:
-1. Direct assign() function calls
-2. Helper macros for cleaner syntax (optional)
-3. A builder member syntax approach
+Container and **`zm::Pointer`** types expose **`operator=`** from STL-shaped values (and raw pointers for **`Pointer`**). Prefer normal assignments inside **`zm::build`**.
 
 Usage examples:
-  zm::assign(root->string_array, src_vector);
-  // or via macro: ASSIGN(root->string_array, src_vector);
+  root->string_array = src_vector;
 
 */
 
-// Optional macro for cleaner syntax
-#define ZM_ASSIGN(zm_var, std_var) zm::assign(zm_var, std_var)
+#define ZM_ASSIGN(zm_var, std_var) ((zm_var) = (std_var))
 
 #endif // ZMEYA_ENABLE_SERIALIZE_SUPPORT
 

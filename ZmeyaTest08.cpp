@@ -53,29 +53,22 @@ static void validate(const IteratorsTestRoot* root)
 
 TEST(ZmeyaTestSuite, IteratorsTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<IteratorsTestRoot>> builder = zm::Builder<IteratorsTestRoot>::create();
-        zm::ScopedBuilder scope(builder.get());
+    std::vector<char> bytesCopy = zm::build<IteratorsTestRoot>(
+        [](zm::BuildSession<IteratorsTestRoot>& session)
+        {
+            IteratorsTestRoot* root = session.root();
 
-        IteratorsTestRoot* root = builder->getRoot();
+            std::vector<int> arr_data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+            root->arr = arr_data;
 
-        std::vector<int> arr_data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-        zm::assign(root->arr, arr_data);
+            std::unordered_set<int> set_data = {0, 1, 4, 3, 5, 2};
+            root->set = set_data;
 
-        std::unordered_set<int> set_data = {0, 1, 4, 3, 5, 2};
-        zm::assign(root->set, set_data);
+            std::unordered_map<int, int> map_data = {{0, 1}, {3, 2}, {4, 5}};
+            root->map = map_data;
 
-        std::unordered_map<int, int> map_data = {{0, 1}, {3, 2}, {4, 5}};
-        zm::assign(root->map, map_data);
-
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize();
-
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            validate(root);
+        });
 
     const IteratorsTestRoot* rootCopy = (const IteratorsTestRoot*)(bytesCopy.data());
 

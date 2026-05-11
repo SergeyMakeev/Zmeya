@@ -75,11 +75,11 @@ Root **`build.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs *
 
 ### Builder growth and raw pointers
 
-`BuilderBase` stores data in a `std::vector<char>` that can **reallocate** when it grows. Raw pointers returned by **`allocate<T>()`** or captured before a large **`assign`** are only valid while the buffer does not move. Stress tests pass a **large initial size** to **`Builder<>::create(n)`** so the buffer stays stable for that session. A future handle-based or slab builder would remove this constraint.
+Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Raw pointers returned by **`session.allocate<T>()`** or captured before a large bulk **`operator=`** into zm containers are only valid while the buffer does not move. Stress tests pass a **large initial reserve** as the second argument to **`zm::build`** so the buffer stays stable for that session.
 
 ### Debug vs Release
 
-**`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; it reserves a larger builder buffer in Release so pointer assignments stay valid.
+**`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; it reserves a larger buffer in Release so pointer assignments stay valid.
 
 ## Documentation
 

@@ -143,39 +143,39 @@ static void validate(const MMapTestRoot* root)
     }
 }
 
-static void createChildren(zm::Builder<MMapTestRoot>* builder, MMapTestNode* parent, size_t count, size_t startIndex)
+static void createChildren(zm::BuildSession<MMapTestRoot>& session, MMapTestNode* parent, size_t count, size_t startIndex)
 {
     std::vector<MMapTestNode*> childPtrs;
     childPtrs.reserve(count);
     for (size_t i = 0; i < count; i++)
     {
-        MMapTestLeafNode* leaf = builder->allocate<MMapTestLeafNode>();
+        MMapTestLeafNode* leaf = session.allocate<MMapTestLeafNode>();
         leaf->nodeType = NodeType::Leaf;
         leaf->name = std::string("leaf_") + std::to_string(startIndex + i);
         leaf->payload = uint32_t(count + startIndex * 13);
-        zm::assign(leaf->parent, parent);
+        leaf->parent = parent;
         childPtrs.push_back(leaf);
     }
-    zm::assign(parent->children, childPtrs);
+    parent->children = childPtrs;
 }
 
-static MMapTestNode* allocateNode1(zm::Builder<MMapTestRoot>* builder, MMapTestRoot* root, size_t index)
+static MMapTestNode* allocateNode1(zm::BuildSession<MMapTestRoot>& session, MMapTestRoot* root, size_t index)
 {
-    MMapTestNode1* node = builder->allocate<MMapTestNode1>();
+    MMapTestNode1* node = session.allocate<MMapTestNode1>();
     node->nodeType = NodeType::NodeType1;
     node->name = std::string("node_") + std::to_string(index);
     node->str1 = std::string(kLongDesc);
     node->idx = uint32_t(index);
-    zm::assign(node->root, root);
+    node->root = root;
 
     size_t numChildrenNodes = 1 + (index % 6);
-    createChildren(builder, node, numChildrenNodes, index);
+    createChildren(session, node, numChildrenNodes, index);
     return node;
 }
 
-static MMapTestNode* allocateNode2(zm::Builder<MMapTestRoot>* builder, size_t index)
+static MMapTestNode* allocateNode2(zm::BuildSession<MMapTestRoot>& session, size_t index)
 {
-    MMapTestNode2* node = builder->allocate<MMapTestNode2>();
+    MMapTestNode2* node = session.allocate<MMapTestNode2>();
     node->nodeType = NodeType::NodeType2;
     node->name = std::string("item_") + std::to_string(index);
     node->str1 = std::string(kLongDesc);
@@ -184,47 +184,49 @@ static MMapTestNode* allocateNode2(zm::Builder<MMapTestRoot>* builder, size_t in
     node->hashSet = hs;
 
     size_t numChildrenNodes = 2;
-    createChildren(builder, node, numChildrenNodes, index);
+    createChildren(session, node, numChildrenNodes, index);
     return node;
 }
 
 static void generateTestFile(const char* fileName)
 {
-    std::unique_ptr<zm::Builder<MMapTestRoot>> builder = zm::Builder<MMapTestRoot>::create(64 * 1024 * 1024);
-    zm::ScopedBuilder scope(builder.get());
-
-    MMapTestRoot* root = builder->getRoot();
-    root->magic = 0x59454D5A;
-    root->desc = std::string(kLongDesc);
-
-    std::unordered_map<std::string, float> hm = {
-        {"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}, {"five", 5.0f}, {"six", 6.0f}};
-    root->hashMap = hm;
-
-    constexpr size_t numRoots = 512;
-    std::vector<MMapTestNode*> rootNodes;
-    rootNodes.reserve(numRoots);
-    for (size_t i = 0; i < numRoots; i++)
-    {
-        if ((i & 1) == 0)
+    std::vector<char> bytes = zm::build<MMapTestRoot>(
+        [](zm::BuildSession<MMapTestRoot>& session)
         {
-            rootNodes.push_back(allocateNode1(builder.get(), root, i));
-        }
-        else
-        {
-            rootNodes.push_back(allocateNode2(builder.get(), i));
-        }
-    }
-    zm::assign(root->roots, rootNodes);
+            MMapTestRoot* root = session.root();
+            root->magic = 0x59454D5A;
+            root->desc = std::string(kLongDesc);
 
-    validate(root);
+            std::unordered_map<std::string, float> hm = {
+                {"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}, {"five", 5.0f}, {"six", 6.0f}};
+            root->hashMap = hm;
 
-    zm::Span<char> bytes = builder->finalize(32);
-    EXPECT_TRUE((bytes.size % 32) == std::size_t(0));
+            constexpr size_t numRoots = 512;
+            std::vector<MMapTestNode*> rootNodes;
+            rootNodes.reserve(numRoots);
+            for (size_t i = 0; i < numRoots; i++)
+            {
+                if ((i & 1) == 0)
+                {
+                    rootNodes.push_back(allocateNode1(session, root, i));
+                }
+                else
+                {
+                    rootNodes.push_back(allocateNode2(session, i));
+                }
+            }
+            root->roots = rootNodes;
+
+            validate(root);
+        },
+        64 * 1024 * 1024,
+        32);
+
+    EXPECT_TRUE((bytes.size() % 32) == std::size_t(0));
 
     FILE* file = fopen(fileName, "wb");
     ASSERT_TRUE(file != nullptr);
-    fwrite(bytes.data, bytes.size, 1, file);
+    fwrite(bytes.data(), bytes.size(), 1, file);
     fclose(file);
 }
 

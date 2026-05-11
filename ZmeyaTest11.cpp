@@ -93,42 +93,36 @@ static void validate(const ReferToTestRoot* root)
 
 TEST(ZmeyaTestSuite, ReferToTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<ReferToTestRoot>> builder = zm::Builder<ReferToTestRoot>::create(128 * 1024 * 1024);
-        zm::ScopedBuilder scope(builder.get());
+    std::vector<char> bytesCopy = zm::build<ReferToTestRoot>(
+        [](zm::BuildSession<ReferToTestRoot>& session)
+        {
+            ReferToTestRoot* root = session.root();
 
-        ReferToTestRoot* root = builder->getRoot();
+            root->str = std::string("This is supposed to be a long enough string. I think it is long enough now.");
+            root->arr = std::vector<int32_t>{1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
+            root->hashSet = std::unordered_set<int32_t>{1, 5, 15, 23, 38, 31};
+            root->hashMap =
+                std::unordered_map<std::string, float>{{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
 
-        root->str = std::string("This is supposed to be a long enough string. I think it is long enough now.");
-        root->arr = std::vector<int32_t>{1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
-        root->hashSet = std::unordered_set<int32_t>{1, 5, 15, 23, 38, 31};
-        root->hashMap =
-            std::unordered_map<std::string, float>{{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
+            EXPECT_FLOAT_EQ(root->hashMap.find("one", -1.0f), 1.0f);
+            EXPECT_FLOAT_EQ(root->hashMap.find("two", -1.0f), 2.0f);
+            EXPECT_FLOAT_EQ(root->hashMap.find("three", -1.0f), 3.0f);
+            EXPECT_FLOAT_EQ(root->hashMap.find("four", -1.0f), 4.0f);
 
-        EXPECT_FLOAT_EQ(root->hashMap.find("one", -1.0f), 1.0f);
-        EXPECT_FLOAT_EQ(root->hashMap.find("two", -1.0f), 2.0f);
-        EXPECT_FLOAT_EQ(root->hashMap.find("three", -1.0f), 3.0f);
-        EXPECT_FLOAT_EQ(root->hashMap.find("four", -1.0f), 4.0f);
+            ReferToNodeInit proto;
+            proto.str = "This is supposed to be a long enough string. I think it is long enough now.";
+            proto.arr = {1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
+            proto.hashSet = {1, 5, 15, 23, 38, 31};
+            proto.hashMap = {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
 
-        ReferToNodeInit proto;
-        proto.str = "This is supposed to be a long enough string. I think it is long enough now.";
-        proto.arr = {1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
-        proto.hashSet = {1, 5, 15, 23, 38, 31};
-        proto.hashMap = {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
+            std::vector<ReferToNodeInit> nodeInits;
+            nodeInits.resize(10000, proto);
 
-        std::vector<ReferToNodeInit> nodeInits;
-        nodeInits.resize(10000, proto);
+            root->nodes = nodeInits;
 
-        zm::assign(root->nodes, nodeInits);
-
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize();
-        (void)bytes;
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            validate(root);
+        },
+        128 * 1024 * 1024);
 
     const ReferToTestRoot* rootCopy = (const ReferToTestRoot*)(bytesCopy.data());
     validate(rootCopy);

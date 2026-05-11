@@ -2,10 +2,9 @@
 
 ## Current API
 
-- **`zm::build<TRoot>(fn)`** returns an owning **`std::vector<char>`**. **`ScopedBuilder`** installs the TLS active builder for the closure (see **`Zmeya/Zmeya.h`**).
-- **`zm::Builder<TRoot>::create()`** plus **`ScopedBuilder`** and **`finalize()`** cover non-linear control flow (see tests).
+- **`zm::build<TRoot>(fn)`** returns an owning **`std::vector<char>`** after calling **`fn(session)`** with **`zm::BuildSession<TRoot>`** (root + **`allocate`**, etc.). Builder implementation types live in **`zm::detail`** only.
 
-Assignments into **`zm::*`** fields use **`zm::assign`** and container **`operator=`**, resolved against the **thread-local** active builder.
+Assignments into **`zm::*`** fields use each type's **`operator=`** (STL-shaped RHS and **`zm::Pointer<T> = T*`**), resolved against the **thread-local** active builder installed for that **`zm::build`** call.
 
 ## Threading
 
@@ -13,7 +12,7 @@ Do not assign into **`zm::*`** containers from worker threads during a build; TL
 
 ## Builder growth (reallocation)
 
-**`BuilderBase`** stores bytes in **`std::vector<char>`**, which can **reallocate** when it grows. Relative offsets stored in **`zm::*`** fields can become invalid if the buffer moves mid-build; stress tests often pass a **large initial reserve** to **`Builder<>::create(n)`** so the heap block stays stable for that session.
+The internal builder stores bytes in **`std::vector<char>`**, which can **reallocate** when it grows. Relative offsets stored in **`zm::*`** fields can become invalid if the buffer moves mid-build; stress tests pass a **large initial reserve** as the second argument to **`zm::build`** so the heap block stays stable for that session.
 
 Possible directions when this becomes a priority:
 

@@ -33,33 +33,29 @@ static void validate(const PointerTestRoot* root)
 
 TEST(ZmeyaTestSuite, PointerTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<PointerTestRoot>> builder = zm::Builder<PointerTestRoot>::create();
-        zm::ScopedBuilder scope(builder.get());
+    std::vector<char> bytesCopy = zm::build<PointerTestRoot>(
+        [](zm::BuildSession<PointerTestRoot>& session)
+        {
+            PointerTestRoot* root = session.root();
 
-        PointerTestRoot* root = builder->getRoot();
+            PointerTestNode* nodeLeft = session.allocate<PointerTestNode>();
+            PointerTestNode* nodeRight = session.allocate<PointerTestNode>();
 
-        PointerTestNode* nodeLeft = builder->allocate<PointerTestNode>();
-        PointerTestNode* nodeRight = builder->allocate<PointerTestNode>();
+            root->left = nodeLeft;
+            root->right = nodeRight;
 
-        zm::assign(root->left, nodeLeft);
-        zm::assign(root->right, nodeRight);
+            nodeLeft->payload = -13;
+            nodeLeft->other = nodeRight;
 
-        nodeLeft->payload = -13;
-        zm::assign(nodeLeft->other, nodeRight);
+            nodeRight->payload = 13;
+            nodeRight->other = nodeLeft;
 
-        nodeRight->payload = 13;
-        zm::assign(nodeRight->other, nodeLeft);
+            validate(root);
+        },
+        2048,
+        16);
 
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize(16);
-        EXPECT_TRUE((bytes.size % 16) == 0);
-
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+    EXPECT_TRUE((bytesCopy.size() % 16) == 0);
 
     const PointerTestRoot* rootCopy = (const PointerTestRoot*)(bytesCopy.data());
     validate(rootCopy);

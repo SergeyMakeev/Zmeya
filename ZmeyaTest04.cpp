@@ -49,50 +49,41 @@ static void validate(const ListTestRoot* root)
 
 TEST(ZmeyaTestSuite, ListTest)
 {
-    std::vector<char> bytesCopy;
-    {
-#ifndef _DEBUG
-        std::unique_ptr<zm::Builder<ListTestRoot>> builder = zm::Builder<ListTestRoot>::create(128 * 1024 * 1024);
-#else
-        std::unique_ptr<zm::Builder<ListTestRoot>> builder = zm::Builder<ListTestRoot>::create(4 * 1024 * 1024);
-#endif
-        zm::ScopedBuilder scope(builder.get());
-
-        zm::Builder<ListTestRoot>* b = builder.get();
-        ListTestRoot* root = b->getRoot();
-
 #ifdef _DEBUG
-        uint32_t numNodes = 3000;
+    constexpr size_t kReserve = 4 * 1024 * 1024;
+    uint32_t numNodes = 3000;
 #else
-        uint32_t numNodes = 1000000;
+    constexpr size_t kReserve = 128 * 1024 * 1024;
+    uint32_t numNodes = 1000000;
 #endif
 
-        root->numNodes = numNodes;
-        ListTestNode* prevNode = nullptr;
-        for (uint32_t i = 0; i < numNodes; i++)
+    std::vector<char> bytesCopy = zm::build<ListTestRoot>(
+        [numNodes](zm::BuildSession<ListTestRoot>& session)
         {
-            ListTestNode* node = b->allocate<ListTestNode>();
-            node->payload = 13 + i;
-            zm::assign(node->prev, prevNode);
-            if (prevNode)
+            ListTestRoot* root = session.root();
+
+            root->numNodes = numNodes;
+            ListTestNode* prevNode = nullptr;
+            for (uint32_t i = 0; i < numNodes; i++)
             {
-                zm::assign(prevNode->next, node);
+                ListTestNode* node = session.allocate<ListTestNode>();
+                node->payload = 13 + i;
+                node->prev = prevNode;
+                if (prevNode)
+                {
+                    prevNode->next = node;
+                }
+                else
+                {
+                    EXPECT_TRUE(root->root == nullptr);
+                    root->root = node;
+                }
+                prevNode = node;
             }
-            else
-            {
-                EXPECT_TRUE(root->root == nullptr);
-                zm::assign(root->root, node);
-            }
-            prevNode = node;
-        }
 
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize();
-
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            validate(root);
+        },
+        kReserve);
 
     const ListTestRoot* rootCopy = (const ListTestRoot*)(bytesCopy.data());
     validate(rootCopy);

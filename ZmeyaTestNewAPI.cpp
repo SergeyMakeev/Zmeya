@@ -58,8 +58,9 @@ struct TestRoot
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
     std::vector<char> blob = zm::build<TestRoot>(
-        [](TestRoot* root)
+        [](zm::BuildSession<TestRoot>& session)
         {
+            TestRoot* root = session.root();
             std::string srcDesc = "Test description";
             root->description = srcDesc;
 
@@ -103,8 +104,9 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
     std::vector<char> blob = zm::build<TestRoot>(
-        [](TestRoot* root)
+        [](zm::BuildSession<TestRoot>& session)
         {
+            TestRoot* root = session.root();
             std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
             root->nestedArray = srcNested;
         });

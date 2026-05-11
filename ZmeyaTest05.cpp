@@ -41,62 +41,55 @@ static void validate(const StringTestRoot* root)
 
 TEST(ZmeyaTestSuite, StringTest_Debug)
 {
-    std::unique_ptr<zm::Builder<StringTestRoot>> builder = zm::Builder<StringTestRoot>::create();
-    zm::ScopedBuilder scope(builder.get());
+    zm::build<StringTestRoot>([](zm::BuildSession<StringTestRoot>& session)
+                              {
+                                  StringTestRoot* root = session.root();
 
-    StringTestRoot* root = builder->getRoot();
+                                  EXPECT_TRUE(session.contains_pointer(root));
+                                  EXPECT_TRUE(session.contains_pointer(&root->strArr1));
 
-    EXPECT_TRUE(builder->contains_pointer(root));
-    EXPECT_TRUE(builder->contains_pointer(&root->strArr1));
+                                  root->str1 = "test";
 
-    zm::assign(root->str1, "test");
-
-    std::vector<std::string> arr1 = {"first"};
-    zm::assign(root->strArr1, arr1);
+                                  std::vector<std::string> arr1 = {"first"};
+                                  root->strArr1 = arr1;
+                              });
 }
 
 TEST(ZmeyaTestSuite, StringTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<StringTestRoot>> builder = zm::Builder<StringTestRoot>::create(1024 * 1024);
-        zm::ScopedBuilder scope(builder.get());
+    std::vector<char> bytesCopy = zm::build<StringTestRoot>(
+        [](zm::BuildSession<StringTestRoot>& session)
+        {
+            StringTestRoot* root = session.root();
 
-        zm::Builder<StringTestRoot>* b = builder.get();
-        StringTestRoot* root = b->getRoot();
+            root->str1 = "Hello World - This is a very long test string. Expected 1000000 instances";
 
-        zm::assign(root->str1, "Hello World - This is a very long test string. Expected 1000000 instances");
+            std::string testStr("Hello World 2");
+            root->str2 = testStr;
 
-        std::string testStr("Hello World 2");
-        zm::assign(root->str2, testStr);
+            std::string substr("Hello World 3", 7);
+            root->str3 = substr;
 
-        std::string substr("Hello World 3", 7);
-        zm::assign(root->str3, substr);
+            root->str4 = "Hello World - This is a very long test string. Expected 1000000 instances";
 
-        zm::assign(root->str4, "Hello World - This is a very long test string. Expected 1000000 instances");
+            root->str5 = "Hello World 2";
 
-        zm::assign(root->str5, "Hello World 2");
+            std::vector<std::string> arr1 = {"first", "second", "third", "fourth"};
+            root->strArr1 = arr1;
 
-        std::vector<std::string> arr1 = {"first", "second", "third", "fourth"};
-        zm::assign(root->strArr1, arr1);
+            std::vector<std::string> arr2 = {"one", "two", "three"};
+            root->strArr2 = arr2;
 
-        std::vector<std::string> arr2 = {"one", "two", "three"};
-        zm::assign(root->strArr2, arr2);
+            std::vector<std::string> arr3 = {"hello", "world"};
+            root->strArr3 = arr3;
 
-        std::vector<std::string> arr3 = {"hello", "world"};
-        zm::assign(root->strArr3, arr3);
+            size_t numStrings = 10;
+            std::vector<std::string> arr4(numStrings, "Hello World - This is a very long test string. Expected 1000000 instances");
+            root->strArr4 = arr4;
 
-        size_t numStrings = 10;
-        std::vector<std::string> arr4(numStrings, "Hello World - This is a very long test string. Expected 1000000 instances");
-        zm::assign(root->strArr4, arr4);
-
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize();
-
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            validate(root);
+        },
+        1024 * 1024);
 
     const StringTestRoot* rootCopy = (const StringTestRoot*)(bytesCopy.data());
 

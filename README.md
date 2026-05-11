@@ -11,7 +11,7 @@ Zmeya is not even a serialization library in the usual sense but rather a set of
 # Features
 
 - Cross-platform compatible
-- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for builder and assign APIs)
+- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::build`** / serialization)
 - No code generation required: no IDL or metadata, just use your types directly
 - No macros
 - Heavily optimized for performance
@@ -133,20 +133,20 @@ The only requirement is that we have to have all the data tightly packed in a si
 
 Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling code that **writes** blobs (see `CMakeLists.txt` in this repo).
 
-**Primary API:** **`zm::build<TRoot>`** returns an owning **`std::vector<char>`** after running a closure with the root pointer (TLS-backed **`ScopedBuilder`** is set inside the implementation). Example:
+**Primary (and only) build API:** **`zm::build<TRoot>`** returns an owning **`std::vector<char>`** after invoking your closure with **`zm::BuildSession<TRoot>&`**. The session exposes **`root()`**, **`allocate<T>()`**, and **`contains_pointer()`**; TLS and finalize are internal (see **`Zmeya/Zmeya.h`**). Example:
 
 ```cpp
-std::vector<char> blob = zm::build<MyRoot>([](MyRoot* root) {
-    root->title = std::string("hello");
-    root->nums = std::vector<int>{1, 2, 3};
+std::vector<char> blob = zm::build<MyRoot>([](zm::BuildSession<MyRoot>& s) {
+    s.root()->title = std::string("hello");
+    s.root()->nums = std::vector<int>{1, 2, 3};
 });
 ```
 
-For non-linear control flow you can still use **`zm::Builder<MyRoot>::create()`** plus **`zm::ScopedBuilder`** and **`finalize()`** (see unit tests).
+Optional second and third arguments set initial reserve size and finalize alignment.
 
 Assignments into **`zm::`** fields use an **active builder** stored in **thread-local storage** for that call chain. **Do not** assign into zm containers from **other threads** inside the same build (worker threads do not share that TLS). Parallel work is fine if zm mutations stay on the thread that started the build.
 
-Recursive **`std::*` → `zm::*`** conversion is handled by **`zm::assign`** and container **`operator=`** overloads so nested STL shapes map to nested Zmeya containers without hand-writing every combination.
+Recursive **`std::*` → `zm::*`** conversion uses ordinary **`=`** into **`zm::*`** fields (each type provides **`operator=`** where applicable, including **`zm::Pointer<T> = T*`**).
 
 See **`NEXT_STEPS.md`** for builder limitations and follow-up work (e.g. reallocation).
 

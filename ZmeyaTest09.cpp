@@ -91,44 +91,41 @@ static void validate(const SimpleFileTestRoot* root)
 
 static void generateTestFile(const char* fileName)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
+    std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-        std::unique_ptr<zm::Builder<SimpleFileTestRoot>> builder = zm::Builder<SimpleFileTestRoot>::create(256 * 1024);
-        zm::ScopedBuilder scope(builder.get());
-        SimpleFileTestRoot* root = builder->getRoot();
-        root->magic = 0x59454D5A;
-
-        std::vector<ObjectFlat> objs;
-        objs.reserve(objectNames.size());
-        for (size_t i = 0; i < objectNames.size(); i++)
+    std::vector<char> bytesCopy = zm::build<SimpleFileTestRoot>(
+        [&objectNames](zm::BuildSession<SimpleFileTestRoot>& session)
         {
-            objs.push_back(ObjectFlat{objectNames[i], Vec2(float(i), float(i + 4))});
-        }
-        zm::assign(root->objects, objs);
+            SimpleFileTestRoot* root = session.root();
+            root->magic = 0x59454D5A;
+
+            std::vector<ObjectFlat> objs;
+            objs.reserve(objectNames.size());
+            for (size_t i = 0; i < objectNames.size(); i++)
+            {
+                objs.push_back(ObjectFlat{objectNames[i], Vec2(float(i), float(i + 4))});
+            }
+        root->objects = objs;
 
         for (size_t i = 1; i < root->objects.size(); i++)
         {
             Object* cur = root->objects.get_element_ptr_unsafe_can_be_relocated(i);
             Object* prev = root->objects.get_element_ptr_unsafe_can_be_relocated(i - 1);
-            zm::assign(cur->parent, prev);
+            cur->parent = prev;
         }
 
         std::unordered_set<std::string> hs = {"one", "two", "three"};
-        zm::assign(root->hashSet, hs);
+        root->hashSet = hs;
 
         std::unordered_map<std::string, float> hm = {{"1", 1.0f}, {"2", 2.0f}, {"3", 3.0f}};
-        zm::assign(root->hashMap, hm);
+        root->hashMap = hm;
 
-        validate(root);
+            validate(root);
+        },
+        256 * 1024,
+        32);
 
-        zm::Span<char> bytes = builder->finalize(32);
-        EXPECT_TRUE((bytes.size % 32) == 0);
-
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+    EXPECT_TRUE((bytesCopy.size() % 32) == 0);
 
     const SimpleFileTestRoot* rootCopy = (const SimpleFileTestRoot*)(bytesCopy.data());
     validate(rootCopy);

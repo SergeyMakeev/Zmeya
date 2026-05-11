@@ -68,31 +68,25 @@ static void validate(const HashSetTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashSetTest)
 {
-    std::vector<char> bytesCopy;
-    {
-        std::unique_ptr<zm::Builder<HashSetTestRoot>> builder = zm::Builder<HashSetTestRoot>::create();
-        zm::ScopedBuilder scope(builder.get());
+    std::vector<char> bytesCopy = zm::build<HashSetTestRoot>(
+        [](zm::BuildSession<HashSetTestRoot>& session)
+        {
+            HashSetTestRoot* root = session.root();
 
-        HashSetTestRoot* root = builder->getRoot();
+            std::unordered_set<int> testSet1 = {5, 7, 3, 11, 99};
+            root->set1 = testSet1;
 
-        std::unordered_set<int> testSet1 = {5, 7, 3, 11, 99};
-        zm::assign(root->set1, testSet1);
+            std::unordered_set<int32_t> testSet2 = {1, 2, 3, 4, 0, 99, 6};
+            root->set2 = testSet2;
 
-        std::unordered_set<int32_t> testSet2 = {1, 2, 3, 4, 0, 99, 6};
-        zm::assign(root->set2, testSet2);
+            std::unordered_set<std::string> strSet1 = {"one", "two", "three", "four", "123456", "1234567"};
+            root->strSet1 = strSet1;
 
-        std::unordered_set<std::string> strSet1 = {"one", "two", "three", "four", "123456", "1234567"};
-        zm::assign(root->strSet1, strSet1);
+            std::unordered_set<std::string> strSet2 = {"five", "six", "seven", "eight", "this-is-a-very-very-long-key-to-test-hasher"};
+            root->strSet2 = strSet2;
 
-        std::unordered_set<std::string> strSet2 = {"five", "six", "seven", "eight", "this-is-a-very-very-long-key-to-test-hasher"};
-        zm::assign(root->strSet2, strSet2);
-
-        validate(root);
-
-        zm::Span<char> bytes = builder->finalize();
-        bytesCopy = utils::copyBytes(bytes);
-        std::memset(bytes.data, 0xFF, bytes.size);
-    }
+            validate(root);
+        });
 
     const HashSetTestRoot* rootCopy = (const HashSetTestRoot*)(bytesCopy.data());
 
