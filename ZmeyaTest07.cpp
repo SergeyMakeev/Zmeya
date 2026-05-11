@@ -85,7 +85,7 @@ static void validate(const HashMapTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashMapTest)
 {
-    std::vector<char> bytesCopy = zm::write_blob<HashMapTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_blob<HashMapTestRoot>(
         [](zm::BlobWriter<HashMapTestRoot>& w)
         {
             HashMapTestRoot* root = w.root();

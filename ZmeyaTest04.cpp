@@ -55,7 +55,7 @@ TEST(ZmeyaTestSuite, ListTest)
     uint32_t numNodes = 1000000;
 #endif
 
-    std::vector<char> bytesCopy = zm::write_blob<ListTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_blob<ListTestRoot>(
         [numNodes](zm::BlobWriter<ListTestRoot>& w)
         {
             zm::detail::BuilderBase* bb = w.builder_base();

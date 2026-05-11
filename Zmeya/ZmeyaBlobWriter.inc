@@ -9,11 +9,11 @@ User-facing entry is **`zm::write_blob`** and **`BlobWriter`** only. Implementat
 namespace detail
 {
 template <typename TRoot, typename Fn>
-std::vector<char> write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment = 4);
+BlobBuffer write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment = 4);
 }
 
 template <typename TRoot, typename Fn>
-std::vector<char> write_blob(Fn&& fn, size_t finalizeAlignment);
+BlobBuffer write_blob(Fn&& fn, size_t finalizeAlignment);
 
 template <typename TRoot>
 class BlobWriter
@@ -21,10 +21,10 @@ class BlobWriter
     struct Private {};
 
     template <typename R, typename Fn>
-    friend std::vector<char> write_blob(Fn&& fn, size_t finalizeAlignment);
+    friend BlobBuffer write_blob(Fn&& fn, size_t finalizeAlignment);
 
     template <typename R, typename Fn>
-    friend std::vector<char> detail::write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment);
+    friend BlobBuffer detail::write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment);
 
     explicit BlobWriter(detail::Builder<TRoot>* impl, Private)
         : impl_(impl)
@@ -44,6 +44,8 @@ class BlobWriter
     ZMEYA_NODISCARD detail::BuilderBase* builder_base() const noexcept { return impl_; }
 
     void string_append(String& s, const char* suf);
+
+    void string_append(String& s, const char* suf, size_t suf_len);
 
     void string_clear(String& s);
 
@@ -75,11 +77,12 @@ class BlobWriter
 **write_blob**
 
 Installs TLS, invokes **`fn(writer)`**, then finalizes. **`BlobWriter`** is the stable handle so internals can evolve without changing call sites.
+Returns **`zm::BlobBuffer`** (same backing allocator as the arena) by **moving** the finalized bytes; no extra **`std::vector<char>`** copy of the span.
 
 */
 
 template <typename TRoot, typename Fn>
-ZMEYA_NODISCARD inline std::vector<char> write_blob(Fn&& fn, size_t finalizeAlignment = 4)
+ZMEYA_NODISCARD inline BlobBuffer write_blob(Fn&& fn, size_t finalizeAlignment = 4)
 {
     return detail::write_blob_with_initial_buffer_bytes<TRoot>(std::forward<Fn>(fn), detail::kDefaultWriteBlobArenaReserveBytes, finalizeAlignment);
 }
@@ -97,14 +100,13 @@ Intended for unit tests that intentionally force **`std::vector`** reallocations
 */
 
 template <typename TRoot, typename Fn>
-ZMEYA_NODISCARD inline std::vector<char> write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment)
+ZMEYA_NODISCARD inline BlobBuffer write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment)
 {
     std::unique_ptr<Builder<TRoot>> builder = Builder<TRoot>::create(initialBufferBytes);
     ScopedBuilder scope(builder.get());
     BlobWriter<TRoot> writer(builder.get(), typename BlobWriter<TRoot>::Private{});
     std::forward<Fn>(fn)(writer);
-    Span<char> blobSpan = builder->finalize(finalizeAlignment);
-    return std::vector<char>(blobSpan.data, blobSpan.data + blobSpan.size);
+    return builder->finalize_move_out(finalizeAlignment);
 }
 
 } // namespace detail

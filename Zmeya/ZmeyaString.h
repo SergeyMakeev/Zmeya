@@ -80,6 +80,7 @@ class String
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     void clear();
     String& append(const char* suf);
+    String& append(const char* suf, size_t suf_len);
     ZMEYA_NODISCARD String& operator+=(const char* suf);
 #endif
 };

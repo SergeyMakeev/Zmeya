@@ -57,7 +57,7 @@ TEST(ZmeyaTestSuite, StringTest_Debug)
 
 TEST(ZmeyaTestSuite, StringTest)
 {
-    std::vector<char> bytesCopy = zm::write_blob<StringTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_blob<StringTestRoot>(
         [](zm::BlobWriter<StringTestRoot>& w)
         {
             StringTestRoot* root = w.root();

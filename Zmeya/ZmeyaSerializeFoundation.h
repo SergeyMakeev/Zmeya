@@ -85,6 +85,17 @@ template <typename T, int Alignment> class BufferAllocator : public std::allocat
 
 /*
 
+**Owning blob byte buffer**
+
+Same allocator as the write-path arena (`BufferAllocator`). `write_blob` returns this type so the
+finalized bytes can be moved out without copying the arena into a separate `std::vector<char>`.
+
+*/
+
+using BlobBuffer = std::vector<char, BufferAllocator<char, ZMEYA_MAX_ALIGN>>;
+
+/*
+
 **Span view**
 
 Returned from `finalize` so callers can copy bytes without exposing the internal vector type.

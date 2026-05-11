@@ -63,7 +63,7 @@ struct TestRoot
 // Verifies operator= from STL strings, vectors, map, and set into a root blob round-trip on read.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
-    std::vector<char> blob = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blob = zm::write_blob<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             TestRoot* root = w.root();
@@ -110,7 +110,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 // Verifies nested vector-of-vector-of-string assigns into zm::Array<zm::Array<zm::String>> and reads back correctly.
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
-    std::vector<char> blob = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blob = zm::write_blob<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             TestRoot* root = w.root();
@@ -208,7 +208,8 @@ static void ExpectUnorderedStringIntMapsEqual(const std::unordered_map<std::stri
     }
 }
 
-static void ExpectTestRootLogicalEqual(const std::vector<char>& a, const std::vector<char>& b)
+template <typename A, typename B>
+static void ExpectTestRootLogicalEqual(const A& a, const B& b)
 {
     ASSERT_EQ(a.size(), b.size());
     const TestRoot* ra = reinterpret_cast<const TestRoot*>(a.data());
@@ -265,7 +266,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
     zm::Span<char> span = builder->finalize(4);
     std::vector<char> blobA(span.data, span.data + span.size);
 
-    std::vector<char> blobB = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blobB = zm::write_blob<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRoot(w.root());
@@ -279,13 +280,13 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
 {
     constexpr size_t kTinyArenaBytes = 32;
 
-    std::vector<char> golden = zm::write_blob<TestRoot>(
+    zm::BlobBuffer golden = zm::write_blob<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);
         });
 
-    std::vector<char> stressed = zm::detail::write_blob_with_initial_buffer_bytes<TestRoot>(
+    zm::BlobBuffer stressed = zm::detail::write_blob_with_initial_buffer_bytes<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);

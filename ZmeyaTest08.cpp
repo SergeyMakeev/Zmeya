@@ -53,7 +53,7 @@ static void validate(const IteratorsTestRoot* root)
 
 TEST(ZmeyaTestSuite, IteratorsTest)
 {
-    std::vector<char> bytesCopy = zm::write_blob<IteratorsTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_blob<IteratorsTestRoot>(
         [](zm::BlobWriter<IteratorsTestRoot>& w)
         {
             IteratorsTestRoot* root = w.root();

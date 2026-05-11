@@ -237,13 +237,13 @@ TEST(ZmeyaTestSuite, Coverage_P0_StringAppendManyReallocs)
         }
     }
 
-    std::vector<char> golden = zm::write_blob<CovStringRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovStringRoot>(
         [&model](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = model;
         }, 4);
 
-    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [&model](zm::BlobWriter<CovStringRoot>& w)
         {
             for (size_t i = 0; i < model.size(); ++i)
@@ -262,14 +262,14 @@ TEST(ZmeyaTestSuite, Coverage_P0_StringClearThenAppendMatchesGolden)
 {
     const std::string goldenStr = "after_clear";
 
-    std::vector<char> golden = zm::write_blob<CovStringRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovStringRoot>(
         [&goldenStr](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string("temp");
             w.root()->text = goldenStr;
         }, 4);
 
-    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string("temp");
@@ -286,14 +286,14 @@ TEST(ZmeyaTestSuite, Coverage_P0_StringClearThenAppendMatchesGolden)
 // P0-03: Empty assign then append must not assume a non-null C string length on the empty state.
 TEST(ZmeyaTestSuite, Coverage_P0_EmptyStringThenAppend)
 {
-    std::vector<char> golden = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer golden = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string();
             w.root()->text += "x";
         }, 256, 4);
 
-    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string();
@@ -313,13 +313,13 @@ TEST(ZmeyaTestSuite, Coverage_P0_ArrayPushBackAcrossRealloc)
         model.push_back(i * i - 3);
     }
 
-    std::vector<char> golden = zm::write_blob<CovIntArrayRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovIntArrayRoot>(
         [&model](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.root()->values = model;
         }, 4);
 
-    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [&model](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             for (int32_t v : model)
@@ -340,7 +340,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_ArrayPushBackAcrossRealloc)
 // P0-05: First push on an empty array yields size 1 and the pushed value.
 TEST(ZmeyaTestSuite, Coverage_P0_ArrayPushBackFirstElement)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.array_push_back(w.root()->values, int32_t(911));
@@ -354,7 +354,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_ArrayPushBackFirstElement)
 // P0-06: erase_at at first, middle, and last indices preserves order for the remaining elements.
 TEST(ZmeyaTestSuite, Coverage_P0_ArrayEraseAtBoundaries)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             for (int i = 0; i < 7; ++i)
@@ -377,7 +377,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_ArrayEraseAtBoundaries)
 // P0-07: pop_back on empty is a no-op; extra pops after draining must not crash.
 TEST(ZmeyaTestSuite, Coverage_P0_ArrayPopBackUntilEmpty)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             for (int i = 0; i < 10; ++i)
@@ -396,7 +396,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_ArrayPopBackUntilEmpty)
 // P0-08: array_resize grows with fill then shrinks; grown tail uses fill and truncation drops tail values.
 TEST(ZmeyaTestSuite, Coverage_P0_ArrayResizeGrowThenShrink)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.array_push_back(w.root()->values, 1);
@@ -421,13 +421,13 @@ TEST(ZmeyaTestSuite, Coverage_P0_HashMapStringKeyCompactionLogicalMatch)
         model[std::string("k") + std::to_string(i)] = i;
     }
 
-    std::vector<char> golden = zm::write_blob<CovHashMapStrIntRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovHashMapStrIntRoot>(
         [&model](zm::BlobWriter<CovHashMapStrIntRoot>& w)
         {
             w.root()->map = model;
         }, 4);
 
-    std::vector<char> built = zm::write_blob<CovHashMapStrIntRoot>(
+    zm::BlobBuffer built = zm::write_blob<CovHashMapStrIntRoot>(
         [&model](zm::BlobWriter<CovHashMapStrIntRoot>& w)
         {
             std::vector<std::string> keys;
@@ -457,7 +457,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_MixedStringsAndArraysCompaction)
         zm::Array<int32_t> nums;
     };
 
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
         [](zm::BlobWriter<Root>& w)
         {
             for (int round = 0; round < 40; ++round)
@@ -486,7 +486,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_FinalizeAlignmentMatrix)
     for (size_t ai = 0; ai < sizeof(kAligns) / sizeof(kAligns[0]); ++ai)
     {
         const size_t align = kAligns[ai];
-        std::vector<char> blob = zm::write_blob<CovStringRoot>(
+        zm::BlobBuffer blob = zm::write_blob<CovStringRoot>(
             [](zm::BlobWriter<CovStringRoot>& w)
             {
                 w.root()->text = std::string("align");
@@ -507,7 +507,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_ExplicitAssignHashMapNestedStringsUnderRealloc)
         model[std::string("k") + std::to_string(i)] = std::string("v") + std::to_string(i * i);
     }
 
-    std::vector<char> golden = zm::write_blob<CovHashMapStrStrRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovHashMapStrStrRoot>(
         [&model](zm::BlobWriter<CovHashMapStrStrRoot>& w)
         {
             w.root()->map = model;
@@ -526,7 +526,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_ExplicitAssignHashMapNestedStringsUnderRealloc)
 // P0-13: deep_copy(builder, ...) must run with TLS scoped to the explicit builder while writing a zm::String slot.
 TEST(ZmeyaTestSuite, Coverage_P0_DeepCopyBuilderScopedNestedString)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovDeepCopyRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovDeepCopyRoot>(
         [](zm::BlobWriter<CovDeepCopyRoot>& w)
         {
             CovDeepCopyRoot* root = w.root();
@@ -541,7 +541,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_DeepCopyBuilderScopedNestedString)
 // P0-14: Many allocate() nodes plus pointer wiring; resolve nodes by goffset_t after growth so raw pointers are not cached across realloc.
 TEST(ZmeyaTestSuite, Coverage_P0_AllocatePointerGraphManyNodes)
 {
-    std::vector<char> blob = zm::write_blob<CovPointerChainRoot>(
+    zm::BlobBuffer blob = zm::write_blob<CovPointerChainRoot>(
         [](zm::BlobWriter<CovPointerChainRoot>& w)
         {
             constexpr int kN = 64;
@@ -594,13 +594,13 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashSetStringIncrementalVsGolden)
 {
     std::unordered_set<std::string> model = {"apple", "banana", "cherry", "date", "elderberry", "fig"};
 
-    std::vector<char> golden = zm::write_blob<CovHashSetStrRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovHashSetStrRoot>(
         [&model](zm::BlobWriter<CovHashSetStrRoot>& w)
         {
             w.root()->set = model;
         }, 4);
 
-    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<CovHashSetStrRoot>(
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<CovHashSetStrRoot>(
         [&model](zm::BlobWriter<CovHashSetStrRoot>& w)
         {
             std::vector<std::string> order(model.begin(), model.end());
@@ -624,13 +624,13 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashMapIntKeyIncrementalVsGolden)
         model[i] = i * 3 + 1;
     }
 
-    std::vector<char> golden = zm::write_blob<CovHashMapIntIntRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovHashMapIntIntRoot>(
         [&model](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             w.root()->map = model;
         }, 4);
 
-    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
         [&model](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             for (const auto& kv : model)
@@ -664,7 +664,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashMapStringValueBulkAssignRoundTrip)
         zm::HashMap<int32_t, zm::String> map;
     };
 
-    std::vector<char> blob = zm::write_blob<Root>(
+    zm::BlobBuffer blob = zm::write_blob<Root>(
         [&model](zm::BlobWriter<Root>& w)
         {
             w.root()->map = model;
@@ -689,7 +689,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashMapStringValueBulkAssignRoundTrip)
 // P1-04: Inserting the same key twice keeps the last value (map overwrite semantics).
 TEST(ZmeyaTestSuite, Coverage_P1_HashMapDuplicateKeyReplacesValue)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
         [](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             w.hashmap_insert(w.root()->map, 7, 1);
@@ -705,7 +705,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashMapDuplicateKeyReplacesValue)
 // P1-05: Erasing a missing key must not change size or corrupt existing entries.
 TEST(ZmeyaTestSuite, Coverage_P1_HashMapEraseMissingNoOp)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
         [](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             w.hashmap_insert(w.root()->map, 1, 10);
@@ -722,7 +722,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashMapEraseMissingNoOp)
 // P1-06: clear then a second wave of inserts leaves only the second wave.
 TEST(ZmeyaTestSuite, Coverage_P1_HashMapClearThenRefill)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
         [](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             w.hashmap_insert(w.root()->map, 1, 100);
@@ -745,13 +745,13 @@ TEST(ZmeyaTestSuite, Coverage_P1_HashMapManyStringKeysVsGolden)
         model[std::string("key_") + std::to_string(i)] = i;
     }
 
-    std::vector<char> golden = zm::write_blob<CovHashMapStrIntRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovHashMapStrIntRoot>(
         [&model](zm::BlobWriter<CovHashMapStrIntRoot>& w)
         {
             w.root()->map = model;
         }, 4);
 
-    std::vector<char> built = zm::write_blob<CovHashMapStrIntRoot>(
+    zm::BlobBuffer built = zm::write_blob<CovHashMapStrIntRoot>(
         [&model](zm::BlobWriter<CovHashMapStrIntRoot>& w)
         {
             std::vector<std::string> keys;
@@ -780,7 +780,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_SingleElementMapAndSet)
         zm::HashSet<int32_t> s;
     };
 
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
         [](zm::BlobWriter<Root>& w)
         {
             w.hashmap_insert(w.root()->m, 42, 43);
@@ -817,14 +817,14 @@ TEST(ZmeyaTestSuite, Coverage_P1_LargeNIncrementalHashMapVsGolden)
         model[i] = i ^ 0x5555;
     }
 
-    std::vector<char> golden = zm::write_blob<CovHashMapIntIntRoot>(
+    zm::BlobBuffer golden = zm::write_blob<CovHashMapIntIntRoot>(
         [&model](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             w.root()->map = model;
         },
         4);
 
-    std::vector<char> built = zm::write_blob<CovHashMapIntIntRoot>(
+    zm::BlobBuffer built = zm::write_blob<CovHashMapIntIntRoot>(
         [&model](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             for (const auto& kv : model)
@@ -856,7 +856,7 @@ TEST(ZmeyaTestSuite, Coverage_P2_LongStringAssignRoundTrip)
         longStr[i] = static_cast<char>('a' + (i % 26));
     }
 
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [&longStr](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = longStr;
@@ -872,7 +872,7 @@ TEST(ZmeyaTestSuite, Coverage_P2_StringWithEmbeddedNulStoredLength)
     s.push_back('\0');
     s.append("post", 4);
 
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [&s](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = s;
@@ -886,13 +886,13 @@ TEST(ZmeyaTestSuite, Coverage_P2_StringWithEmbeddedNulStoredLength)
 // P2-03: const char* and std::string sources with identical byte content produce identical serialized strings.
 TEST(ZmeyaTestSuite, Coverage_P2_CharPtrVsStdStringSameBytes)
 {
-    std::vector<char> a = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer a = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = "identical_payload";
         }, 128, 4);
 
-    std::vector<char> b = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer b = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string("identical_payload");
@@ -905,7 +905,7 @@ TEST(ZmeyaTestSuite, Coverage_P2_CharPtrVsStdStringSameBytes)
 // P2-04: Member operator+= only (no bulk assign of the whole string until implicit initial empty) under a tiny reserve.
 TEST(ZmeyaTestSuite, Coverage_P2_StringMemberPlusEqualsChain)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             for (int i = 0; i < 200; ++i)
@@ -920,7 +920,7 @@ TEST(ZmeyaTestSuite, Coverage_P2_StringMemberPlusEqualsChain)
 // P2-05: String::clear() from the member API leaves an empty C string view.
 TEST(ZmeyaTestSuite, Coverage_P2_StringMemberClear)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string("will_clear");
@@ -935,7 +935,7 @@ TEST(ZmeyaTestSuite, Coverage_P2_StringMemberClear)
 // P2-06: Comparison operators cover zm vs const char*, std::string, and reflexive cases.
 TEST(ZmeyaTestSuite, Coverage_P2_StringComparisonOperators)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringCmpRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringCmpRoot>(
         [](zm::BlobWriter<CovStringCmpRoot>& w)
         {
             w.root()->a = std::string("same");
@@ -968,7 +968,7 @@ TEST(ZmeyaTestSuite, Coverage_P3_ArrayStringPushBackCompileTrait)
 // P3-02: Array of pointers round-trips from a std::vector of allocated node addresses.
 TEST(ZmeyaTestSuite, Coverage_P3_ArrayOfPointersAssign)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovArrayPtrRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovArrayPtrRoot>(
         [](zm::BlobWriter<CovArrayPtrRoot>& w)
         {
             std::vector<CovPointerChainNode*> ptrs;
@@ -1001,7 +1001,7 @@ TEST(ZmeyaTestSuite, Coverage_P3_NestedArrayIntBulkAssign)
 
     std::vector<std::vector<int32_t>> model = {{1, 2}, {3, 4, 5}, {6}};
 
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
         [&model](zm::BlobWriter<Root>& w)
         {
             w.root()->grid = model;
@@ -1026,7 +1026,7 @@ TEST(ZmeyaTestSuite, Coverage_P3_ArrayResizeLargeFillPattern)
     constexpr size_t kN = size_t(1) << 14;
     constexpr size_t kStartArenaBytes = 32u * 1024u * 1024u;
 #endif
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [kN](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.array_resize(w.root()->values, kN, int32_t(-7));
@@ -1044,7 +1044,7 @@ TEST(ZmeyaTestSuite, Coverage_P3_ArrayResizeLargeFillPattern)
 // P3-05: array_erase_at on an empty array is a documented no-op (out-of-range index).
 TEST(ZmeyaTestSuite, Coverage_P3_ArrayEraseAtWhenEmptyNoOp)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.array_erase_at(w.root()->values, 0);
@@ -1056,7 +1056,7 @@ TEST(ZmeyaTestSuite, Coverage_P3_ArrayEraseAtWhenEmptyNoOp)
 // P4-01: Null zm::Pointer serializes as a zero relative offset and reads back as nullptr.
 TEST(ZmeyaTestSuite, Coverage_P4_NullPointerRoundTrip)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovNullPointerRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovNullPointerRoot>(
         [](zm::BlobWriter<CovNullPointerRoot>& w)
         {
             w.root()->p = nullptr;
@@ -1068,7 +1068,7 @@ TEST(ZmeyaTestSuite, Coverage_P4_NullPointerRoundTrip)
 // P4-02: Long singly-linked pointer chain preserves roffset links across many nodes.
 TEST(ZmeyaTestSuite, Coverage_P4_PointerChainThousandNodes)
 {
-    std::vector<char> blob = zm::write_blob<CovPointerChainRoot>(
+    zm::BlobBuffer blob = zm::write_blob<CovPointerChainRoot>(
         [](zm::BlobWriter<CovPointerChainRoot>& w)
         {
             constexpr int kN = 1000;
@@ -1105,7 +1105,7 @@ TEST(ZmeyaTestSuite, Coverage_P4_PointerChainThousandNodes)
 // P4-03: Small tree with parent pointers plus child arrays forms a DAG-style back reference graph.
 TEST(ZmeyaTestSuite, Coverage_P4_TreeWithParentPointers)
 {
-    std::vector<char> blob = zm::write_blob<CovTreeRoot>(
+    zm::BlobBuffer blob = zm::write_blob<CovTreeRoot>(
         [](zm::BlobWriter<CovTreeRoot>& w)
         {
             CovTreeNode* root = w.allocate<CovTreeNode>();
@@ -1136,7 +1136,7 @@ TEST(ZmeyaTestSuite, Coverage_P4_TreeWithParentPointers)
 // P4-04: allocate returns addresses aligned to the requested T inside the bump arena.
 TEST(ZmeyaTestSuite, Coverage_P4_AllocatePointerAlignment)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovAllocAlignRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovAllocAlignRoot>(
         [](zm::BlobWriter<CovAllocAlignRoot>& w)
         {
             double* pd = w.allocate<double>();
@@ -1158,7 +1158,7 @@ TEST(ZmeyaTestSuite, Coverage_P4_AllocatePointerAlignment)
 // P5-01: Alignment of 1 always yields a valid blob size (trivially size % 1 == 0).
 TEST(ZmeyaTestSuite, Coverage_P5_FinalizeAlignmentOne)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = "x";
@@ -1169,13 +1169,13 @@ TEST(ZmeyaTestSuite, Coverage_P5_FinalizeAlignmentOne)
 // P5-02: Extra finalize padding bytes (when using stricter alignment) are zero-filled in the output buffer.
 TEST(ZmeyaTestSuite, Coverage_P5_FinalizePaddingBytesZero)
 {
-    std::vector<char> a = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer a = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = "pad";
         }, 128, 4);
 
-    std::vector<char> b = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer b = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = "pad";
@@ -1188,14 +1188,14 @@ TEST(ZmeyaTestSuite, Coverage_P5_FinalizePaddingBytesZero)
     }
 }
 
-// P5-04: write_blob copies the finalized span into a std::vector of the same byte length (round-trip size sanity).
+// P5-04: write_blob returns owning bytes with the same length as finalize() on an equivalent session (size sanity).
 TEST(ZmeyaTestSuite, Coverage_P5_WriteBlobVectorMatchesFinalizeSize)
 {
     std::unique_ptr<zm::detail::Builder<CovStringRoot>> builder = zm::detail::Builder<CovStringRoot>::create(128);
     zm::detail::ScopedBuilder scope(builder.get());
     builder->getRoot()->text = std::string("size_check");
     zm::Span<char> span = builder->finalize(8);
-    std::vector<char> viaVec = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
+    zm::BlobBuffer viaVec = zm::detail::write_blob_with_initial_buffer_bytes<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string("size_check");
@@ -1207,7 +1207,7 @@ TEST(ZmeyaTestSuite, Coverage_P5_WriteBlobVectorMatchesFinalizeSize)
 TEST(ZmeyaTestSuite, Coverage_P6_MmapMiniRootAlignment16)
 {
     const char* fileName = "coverage_mmap_mini.zm";
-    std::vector<char> bytes = zm::write_blob<CovMmapMiniRoot>(
+    zm::BlobBuffer bytes = zm::write_blob<CovMmapMiniRoot>(
         [](zm::BlobWriter<CovMmapMiniRoot>& w)
         {
             w.root()->magic = 0x11223344u;
@@ -1254,7 +1254,7 @@ TEST(ZmeyaTestSuite, Coverage_P6_MmapMiniRootAlignment16)
 // P6-04: Full file round-trip preserves raw blob bytes (fwrite/fread memcmp).
 TEST(ZmeyaTestSuite, Coverage_P6_FileRoundTripBytesIdentical)
 {
-    std::vector<char> bytes = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
+    zm::BlobBuffer bytes = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapIntIntRoot>(
         [](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             w.hashmap_insert(w.root()->map, 1, 2);
@@ -1288,7 +1288,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ReferToShapedSmallNodeCount)
     proto.hashMap = {{"one", 1.0f}, {"two", 2.0f}, {"three", 3.0f}, {"four", 4.0f}};
 
     constexpr size_t kNodes = 100;
-    std::vector<char> blob = zm::write_blob<CoverageReferMultiRoot>(
+    zm::BlobBuffer blob = zm::write_blob<CoverageReferMultiRoot>(
         [&proto, kNodes](zm::BlobWriter<CoverageReferMultiRoot>& w)
         {
             std::vector<CoverageReferNodeInit> inits(kNodes, proto);
@@ -1317,7 +1317,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ReferToShapedSingleNode)
     proto.hashSet = {100, 200};
     proto.hashMap = {{"k", 1.5f}};
 
-    std::vector<char> blob = zm::write_blob<CoverageReferSingleRoot>(
+    zm::BlobBuffer blob = zm::write_blob<CoverageReferSingleRoot>(
         [&proto](zm::BlobWriter<CoverageReferSingleRoot>& w)
         {
             w.root()->node = proto;
@@ -1347,7 +1347,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ListChainSmokeTenNodes)
     };
 
     constexpr uint32_t kN = 10;
-    std::vector<char> blob = zm::write_blob<Root>(
+    zm::BlobBuffer blob = zm::write_blob<Root>(
         [kN](zm::BlobWriter<Root>& w)
         {
             zm::detail::BuilderBase* bb = w.builder_base();
@@ -1389,7 +1389,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ListChainSmokeTenNodes)
 // P8-01: Range-for over empty zm containers does not crash and yields zero iterations.
 TEST(ZmeyaTestSuite, Coverage_P8_EmptyContainerIteration)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIterEmptyRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIterEmptyRoot>(
         [](zm::BlobWriter<CovIterEmptyRoot>& /*w*/) {}, 128, 4);
 
     const CovIterEmptyRoot* r = reinterpret_cast<const CovIterEmptyRoot*>(blob.data());
@@ -1419,7 +1419,7 @@ TEST(ZmeyaTestSuite, Coverage_P8_EmptyContainerIteration)
 // P8-02: For a non-empty array, begin/end iterators compare as unequal until the walk completes.
 TEST(ZmeyaTestSuite, Coverage_P8_IteratorBeginEndPatterns)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovIntArrayRoot>(
         [](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.array_push_back(w.root()->values, 1);
@@ -1439,7 +1439,7 @@ TEST(ZmeyaTestSuite, Coverage_P8_IteratorBeginEndPatterns)
 // P8-03: HashMap::find(key, default) returns the default when the key is absent.
 TEST(ZmeyaTestSuite, Coverage_P8_HashMapFindWithDefault)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapStrIntRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovHashMapStrIntRoot>(
         [](zm::BlobWriter<CovHashMapStrIntRoot>& w)
         {
             w.hashmap_insert(w.root()->map, std::string("only"), 5);
@@ -1501,7 +1501,7 @@ TEST(ZmeyaDeathTestSuite, Coverage_P10_FinalizeZeroAlignmentAborts)
 // P11-01: One root touches strings, arrays, hash containers, pointers, and nested arrays together.
 TEST(ZmeyaTestSuite, Coverage_P11_SingleRootAllMajorKinds)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovAllKindsRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovAllKindsRoot>(
         [](zm::BlobWriter<CovAllKindsRoot>& w)
         {
             w.root()->s = std::string("all_kinds");
@@ -1537,7 +1537,7 @@ TEST(ZmeyaTestSuite, Coverage_P11_MixedIncrementalAndBulkInOneBlob)
         zm::HashMap<zm::String, int32_t> m;
     };
 
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<Root>(
         [](zm::BlobWriter<Root>& w)
         {
             for (int i = 0; i < 20; ++i)
@@ -1557,7 +1557,7 @@ TEST(ZmeyaTestSuite, Coverage_P11_MixedIncrementalAndBulkInOneBlob)
 // P11-03: Forward-compatible roots can carry a version field next to magic for future readers (numeric round-trip only).
 TEST(ZmeyaTestSuite, Coverage_P11_VersionFieldRoundTrip)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovVersionRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovVersionRoot>(
         [](zm::BlobWriter<CovVersionRoot>& w)
         {
             w.root()->magic = 0x59454D5Au;
@@ -1585,8 +1585,8 @@ TEST(ZmeyaTestSuite, Coverage_P12_TwoWriteBlobPODDeterministicBytes)
                 }
             }, 1024, 8);
     };
-    std::vector<char> a = make();
-    std::vector<char> b = make();
+    zm::BlobBuffer a = make();
+    zm::BlobBuffer b = make();
     ASSERT_EQ(a.size(), b.size());
     EXPECT_EQ(std::memcmp(a.data(), b.data(), a.size()), 0);
 }
@@ -1606,7 +1606,7 @@ TEST(ZmeyaTestSuite, Coverage_P13_IncrementalHashWallTimeBoundReleaseOnly)
         model[i] = i * 2;
     }
     auto t0 = std::chrono::steady_clock::now();
-    std::vector<char> blob = zm::write_blob<CovHashMapIntIntRoot>(
+    zm::BlobBuffer blob = zm::write_blob<CovHashMapIntIntRoot>(
         [&model](zm::BlobWriter<CovHashMapIntIntRoot>& w)
         {
             for (const auto& kv : model)
@@ -1623,7 +1623,7 @@ TEST(ZmeyaTestSuite, Coverage_P13_IncrementalHashWallTimeBoundReleaseOnly)
 // P14-01: zm::Pair fields round-trip as plain members on the read side.
 TEST(ZmeyaTestSuite, Coverage_P14_PairFieldRoundTrip)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovPairRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovPairRoot>(
         [](zm::BlobWriter<CovPairRoot>& w)
         {
             w.root()->p.first = -9;
@@ -1638,7 +1638,7 @@ TEST(ZmeyaTestSuite, Coverage_P14_PairFieldRoundTrip)
 // P14-02: enum class stored as uint32_t field round-trips through write_blob.
 TEST(ZmeyaTestSuite, Coverage_P14_EnumClassFieldRoundTrip)
 {
-    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<CovEnumRoot>(
+    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<CovEnumRoot>(
         [](zm::BlobWriter<CovEnumRoot>& w)
         {
             w.root()->e = CovEnumField::B;

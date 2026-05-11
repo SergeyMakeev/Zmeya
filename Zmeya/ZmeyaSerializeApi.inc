@@ -269,16 +269,7 @@ template <typename Key, typename F> void hashset_erase(detail::BuilderBase& buil
     tmp.reserve(hs.size());
     for (const Key& k : hs)
     {
-        bool skip = false;
-        if constexpr (std::is_same<Key, String>::value && std::is_same<F, std::string>::value)
-        {
-            skip = (key == std::string(k.c_str()));
-        }
-        else
-        {
-            skip = (k == key);
-        }
-        if (skip)
+        if (k == key)
         {
             continue;
         }
@@ -369,9 +360,10 @@ template <typename K, typename V, typename FK> void hashmap_erase(detail::Builde
     if constexpr (std::is_same<K, String>::value)
     {
         std::unordered_map<std::string, V> tmp;
+        tmp.reserve(hm.size());
         for (const auto& it : hm)
         {
-            if (key == std::string(it.first.c_str()))
+            if (it.first == key)
             {
                 continue;
             }
@@ -453,13 +445,19 @@ inline void String::clear()
     b->string_clear(*this);
 }
 
-inline String& String::append(const char* suf)
+inline String& String::append(const char* suf, size_t suf_len)
 {
     ZMEYA_ASSERT(suf != nullptr);
     detail::BuilderBase* b = detail::get_global_builder();
     ZMEYA_ASSERT(b != nullptr);
-    b->string_append_cstr(*this, suf, std::strlen(suf));
+    b->string_append_cstr(*this, suf, suf_len);
     return *this;
+}
+
+inline String& String::append(const char* suf)
+{
+    ZMEYA_ASSERT(suf != nullptr);
+    return append(suf, std::strlen(suf));
 }
 
 inline String& String::operator+=(const char* suf) { return append(suf); }
@@ -483,6 +481,12 @@ template <typename TRoot> inline void BlobWriter<TRoot>::string_append(String& s
 {
     ZMEYA_ASSERT(suf != nullptr);
     impl_->string_append_cstr(s, suf, std::strlen(suf));
+}
+
+template <typename TRoot> inline void BlobWriter<TRoot>::string_append(String& s, const char* suf, size_t suf_len)
+{
+    ZMEYA_ASSERT(suf != nullptr);
+    impl_->string_append_cstr(s, suf, suf_len);
 }
 
 template <typename TRoot> inline void BlobWriter<TRoot>::string_clear(String& s) { impl_->string_clear(s); }

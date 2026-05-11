@@ -422,6 +422,16 @@ class BuilderBase
         ZMEYA_ASSERT(old_len + suf_len <= SIZE_MAX - 1);
         const size_t new_len = old_len + suf_len;
         size_t alloc_bytes = new_len + 1;
+        if (old_ptr == nullptr)
+        {
+            // First allocation: reserve a small minimum so chatty append from an empty string does not
+            // grow the arena on every tiny suffix (audit: string_append chatter).
+            const size_t kMinFirstBlob = 32;
+            if (alloc_bytes < kMinFirstBlob)
+            {
+                alloc_bytes = kMinFirstBlob;
+            }
+        }
         if (old_ptr != nullptr)
         {
             if (old_phys_for_growth >= alloc_bytes)
@@ -601,7 +611,7 @@ class BuilderBase
     Phase 2: patch every registered self-relative word from parallel goffset targets (Q9).
     */
 
-    Span<char> finalize(size_t alignment = 4)
+    void finalize_in_place(size_t alignment)
     {
         ZMEYA_ASSERT(alignment > 0);
         ZMEYA_ASSERT(isPowerOfTwo(alignment));
@@ -620,8 +630,20 @@ class BuilderBase
         ZMEYA_ASSERT((data.size() % alignment) == 0);
 
         patch_roffset_slots_from_registry();
+    }
 
+    Span<char> finalize(size_t alignment = 4)
+    {
+        finalize_in_place(alignment);
         return Span<char>(data.data(), data.size());
+    }
+
+    BlobBuffer finalize_move_out(size_t alignment = 4)
+    {
+        finalize_in_place(alignment);
+        BlobBuffer out;
+        out.swap(data);
+        return out;
     }
 
     template <typename T> roffset_t get_relative_offset(const T* base, goffset_t ofs) const
