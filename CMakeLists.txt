@@ -10,6 +10,7 @@ set(ZMEYA_SOURCES
   TestHelper.h
   TestHelper.cpp
   ZmeyaTestNewAPI.cpp
+  ZmeyaTestIncremental.cpp
   ZmeyaTest01.cpp
   ZmeyaTest02.cpp
   ZmeyaTest03.cpp

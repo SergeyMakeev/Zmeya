@@ -24,9 +24,10 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <limits>
 #include <memory>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -368,6 +369,12 @@ class String
     // Friend declarations for new Builder API
     inline friend void assign(String& to, const std::string& from);
     inline friend void assign(String& to, const char* from);
+
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    void clear();
+    String& append(const char* suf);
+    ZMEYA_NODISCARD String& operator+=(const char* suf);
+#endif
 };
 
 ZMEYA_NODISCARD inline bool operator==(const String& left, const char* const right) noexcept { return left.isEqual(right); }
@@ -446,6 +453,14 @@ template <typename T> class Array
 
     ZMEYA_NODISCARD bool empty() const noexcept { return size() == 0; }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    template <typename U> void push_back(U&& v);
+    void pop_back();
+    void clear();
+    void erase_at(size_t index);
+    void resize(size_t new_size, const T& fill = T{});
+#endif
+
     // Assignment operators for automatic conversion
     template<typename F>
     Array<T>& operator=(const std::vector<F>& other)
@@ -462,6 +477,24 @@ template <typename T> class Array
     template <typename T> friend void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from);
     friend class detail::BuilderBase;
 };
+
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+namespace detail
+{
+template <typename U> struct zm_array_push_back_ok : std::integral_constant<bool, std::is_trivially_copyable<U>::value>
+{
+};
+template <> struct zm_array_push_back_ok<String> : std::false_type
+{
+};
+template <typename P> struct zm_array_push_back_ok<Pointer<P>> : std::false_type
+{
+};
+template <typename A> struct zm_array_push_back_ok<Array<A>> : std::false_type
+{
+};
+} // namespace detail
+#endif
 
 /*
 
@@ -575,6 +608,12 @@ template <typename Key> class HashSet
         assign(*this, other);
         return *this;
     }
+
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    template <typename F> void insert(const F& item);
+    template <typename F> void erase(const F& key);
+    void clear();
+#endif
 
     // Friend declarations for new Builder API
     template <typename K, typename F> friend void assign(HashSet<K>& to, const std::unordered_set<F>& from);
@@ -746,6 +785,12 @@ template <typename Key, typename Value> class HashMap
         return *this;
     }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    template <typename FK, typename FV> void insert(const FK& key, const FV& value);
+    template <typename FK> void erase(const FK& key);
+    void clear();
+#endif
+
     // Friend declarations for new Builder API
     template <typename K, typename V, typename FK, typename FV>
     friend void assign(HashMap<K, V>& to, const std::unordered_map<FK, FV>& from);
@@ -908,33 +953,29 @@ class BuilderBase
     {
     };
 
-    struct RoffsetSlot
-    {
-        goffset_t slot_field_goffset;
-        goffset_t target_goffset;
-    };
-
-    std::vector<RoffsetSlot> roffset_slots_;
+    std::unordered_map<goffset_t, goffset_t> roffset_slot_targets_;
 
     void register_roffset_slot(goffset_t slot_field_goffset, goffset_t target_goffset)
     {
-        roffset_slots_.push_back(RoffsetSlot{slot_field_goffset, target_goffset});
+        roffset_slot_targets_[slot_field_goffset] = target_goffset;
     }
 
     void patch_roffset_slots_from_registry()
     {
-        for (const auto& e : roffset_slots_)
+        for (const auto& kv : roffset_slot_targets_)
         {
-            roffset_t* pr = reinterpret_cast<roffset_t*>(&data[e.slot_field_goffset]);
-            if (e.target_goffset == 0)
+            goffset_t slot_g = kv.first;
+            goffset_t target_g = kv.second;
+            roffset_t* pr = reinterpret_cast<roffset_t*>(&data[slot_g]);
+            if (target_g == 0)
             {
                 *pr = 0;
             }
             else
             {
-                const void* slotPtr = &data[e.slot_field_goffset];
+                const void* slotPtr = &data[slot_g];
                 goffset_t baseG = get_global_offset(slotPtr);
-                diff_t d = diff_t(goffset_t(e.target_goffset)) - diff_t(goffset_t(baseG));
+                diff_t d = diff_t(goffset_t(target_g)) - diff_t(goffset_t(baseG));
                 ZMEYA_ASSERT(d >= diff_t(std::numeric_limits<roffset_t>::min()));
                 ZMEYA_ASSERT(d <= diff_t(std::numeric_limits<roffset_t>::max()));
                 *pr = roffset_t(d);
@@ -1027,6 +1068,145 @@ class BuilderBase
     BuilderBase(BuilderBase&&) = delete;
     BuilderBase& operator=(BuilderBase&&) = delete;
 
+    void string_append_cstr(String& s, const char* suf, size_t suf_len)
+    {
+        if (suf_len == 0)
+        {
+            return;
+        }
+        goffset_t str_g = get_global_offset(&s);
+        String* slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
+        size_t old_len = 0;
+        const char* old_ptr = slot->data.get();
+        if (old_ptr != nullptr)
+        {
+            old_len = std::strlen(old_ptr);
+        }
+        goffset_t blob_g = alloc_aligned(old_len + suf_len + 1, 1);
+        slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
+        char* dest = reinterpret_cast<char*>(get_ptr_unsafe_to_store(blob_g));
+        if (old_ptr != nullptr)
+        {
+            std::memcpy(dest, old_ptr, old_len);
+        }
+        std::memcpy(dest + old_len, suf, suf_len);
+        dest[old_len + suf_len] = '\0';
+        slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
+        goffset_t ptr_slot_g = get_global_offset(&slot->data);
+        slot->data.relativeOffset = get_relative_offset(&slot->data, blob_g);
+        register_roffset_slot(ptr_slot_g, blob_g);
+    }
+
+    void string_clear(String& s)
+    {
+        goffset_t str_g = get_global_offset(&s);
+        String* slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
+        slot->data.relativeOffset = 0;
+        register_roffset_slot(get_global_offset(&slot->data), goffset_t(0));
+    }
+
+    template <typename T, typename U> void array_push_back(Array<T>& arr, U&& value)
+    {
+        static_assert(detail::zm_array_push_back_ok<T>::value,
+            "array_push_back is only supported for slab-memcpy-safe element types; use assign(vector<...>) for String, Pointer, nested Array, etc.");
+        goffset_t hdr_g = get_global_offset(&arr);
+        Array<T>* slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+        size_t old_n = size_t(slot->numElements);
+        size_t new_n = old_n + 1;
+        constexpr size_t alignOfT = std::alignment_of<T>::value;
+        constexpr size_t sizeOfT = sizeof(T);
+        size_t new_cap = new_n;
+        if (old_n == 0)
+        {
+            new_cap = (std::max)(size_t(8), new_n);
+        }
+        else
+        {
+            new_cap = (std::max)(new_n, old_n * 2);
+        }
+        goffset_t new_blob_g = alloc_aligned(sizeOfT * new_cap, alignOfT);
+        slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+        T* new_data = reinterpret_cast<T*>(get_ptr_unsafe_to_store(new_blob_g));
+        if (old_n > 0)
+        {
+            T* old_data = slot->get_raw_ptr_unsafe_can_be_relocated();
+            std::memcpy(new_data, old_data, old_n * sizeOfT);
+        }
+        placementCtor<T>(&new_data[old_n], std::forward<U>(value));
+        slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+        slot->numElements = uint32_t(new_n);
+        slot->relativeOffset = get_relative_offset(slot, new_blob_g);
+        register_roffset_slot(hdr_g, new_blob_g);
+    }
+
+    template <typename T> void array_pop_back(Array<T>& arr)
+    {
+        static_assert(detail::zm_array_push_back_ok<T>::value, "array_pop_back requires same constraints as push_back for this builder");
+        goffset_t hdr_g = get_global_offset(&arr);
+        Array<T>* slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+        if (slot->numElements == 0)
+        {
+            return;
+        }
+        slot->numElements -= 1;
+    }
+
+    template <typename T> void array_clear(Array<T>& arr)
+    {
+        goffset_t hdr_g = get_global_offset(&arr);
+        Array<T>* slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+        slot->numElements = 0;
+        slot->relativeOffset = 0;
+        register_roffset_slot(hdr_g, goffset_t(0));
+    }
+
+    template <typename T> void array_erase_at(Array<T>& arr, size_t index)
+    {
+        static_assert(detail::zm_array_push_back_ok<T>::value, "array_erase_at requires same constraints as push_back for this builder");
+        goffset_t hdr_g = get_global_offset(&arr);
+        Array<T>* slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+        if (index >= size_t(slot->numElements))
+        {
+            return;
+        }
+        T* pdata = slot->get_raw_ptr_unsafe_can_be_relocated();
+        constexpr size_t sizeOfT = sizeof(T);
+        size_t tail = size_t(slot->numElements) - index - 1;
+        if (tail > 0)
+        {
+            std::memmove(reinterpret_cast<char*>(pdata + index), reinterpret_cast<char*>(pdata + index + 1), tail * sizeOfT);
+        }
+        slot->numElements -= 1;
+    }
+
+    template <typename T> void array_resize_fill(Array<T>& arr, size_t new_size, const T& fill)
+    {
+        static_assert(detail::zm_array_push_back_ok<T>::value, "array_resize_fill requires same constraints as push_back for this builder");
+        goffset_t hdr_g = get_global_offset(&arr);
+        for (;;)
+        {
+            Array<T>* slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+            size_t old_n = size_t(slot->numElements);
+            if (new_size == old_n)
+            {
+                return;
+            }
+            if (new_size < old_n)
+            {
+                slot->numElements = uint32_t(new_size);
+                return;
+            }
+            array_push_back(*slot, fill);
+        }
+    }
+
+    /*
+    **finalize**
+
+    Phase 1: grow padding to alignment (layout bytes in-place).
+    Phase 2: patch every registered self-relative word from parallel goffset targets (Q9).
+    */
+
     Span<char> finalize(size_t alignment = 4)
     {
         size_t currentSize = data.size();
@@ -1117,6 +1297,32 @@ class BlobWriter
     ZMEYA_NODISCARD bool contains_pointer(const void* ptr) const { return impl_->contains_pointer(ptr); }
 
     ZMEYA_NODISCARD detail::BuilderBase* builder_base() const noexcept { return impl_; }
+
+    void string_append(String& s, const char* suf);
+
+    void string_clear(String& s);
+
+    template <typename T, typename U> void array_push_back(Array<T>& a, U&& v);
+
+    template <typename T> void array_pop_back(Array<T>& a);
+
+    template <typename T> void array_clear(Array<T>& a);
+
+    template <typename T> void array_erase_at(Array<T>& a, size_t index);
+
+    template <typename T> void array_resize(Array<T>& a, size_t new_size, const T& fill);
+
+    template <typename Key, typename F> void hashset_insert(HashSet<Key>& hs, const F& item);
+
+    template <typename Key, typename F> void hashset_erase(HashSet<Key>& hs, const F& key);
+
+    template <typename Key> void hashset_clear(HashSet<Key>& hs);
+
+    template <typename K, typename V, typename FK, typename FV> void hashmap_insert(HashMap<K, V>& hm, const FK& key, const FV& val);
+
+    template <typename K, typename V, typename FK> void hashmap_erase(HashMap<K, V>& hm, const FK& key);
+
+    template <typename K, typename V> void hashmap_clear(HashMap<K, V>& hm);
 };
 
 /*
@@ -1185,21 +1391,30 @@ template <typename T> void assign(zm::Pointer<T>& _to, T* from)
 // Array of pointers assignment function
 template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<T*>& from)
 {
-    if (from.empty())
-    {
-        return; // Array is already default-initialized as empty
-    }
-
     detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
+
+    if (from.empty())
+    {
+        Array<zm::Pointer<T>>* to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
+        if (to->numElements != 0 || to->relativeOffset != 0)
+        {
+            to->numElements = 0;
+            to->relativeOffset = 0;
+            builder->register_roffset_slot(to_offset, goffset_t(0));
+        }
+        return;
+    }
 
     // Check if array is already assigned
     Array<zm::Pointer<T>>* to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
     if (to->numElements != 0 || to->relativeOffset != 0)
     {
-        ZMEYA_ASSERT(false && "Array already assigned - multiple assignments not supported to avoid builder's memory fragmentation");
-        return;
+        to->numElements = 0;
+        to->relativeOffset = 0;
+        builder->register_roffset_slot(to_offset, goffset_t(0));
+        to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
     }
 
     // Allocate array data
@@ -1238,7 +1453,11 @@ inline void assign(String& _to, const std::string& from)
 
     if (from.empty())
     {
-        // Leave as default-initialized (empty string)
+        String* to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_offset));
+        if (!to->empty())
+        {
+            builder->string_clear(*to);
+        }
         return;
     }
 
@@ -1266,7 +1485,11 @@ inline void assign(String& _to, const char* from)
     size_t len = std::strlen(from);
     if (len == 0)
     {
-        // Leave as default-initialized (empty string)
+        String* to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_offset));
+        if (!to->empty())
+        {
+            builder->string_clear(*to);
+        }
         return;
     }
 
@@ -1285,22 +1508,30 @@ inline void assign(String& _to, const char* from)
 // Array conversions - standalone implementation
 template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F>& from)
 {
-    // Allow empty arrays
-    if (from.empty())
-    {
-        return; // Array is already default-initialized as empty
-    }
-
     detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
+
+    if (from.empty())
+    {
+        Array<T>* to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
+        if (to->numElements != 0 || to->relativeOffset != 0)
+        {
+            to->numElements = 0;
+            to->relativeOffset = 0;
+            builder->register_roffset_slot(to_offset, goffset_t(0));
+        }
+        return;
+    }
 
     // Check if array is already assigned
     Array<T>* to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
     if (to->numElements != 0 || to->relativeOffset != 0)
     {
-        ZMEYA_ASSERT(false && "Array already assigned - multiple assignments not supported to avoid builder's memory fragmentation");
-        return;
+        to->numElements = 0;
+        to->relativeOffset = 0;
+        builder->register_roffset_slot(to_offset, goffset_t(0));
+        to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
     }
 
     // Allocate array data
@@ -1326,14 +1557,21 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
 // HashSet conversions - standalone implementation
 template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::unordered_set<F>& from)
 {
-    if (from.empty())
-    {
-        return; // HashSet is already default-initialized as empty
-    }
-
     detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
+
+    if (from.empty())
+    {
+        HashSet<Key>* to = reinterpret_cast<HashSet<Key>*>(builder->get_ptr_unsafe_to_store(to_offset));
+        to->buckets.numElements = 0;
+        to->buckets.relativeOffset = 0;
+        to->items.numElements = 0;
+        to->items.relativeOffset = 0;
+        builder->register_roffset_slot(builder->get_global_offset(&to->buckets), goffset_t(0));
+        builder->register_roffset_slot(builder->get_global_offset(&to->items), goffset_t(0));
+        return;
+    }
 
     size_t numElements = from.size();
     size_t numBuckets = numElements * 2;
@@ -1416,14 +1654,21 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
 template <typename Key, typename Value, typename FK, typename FV>
 void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 {
-    if (from.empty())
-    {
-        return; // HashMap is already default-initialized as empty
-    }
-
     detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     goffset_t to_offset = builder->get_global_offset(&_to);
+
+    if (from.empty())
+    {
+        HashMap<Key, Value>* to = reinterpret_cast<HashMap<Key, Value>*>(builder->get_ptr_unsafe_to_store(to_offset));
+        to->buckets.numElements = 0;
+        to->buckets.relativeOffset = 0;
+        to->items.numElements = 0;
+        to->items.relativeOffset = 0;
+        builder->register_roffset_slot(builder->get_global_offset(&to->buckets), goffset_t(0));
+        builder->register_roffset_slot(builder->get_global_offset(&to->items), goffset_t(0));
+        return;
+    }
 
     size_t numElements = from.size();
     size_t numBuckets = numElements * 2;
@@ -1569,6 +1814,254 @@ void assign(detail::BuilderBase& builder, HashMap<Key, Value>& _to, const std::u
     detail::ScopedBuilder scope(&builder);
     assign(_to, from);
 }
+
+template <typename Key, typename F> void hashset_insert(detail::BuilderBase& builder, HashSet<Key>& hs, const F& item)
+{
+    detail::ScopedBuilder scope(&builder);
+    std::unordered_set<F> tmp;
+    tmp.reserve(hs.size() + 16);
+    for (const Key& k : hs)
+    {
+        if constexpr (std::is_same<Key, String>::value && std::is_same<F, std::string>::value)
+        {
+            tmp.insert(std::string(k.c_str()));
+        }
+        else
+        {
+            tmp.insert(static_cast<F>(k));
+        }
+    }
+    tmp.insert(item);
+    assign(hs, tmp);
+}
+
+template <typename Key, typename F> void hashset_erase(detail::BuilderBase& builder, HashSet<Key>& hs, const F& key)
+{
+    detail::ScopedBuilder scope(&builder);
+    std::unordered_set<F> tmp;
+    tmp.reserve(hs.size());
+    for (const Key& k : hs)
+    {
+        bool skip = false;
+        if constexpr (std::is_same<Key, String>::value && std::is_same<F, std::string>::value)
+        {
+            skip = (key == std::string(k.c_str()));
+        }
+        else
+        {
+            skip = (k == key);
+        }
+        if (skip)
+        {
+            continue;
+        }
+        if constexpr (std::is_same<Key, String>::value && std::is_same<F, std::string>::value)
+        {
+            tmp.insert(std::string(k.c_str()));
+        }
+        else
+        {
+            tmp.insert(static_cast<F>(k));
+        }
+    }
+    assign(hs, tmp);
+}
+
+template <typename Key> void hashset_clear(detail::BuilderBase& builder, HashSet<Key>& hs)
+{
+    detail::ScopedBuilder scope(&builder);
+    if constexpr (std::is_same<Key, String>::value)
+    {
+        assign(hs, std::unordered_set<std::string>{});
+    }
+    else
+    {
+        assign(hs, std::unordered_set<Key>{});
+    }
+}
+
+template <typename K, typename V, typename FK, typename FV> void hashmap_insert(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key, const FV& val)
+{
+    detail::ScopedBuilder scope(&builder);
+    if constexpr (std::is_same<K, String>::value)
+    {
+        std::unordered_map<std::string, V> tmp;
+        tmp.reserve(hm.size() + 8);
+        for (const auto& it : hm)
+        {
+            tmp[std::string(it.first.c_str())] = it.second;
+        }
+        tmp[key] = val;
+        assign(hm, tmp);
+    }
+    else
+    {
+        std::unordered_map<K, V> tmp;
+        tmp.reserve(hm.size() + 8);
+        for (const auto& it : hm)
+        {
+            tmp[it.first] = it.second;
+        }
+        tmp[key] = val;
+        assign(hm, tmp);
+    }
+}
+
+template <typename K, typename V, typename FK> void hashmap_erase(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key)
+{
+    detail::ScopedBuilder scope(&builder);
+    if constexpr (std::is_same<K, String>::value)
+    {
+        std::unordered_map<std::string, V> tmp;
+        for (const auto& it : hm)
+        {
+            if (key == std::string(it.first.c_str()))
+            {
+                continue;
+            }
+            tmp.emplace(std::string(it.first.c_str()), it.second);
+        }
+        assign(hm, tmp);
+    }
+    else
+    {
+        std::unordered_map<K, V> tmp;
+        for (const auto& it : hm)
+        {
+            if (it.first == key)
+            {
+                continue;
+            }
+            tmp.emplace(it.first, it.second);
+        }
+        assign(hm, tmp);
+    }
+}
+
+template <typename K, typename V> void hashmap_clear(detail::BuilderBase& builder, HashMap<K, V>& hm)
+{
+    detail::ScopedBuilder scope(&builder);
+    if constexpr (std::is_same<K, String>::value)
+    {
+        assign(hm, std::unordered_map<std::string, V>{});
+    }
+    else
+    {
+        assign(hm, std::unordered_map<K, V>{});
+    }
+}
+
+template <typename T> template <typename U> inline void Array<T>::push_back(U&& v)
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->array_push_back(*this, std::forward<U>(v));
+}
+
+template <typename T> inline void Array<T>::pop_back()
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->array_pop_back(*this);
+}
+
+template <typename T> inline void Array<T>::clear()
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->array_clear(*this);
+}
+
+template <typename T> inline void Array<T>::erase_at(size_t index)
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->array_erase_at(*this, index);
+}
+
+template <typename T> inline void Array<T>::resize(size_t new_size, const T& fill)
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->array_resize_fill(*this, new_size, fill);
+}
+
+inline void String::clear()
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->string_clear(*this);
+}
+
+inline String& String::append(const char* suf)
+{
+    detail::BuilderBase* b = detail::get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    b->string_append_cstr(*this, suf, std::strlen(suf));
+    return *this;
+}
+
+inline String& String::operator+=(const char* suf) { return append(suf); }
+
+template <typename Key> template <typename F> inline void HashSet<Key>::insert(const F& item) { zm::hashset_insert(*detail::get_global_builder(), *this, item); }
+
+template <typename Key> template <typename F> inline void HashSet<Key>::erase(const F& key) { zm::hashset_erase(*detail::get_global_builder(), *this, key); }
+
+template <typename Key> inline void HashSet<Key>::clear() { zm::hashset_clear(*detail::get_global_builder(), *this); }
+
+template <typename K, typename V> template <typename FK, typename FV> inline void HashMap<K, V>::insert(const FK& key, const FV& val)
+{
+    zm::hashmap_insert(*detail::get_global_builder(), *this, key, val);
+}
+
+template <typename K, typename V> template <typename FK> inline void HashMap<K, V>::erase(const FK& key) { zm::hashmap_erase(*detail::get_global_builder(), *this, key); }
+
+template <typename K, typename V> inline void HashMap<K, V>::clear() { zm::hashmap_clear(*detail::get_global_builder(), *this); }
+
+template <typename TRoot> inline void BlobWriter<TRoot>::string_append(String& s, const char* suf) { impl_->string_append_cstr(s, suf, std::strlen(suf)); }
+
+template <typename TRoot> inline void BlobWriter<TRoot>::string_clear(String& s) { impl_->string_clear(s); }
+
+template <typename TRoot> template <typename T, typename U> inline void BlobWriter<TRoot>::array_push_back(Array<T>& a, U&& v) { impl_->array_push_back(a, std::forward<U>(v)); }
+
+template <typename TRoot> template <typename T> inline void BlobWriter<TRoot>::array_pop_back(Array<T>& a) { impl_->array_pop_back(a); }
+
+template <typename TRoot> template <typename T> inline void BlobWriter<TRoot>::array_clear(Array<T>& a) { impl_->array_clear(a); }
+
+template <typename TRoot> template <typename T> inline void BlobWriter<TRoot>::array_erase_at(Array<T>& a, size_t index) { impl_->array_erase_at(a, index); }
+
+template <typename TRoot> template <typename T> inline void BlobWriter<TRoot>::array_resize(Array<T>& a, size_t new_size, const T& fill) { impl_->array_resize_fill(a, new_size, fill); }
+
+template <typename TRoot> template <typename Key, typename F> inline void BlobWriter<TRoot>::hashset_insert(HashSet<Key>& hs, const F& item) { zm::hashset_insert(*impl_, hs, item); }
+
+template <typename TRoot> template <typename Key, typename F> inline void BlobWriter<TRoot>::hashset_erase(HashSet<Key>& hs, const F& key) { zm::hashset_erase(*impl_, hs, key); }
+
+template <typename TRoot> template <typename Key> inline void BlobWriter<TRoot>::hashset_clear(HashSet<Key>& hs) { zm::hashset_clear(*impl_, hs); }
+
+template <typename TRoot> template <typename K, typename V, typename FK, typename FV>
+inline void BlobWriter<TRoot>::hashmap_insert(HashMap<K, V>& hm, const FK& key, const FV& val)
+{
+    zm::hashmap_insert(*impl_, hm, key, val);
+}
+
+template <typename TRoot> template <typename K, typename V, typename FK> inline void BlobWriter<TRoot>::hashmap_erase(HashMap<K, V>& hm, const FK& key)
+{
+    zm::hashmap_erase(*impl_, hm, key);
+}
+
+template <typename TRoot> template <typename K, typename V> inline void BlobWriter<TRoot>::hashmap_clear(HashMap<K, V>& hm) { zm::hashmap_clear(*impl_, hm); }
+
+template <typename Key, typename F> void hashset_insert(detail::BuilderBase& builder, HashSet<Key>& hs, const F& item);
+
+template <typename Key, typename F> void hashset_erase(detail::BuilderBase& builder, HashSet<Key>& hs, const F& key);
+
+template <typename Key> void hashset_clear(detail::BuilderBase& builder, HashSet<Key>& hs);
+
+template <typename K, typename V, typename FK, typename FV> void hashmap_insert(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key, const FV& val);
+
+template <typename K, typename V, typename FK> void hashmap_erase(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key);
+
+template <typename K, typename V> void hashmap_clear(detail::BuilderBase& builder, HashMap<K, V>& hm);
 
 /*
 

@@ -22,6 +22,10 @@ The backing store is **`std::vector<char>`**, which can reallocate when it grows
 
 Stress tests use a **large initial reserve** when capturing many raw pointers across many **`assign`** steps so the implementation stays simple and deterministic.
 
+## Incremental mutation
+
+**`Array`**, **`String`**, **`HashSet`**, and **`HashMap`** support incremental APIs during **`write_blob`** (see **`AGENTS.md`**). **`array_push_back`** leaves prior slabs in the arena (bump-only **Q2**); sealed blobs may be **larger** than a minimal bulk **`assign`** for the same logical content.
+
 ## Appendix: tests
 
 Run **`ZmeyaTest.exe --gtest_list_tests`** to refresh filters after adding or renaming suites.

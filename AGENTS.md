@@ -8,10 +8,22 @@ This file is for humans and coding agents so the next session does not rediscove
 |------|------|
 | `Zmeya/Zmeya.h` | Header-only library (deserialize always; **`zm::write_blob`** needs `ZMEYA_ENABLE_SERIALIZE_SUPPORT`) |
 | `Zmeya/CMakeLists.txt` | INTERFACE target **`Zmeya`** (include dir + C++17) |
-| Root `CMakeLists.txt` | Executable **`ZmeyaTest`** (all `ZmeyaTest*.cpp` + `TestHelper`) |
+| Root `CMakeLists.txt` | Executable **`ZmeyaTest`** (all **`ZmeyaTest*.cpp`** including **`ZmeyaTestIncremental.cpp`**, plus **`TestHelper`**) |
 | `extern/googletest` | GoogleTest / gtest_main (pulled as submodule or vendored per your checkout) |
 
 Serialization-related tests require **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`**. The root CMakeLists adds it globally for **`ZmeyaTest`** (`add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)`).
+
+## Incremental write APIs (serialize builds)
+
+With **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`**, during **`zm::write_blob`** you can mutate **`zm::Array`**, **`zm::String`**, **`zm::HashSet`**, and **`zm::HashMap`** incrementally.
+
+- **`BlobWriter`**: **`array_push_back`**, **`array_pop_back`**, **`array_clear`**, **`array_erase_at`**, **`array_resize`**, **`string_append`**, **`string_clear`**, **`hashset_insert`**, **`hashset_erase`**, **`hashset_clear`**, **`hashmap_insert`**, **`hashmap_erase`**, **`hashmap_clear`**
+- **Member helpers** (same session, TLS from **`write_blob`**): **`Array::push_back`**, **`String::append`** / **`operator+=`**, **`HashSet::insert`** / **`erase`** / **`clear`**, **`HashMap::insert`** / **`erase`** / **`clear`**
+- **Explicit builder**: **`zm::assign(detail::BuilderBase&, ...)`**, **`zm::hashset_insert(builder, ...)`**, **`zm::hashmap_insert(builder, ...)`**, etc.
+
+**`array_push_back`** is only supported for **slab-memcpy-safe** element types (see **`detail::zm_array_push_back_ok`** in **`Zmeya.h`**). It excludes **`zm::String`**, **`zm::Pointer`**, nested **`zm::Array`**, and similar edge-bearing types; use **`assign(std::vector<...>)`** for those.
+
+Incremental growth uses a **bump allocator**; abandoned slabs remain in the arena, so the final **`std::vector<char>`** can be **larger** than a minimal one-shot assign for the same logical content. Prefer comparing **logical** fields after **`finalize`**, not only raw **`memcmp`** of the whole blob.
 
 ## Prerequisites
 
@@ -77,6 +89,8 @@ Root **`build.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs *
 
 Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Raw pointers returned by **`w.allocate<T>()`** or captured before a large bulk **`operator=`** into zm containers are only valid while the buffer does not move. Stress tests pass a **large initial reserve** as the second argument to **`zm::write_blob`** so the buffer stays stable for that session.
 
+The builder records self-relative **slot** targets in an **`std::unordered_map<goffset_t, goffset_t>`**; **`finalize`** pads to alignment then **patches** every registered word. **`assign` from empty** STL containers or empty strings **clears** the destination **`zm::`** field when it was previously non-empty.
+
 ### Debug vs Release
 
 **`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; it reserves a larger buffer in Release so pointer assignments stay valid.
@@ -86,4 +100,4 @@ Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when
 | File | Purpose |
 |------|---------|
 | `README.md` | Library overview and usage |
-| `NEXT_STEPS.md` | **`write_blob`** / TLS / reallocation notes and follow-ups |
+| `NEXT_STEPS.md` | **`write_blob`**, TLS, reallocation, incremental APIs, registry / finalize |

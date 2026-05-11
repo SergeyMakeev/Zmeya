@@ -72,6 +72,6 @@ Record decisions here as you lock them:
 
 | Topic | Options | Status |
 |-------|---------|--------|
-| Slot identity | **`goffset_t` of slot** vs opaque **`uint32_t` id** remapped on realloc | TBD |
-| **`BlobWriter` carries `BuilderBase*`** | Yes (minimal) vs wrapper type | TBD |
-| Hash incremental internals | Full rebuild of backing arrays on each mutation vs optimized paths | TBD |
+| Slot identity | **`goffset_t` of slot** vs opaque **`uint32_t` id** remapped on realloc | **`goffset_t` keys in `std::unordered_map` on `BuilderBase` (parallel target `goffset_t`)** |
+| **`BlobWriter` carries `BuilderBase*`** | Yes (minimal) vs wrapper type | **Yes via `builder_base()` -> `impl_`** |
+| Hash incremental internals | Full rebuild of backing arrays on each mutation vs optimized paths | **Rebuild-on-write (decode to `std::unordered_*`, `assign`) for v1** |
