@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ZmeyaString.h"
+#include <optional>
 
 namespace zm
 {
@@ -25,6 +26,8 @@ template <typename T> class Array
     roffset_t relativeOffset;
     uint32_t numElements;
 
+    friend struct BlobLayoutValidator;
+
   private:
     ZMEYA_NODISCARD const T* getConstData() const noexcept
     {
@@ -43,6 +46,16 @@ template <typename T> class Array
     {
         const T* data = getConstData();
         return data[index];
+    }
+
+    ZMEYA_NODISCARD std::optional<std::reference_wrapper<const T>> try_at(const size_t index) const noexcept
+    {
+        if (index >= size())
+        {
+            return std::nullopt;
+        }
+        const T* data = getConstData();
+        return std::cref(data[index]);
     }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT

@@ -46,7 +46,7 @@ template <typename Value> struct HashKeyValueAdapterStdString
 struct HashKeyAdapterCStr
 {
     typedef const char* ItemType;
-    static size_t hash(const ItemType& item) { return HashUtils::hashString(item); }
+    static size_t hash(const ItemType& item) { return HashUtils::hashCStringBounded(item, ZMEYA_HASH_ADAPTER_CSTR_MAX_SCAN); }
     static bool eq(const String& a, const ItemType& b) { return a == b; }
 };
 

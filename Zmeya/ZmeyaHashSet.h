@@ -34,6 +34,8 @@ template <typename Key> class HashSet
   public:
     typedef Key Item;
 
+    friend struct BlobLayoutValidator;
+
     struct Bucket
     {
         uint32_t head;
@@ -71,7 +73,7 @@ template <typename Key> class HashSet
             for (bi = 0; bi < m->buckets.size(); ++bi)
             {
                 ni = m->buckets[bi].head;
-                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                if (ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size())
                 {
                     return;
                 }
@@ -101,9 +103,17 @@ template <typename Key> class HashSet
             }
         }
 
-        reference operator*() const noexcept { return m->nodes[ni].key; }
+        reference operator*() const noexcept
+        {
+            ZMEYA_DEBUG_ASSERT(m != nullptr && ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size());
+            return m->nodes[ni].key;
+        }
 
-        pointer operator->() const noexcept { return &m->nodes[ni].key; }
+        pointer operator->() const noexcept
+        {
+            ZMEYA_DEBUG_ASSERT(m != nullptr && ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size());
+            return &m->nodes[ni].key;
+        }
 
         const_iterator& operator++() noexcept
         {
@@ -113,7 +123,18 @@ template <typename Key> class HashSet
             }
             if (ni != ZMEYA_HASH_CHAIN_NIL)
             {
-                ni = m->nodes[ni].next;
+                if (size_t(ni) >= m->nodes.size())
+                {
+                    mark_end();
+                    return *this;
+                }
+                const uint32_t nxt = m->nodes[ni].next;
+                if (nxt != ZMEYA_HASH_CHAIN_NIL && size_t(nxt) >= m->nodes.size())
+                {
+                    mark_end();
+                    return *this;
+                }
+                ni = nxt;
                 if (ni != ZMEYA_HASH_CHAIN_NIL)
                 {
                     return *this;
@@ -123,7 +144,7 @@ template <typename Key> class HashSet
             for (; bi < m->buckets.size(); ++bi)
             {
                 ni = m->buckets[bi].head;
-                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                if (ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size())
                 {
                     return *this;
                 }
@@ -164,8 +185,19 @@ template <typename Key> class HashSet
         const size_t hashMod = numBuckets;
         const size_t hash = Adapter::hash(key);
         const size_t bucketIndex = hash % hashMod;
+        const size_t nodePool = nodes.size();
+        const size_t maxSteps = nodePool + 1;
+        size_t steps = 0;
         for (uint32_t i = buckets[bucketIndex].head; i != ZMEYA_HASH_CHAIN_NIL; i = nodes[i].next)
         {
+            if (++steps > maxSteps)
+            {
+                return false;
+            }
+            if (size_t(i) >= nodePool)
+            {
+                return false;
+            }
             if (Adapter::eq(nodes[i].key, key))
             {
                 return true;

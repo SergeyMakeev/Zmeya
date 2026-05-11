@@ -43,6 +43,8 @@ template <typename Key, typename Value> class HashMap
 {
     typedef Pair<const Key, Value> Item;
 
+    friend struct BlobLayoutValidator;
+
     struct Bucket
     {
         uint32_t head;
@@ -81,7 +83,7 @@ template <typename Key, typename Value> class HashMap
             for (bi = 0; bi < m->buckets.size(); ++bi)
             {
                 ni = m->buckets[bi].head;
-                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                if (ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size())
                 {
                     return;
                 }
@@ -110,7 +112,11 @@ template <typename Key, typename Value> class HashMap
             }
         }
 
-        reference operator*() const noexcept { return reference(m->nodes[ni].key, m->nodes[ni].value); }
+        reference operator*() const noexcept
+        {
+            ZMEYA_DEBUG_ASSERT(m != nullptr && ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size());
+            return reference(m->nodes[ni].key, m->nodes[ni].value);
+        }
 
         const_iterator& operator++() noexcept
         {
@@ -120,7 +126,18 @@ template <typename Key, typename Value> class HashMap
             }
             if (ni != ZMEYA_HASH_CHAIN_NIL)
             {
-                ni = m->nodes[ni].next;
+                if (size_t(ni) >= m->nodes.size())
+                {
+                    mark_end();
+                    return *this;
+                }
+                const uint32_t nxt = m->nodes[ni].next;
+                if (nxt != ZMEYA_HASH_CHAIN_NIL && size_t(nxt) >= m->nodes.size())
+                {
+                    mark_end();
+                    return *this;
+                }
+                ni = nxt;
                 if (ni != ZMEYA_HASH_CHAIN_NIL)
                 {
                     return *this;
@@ -130,7 +147,7 @@ template <typename Key, typename Value> class HashMap
             for (; bi < m->buckets.size(); ++bi)
             {
                 ni = m->buckets[bi].head;
-                if (ni != ZMEYA_HASH_CHAIN_NIL)
+                if (ni != ZMEYA_HASH_CHAIN_NIL && size_t(ni) < m->nodes.size())
                 {
                     return *this;
                 }
@@ -171,8 +188,19 @@ template <typename Key, typename Value> class HashMap
         const size_t hashMod = numBuckets;
         const size_t hash = Adapter::hash(key);
         const size_t bucketIndex = hash % hashMod;
+        const size_t nodePool = nodes.size();
+        const size_t maxSteps = nodePool + 1;
+        size_t steps = 0;
         for (uint32_t i = buckets[bucketIndex].head; i != ZMEYA_HASH_CHAIN_NIL; i = nodes[i].next)
         {
+            if (++steps > maxSteps)
+            {
+                return nullptr;
+            }
+            if (size_t(i) >= nodePool)
+            {
+                return nullptr;
+            }
             if (Adapter::eq(nodes[i].key, key))
             {
                 return &nodes[i].value;

@@ -28,6 +28,8 @@ class String
     Pointer<char> data;
     String() noexcept = default;
 
+    friend struct BlobLayoutValidator;
+
     bool isEqual(const char* s2) const noexcept
     {
         const char* s1 = c_str();

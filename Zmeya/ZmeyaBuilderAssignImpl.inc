@@ -26,6 +26,7 @@ template <typename T> void BuilderBase::impl_assign_pointer_array(zm::Array<zm::
     constexpr size_t sizeOfPtr = sizeof(zm::Pointer<T>);
     zm::goffset_t arrayDataOffset = alloc_aligned(sizeOfPtr * from.size(), alignOfPtr);
     to = reinterpret_cast<zm::Array<zm::Pointer<T>>*>(get_ptr_unsafe_to_store(to_offset));
+    ZMEYA_HARD_ASSERT(from.size() == size_t(uint32_t(from.size())) && "vector size exceeds uint32_t; cannot serialize");
     to->numElements = uint32_t(from.size());
     to->relativeOffset = get_relative_offset(to, arrayDataOffset);
     register_roffset_slot(to_offset, arrayDataOffset);
@@ -66,6 +67,7 @@ template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm:
     constexpr size_t sizeOfT = sizeof(T);
     zm::goffset_t arrayDataOffset = alloc_aligned(sizeOfT * from.size(), alignOfT);
     to = reinterpret_cast<zm::Array<T>*>(get_ptr_unsafe_to_store(to_offset));
+    ZMEYA_HARD_ASSERT(from.size() == size_t(uint32_t(from.size())) && "vector size exceeds uint32_t; cannot serialize");
     to->numElements = uint32_t(from.size());
     to->relativeOffset = get_relative_offset(to, arrayDataOffset);
     register_roffset_slot(to_offset, arrayDataOffset);

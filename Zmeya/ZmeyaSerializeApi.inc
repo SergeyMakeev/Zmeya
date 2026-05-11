@@ -151,6 +151,7 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 // Universal deep_copy - works for all types thanks to operator= overloads
 template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to_ofs)
 {
+    static_assert(std::is_trivially_copyable<T>::value, "deep_copy target T must be trivially copyable (blob field)");
     detail::BuilderBase* builder = detail::get_global_builder();
     ZMEYA_ASSERT(builder != nullptr);
     T* p_to = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(to_ofs));
@@ -160,6 +161,7 @@ template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to
 
 template <typename F, typename T> void deep_copy(detail::BuilderBase& builder, const F& from, zm::goffset_t to_ofs)
 {
+    static_assert(std::is_trivially_copyable<T>::value, "deep_copy target T must be trivially copyable (blob field)");
     T* p_to = reinterpret_cast<T*>(builder.get_ptr_unsafe_to_store(to_ofs));
     detail::BuilderBase::placementCtor<T>(p_to);
     detail::ScopedBuilder scope(&builder);

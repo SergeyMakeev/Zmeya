@@ -19,6 +19,8 @@ template <typename T> class Pointer
   public:
     roffset_t relativeOffset;
 
+    friend struct BlobLayoutValidator;
+
   private:
     bool isEqual(const Pointer& other) const noexcept { return get() == other.get(); }
 
@@ -41,6 +43,31 @@ template <typename T> class Pointer
             return nullptr;
         }
         uintptr_t addr = toAbsoluteAddr(self, relativeOffset);
+        return reinterpret_cast<T*>(addr);
+    }
+
+    ZMEYA_NODISCARD T* try_get_in_blob(const std::byte* blob_begin, size_t blob_size) const noexcept
+    {
+        if (relativeOffset == 0)
+        {
+            return nullptr;
+        }
+        const uintptr_t b = reinterpret_cast<uintptr_t>(blob_begin);
+        const uintptr_t e = b + blob_size;
+        const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+        if (self < b || self + sizeof(Pointer<T>) > e)
+        {
+            return nullptr;
+        }
+        const uintptr_t addr = toAbsoluteAddr(self, relativeOffset);
+        if (addr < b || addr + sizeof(T) > e)
+        {
+            return nullptr;
+        }
+        if ((addr % alignof(T)) != 0)
+        {
+            return nullptr;
+        }
         return reinterpret_cast<T*>(addr);
     }
 

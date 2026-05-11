@@ -21,6 +21,12 @@
 `ZMEYA_EXTERNAL_HASH`, `ZMEYA_ALLOC` / `ZMEYA_FREE`, `ZMEYA_ENABLE_SERIALIZE_SUPPORT`,
 `ZMEYA_NODISCARD`, `ZMEYA_FALLTHROUGH`, and `ZMEYA_ASSERT` stay overridable from the TU.
 
+**Assert policy**
+
+Do not redefine `ZMEYA_ASSERT` to a no-op in release if you rely on internal library checks. Prefer
+`ZMEYA_DEBUG_ASSERT` for expensive checks you may strip, and keep `ZMEYA_HARD_ASSERT` (or the default
+`ZMEYA_ASSERT`) enabled for invariants that must never be violated on bad integration state.
+
 */
 
 #if !defined(ZMEYA_ALLOC) || !defined(ZMEYA_FREE)
@@ -48,13 +54,27 @@ inline void* alloc_aligned_posix(size_t sizeInBytes, size_t alignment)
 #endif
 #endif
 
-#ifndef ZMEYA_ASSERT
+#ifndef ZMEYA_HARD_ASSERT
 namespace zm
 {
 void onAssertionFailed(const char* expression, const char* srcFile, unsigned int srcLine);
 }
 
-#define ZMEYA_ASSERT(expression) (void)((!!(expression)) || (zm::onAssertionFailed(#expression, __FILE__, (unsigned int)(__LINE__)), 0))
+#define ZMEYA_HARD_ASSERT(expression) (void)((!!(expression)) || (zm::onAssertionFailed(#expression, __FILE__, (unsigned int)(__LINE__)), 0))
+#endif
+
+#ifndef ZMEYA_ASSERT
+#define ZMEYA_ASSERT ZMEYA_HARD_ASSERT
+#endif
+
+#if defined(_DEBUG) || defined(ZMEYA_FORCE_DEBUG_ASSERT)
+#ifndef ZMEYA_DEBUG_ASSERT
+#define ZMEYA_DEBUG_ASSERT ZMEYA_HARD_ASSERT
+#endif
+#else
+#ifndef ZMEYA_DEBUG_ASSERT
+#define ZMEYA_DEBUG_ASSERT(expression) ((void)0)
+#endif
 #endif
 
 #ifndef ZMEYA_NODISCARD

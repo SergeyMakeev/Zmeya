@@ -12,6 +12,10 @@ class BuilderBase
   public:
     std::vector<char, BufferAllocator<char, ZMEYA_MAX_ALIGN>> data;
 
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_ARENA_EPOCH)
+    uint64_t arena_realloc_epoch_ = 0;
+#endif
+
     struct PrivateToken
     {
     };
@@ -201,6 +205,9 @@ class BuilderBase
         roffset_slot_targets_ = std::move(newMap);
 
         data.swap(newData);
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_ARENA_EPOCH)
+        ++arena_realloc_epoch_;
+#endif
         dead_ranges_.clear();
         string_blob_phys_bytes_.clear();
     }
@@ -268,7 +275,16 @@ class BuilderBase
 
         // Resize with zero-initialization
         ZMEYA_ASSERT(cursor <= SIZE_MAX - totalBytes);
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_ARENA_EPOCH)
+        const size_t cap_before = data.capacity();
+#endif
         data.resize(cursor + totalBytes, char(0));
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_ARENA_EPOCH)
+        if (data.capacity() != cap_before)
+        {
+            ++arena_realloc_epoch_;
+        }
+#endif
 
         // Verify alignment
         ZMEYA_ASSERT((uintptr_t(&data[allocOffset]) & (alignment - 1)) == 0);
@@ -336,6 +352,10 @@ class BuilderBase
         const char* dataEnd = dataStart + data.size();
         return (ptr >= dataStart && ptr < dataEnd);
     }
+
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_ARENA_EPOCH)
+    uint64_t arena_realloc_epoch() const noexcept { return arena_realloc_epoch_; }
+#endif
 
     // TODO: rename maybe?
     goffset_t get_global_offset(const void* ptr) const

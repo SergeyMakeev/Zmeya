@@ -5,6 +5,16 @@
 namespace zm
 {
 
+/*
+
+**Forward declaration**
+
+`BlobLayoutValidator` walks blob bytes for untrusted-input checks; containers grant it private access.
+
+*/
+
+struct BlobLayoutValidator;
+
 using offset_t = std::uintptr_t;
 using diff_t = std::ptrdiff_t;
 using roffset_t = int32_t;

@@ -39,6 +39,8 @@ get the same surface area as a single monolithic header.
 #include "ZmeyaHashAdapters.h"
 #include "ZmeyaHashSet.h"
 #include "ZmeyaHashMap.h"
+#include "ZmeyaBlobValidate.h"
+#include "ZmeyaStdHash.h"
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
 #include "ZmeyaSerializeFoundation.h"
@@ -48,5 +50,3 @@ get the same surface area as a single monolithic header.
 #include "ZmeyaBlobWriter.h"
 #include "ZmeyaSerializeApi.h"
 #endif
-
-#include "ZmeyaStdHash.h"

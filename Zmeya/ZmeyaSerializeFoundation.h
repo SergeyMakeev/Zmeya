@@ -60,6 +60,7 @@ template <typename T, int Alignment> class BufferAllocator : public std::allocat
     {
         const size_t alignment = Alignment;
         void* const pv = ZMEYA_ALLOC(n * sizeof(T), alignment);
+        ZMEYA_HARD_ASSERT(pv != nullptr && "ZMEYA_ALLOC returned null; supply an allocator that throws or aborts on failure");
         return static_cast<pointer>(pv);
     }
 
@@ -151,6 +152,10 @@ inline constexpr size_t kDefaultWriteBlobArenaReserveBytes = size_t(64) * 1024;
 
 inline thread_local BuilderBase* g_tls_active_builder = nullptr;
 
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_TLS_BUILDER_STACK)
+inline thread_local int g_tls_builder_stack_depth = 0;
+#endif
+
 inline BuilderBase* get_global_builder() noexcept { return g_tls_active_builder; }
 
 inline void set_global_builder(BuilderBase* builder) noexcept { g_tls_active_builder = builder; }
@@ -185,11 +190,20 @@ class ScopedBuilder
     explicit ScopedBuilder(BuilderBase* builder)
     {
         ZMEYA_ASSERT(builder != nullptr);
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_TLS_BUILDER_STACK)
+        ++g_tls_builder_stack_depth;
+#endif
         prev = get_global_builder();
         set_global_builder(builder);
     }
 
-    ~ScopedBuilder() { set_global_builder(prev); }
+    ~ScopedBuilder()
+    {
+        set_global_builder(prev);
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_TLS_BUILDER_STACK)
+        --g_tls_builder_stack_depth;
+#endif
+    }
 
     ScopedBuilder(const ScopedBuilder&) = delete;
     ScopedBuilder& operator=(const ScopedBuilder&) = delete;
