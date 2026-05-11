@@ -16,5 +16,5 @@ build_script:
 - cmake ..
 - cd ..
 - cmake --build .\build\ --config Debug
-- OpenCppCoverage.exe --export_type=cobertura:cobertura.xml --sources Zmeya*.* --excluded_sources *googletest* --modules *.exe -- .\build\Debug\ZmeyaTest.exe
+- OpenCppCoverage.exe --export_type=cobertura:cobertura.xml --sources Zmeya*.* --excluded_sources *googletest* --modules *.exe -- .\build\Debug\ZmeyaTest.exe --gtest_filter=-ZmeyaTestSuite.Coverage_P1_LargeNIncrementalHashMapVsGolden:ZmeyaTestSuite.Coverage_P13_IncrementalHashWallTimeBoundReleaseOnly:ZmeyaTestSuite.ListTest
 - codecov -f cobertura.xml --root %APPVEYOR_BUILD_FOLDER% -t 11f29925-c727-4836-945c-a210c2756e2f

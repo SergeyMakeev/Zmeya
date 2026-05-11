@@ -30,6 +30,9 @@ jobs:
       matrix:
         arch: [Win32, x64]
         defines: [standard]
+    env:
+      # GoogleTest: first '-' starts the negative pattern list (colon-separated). Same exclusions as build_release.cmd / build_debug.cmd OpenCppCoverage pass.
+      ZMEYA_GTEST_FILTER_INSTRUMENTED: '-ZmeyaTestSuite.Coverage_P1_LargeNIncrementalHashMapVsGolden:ZmeyaTestSuite.Coverage_P13_IncrementalHashWallTimeBoundReleaseOnly:ZmeyaTestSuite.ListTest'
     steps:
     - uses: actions/checkout@v1
     - name: Update submodules
@@ -38,5 +41,15 @@ jobs:
       run: mkdir build && cd build && cmake ..
     - name: Build
       run: cd build && cmake --build . --config Release
-    - name: Run unit tests
+    - name: Run unit tests (full suite, no instrumentation)
       run: build/Release/ZmeyaTest.exe
+    - name: Install OpenCppCoverage
+      if: matrix.arch == 'x64'
+      run: choco install opencppcoverage -y
+    - name: Run unit tests under instrumentation (slow tests excluded)
+      if: matrix.arch == 'x64'
+      shell: pwsh
+      run: |
+        $env:PATH = "C:\Program Files\OpenCppCoverage;$env:PATH"
+        $f = $env:ZMEYA_GTEST_FILTER_INSTRUMENTED
+        OpenCppCoverage.exe --sources "Zmeya*.*" --excluded_sources "*googletest*" --modules "*.exe" -- "build/Release/ZmeyaTest.exe" "--gtest_filter=$f"
