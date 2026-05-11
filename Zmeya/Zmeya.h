@@ -908,6 +908,40 @@ class BuilderBase
     {
     };
 
+    struct RoffsetSlot
+    {
+        goffset_t slot_field_goffset;
+        goffset_t target_goffset;
+    };
+
+    std::vector<RoffsetSlot> roffset_slots_;
+
+    void register_roffset_slot(goffset_t slot_field_goffset, goffset_t target_goffset)
+    {
+        roffset_slots_.push_back(RoffsetSlot{slot_field_goffset, target_goffset});
+    }
+
+    void patch_roffset_slots_from_registry()
+    {
+        for (const auto& e : roffset_slots_)
+        {
+            roffset_t* pr = reinterpret_cast<roffset_t*>(&data[e.slot_field_goffset]);
+            if (e.target_goffset == 0)
+            {
+                *pr = 0;
+            }
+            else
+            {
+                const void* slotPtr = &data[e.slot_field_goffset];
+                goffset_t baseG = get_global_offset(slotPtr);
+                diff_t d = diff_t(goffset_t(e.target_goffset)) - diff_t(goffset_t(baseG));
+                ZMEYA_ASSERT(d >= diff_t(std::numeric_limits<roffset_t>::min()));
+                ZMEYA_ASSERT(d <= diff_t(std::numeric_limits<roffset_t>::max()));
+                *pr = roffset_t(d);
+            }
+        }
+    }
+
     goffset_t alloc_aligned(size_t numBytes, size_t alignment)
     {
         ZMEYA_ASSERT(isPowerOfTwo(alignment));
@@ -995,7 +1029,6 @@ class BuilderBase
 
     Span<char> finalize(size_t alignment = 4)
     {
-        // Add padding to ensure final size is multiple of alignment
         size_t currentSize = data.size();
         size_t remainder = currentSize % alignment;
         if (remainder != 0)
@@ -1005,6 +1038,9 @@ class BuilderBase
         }
 
         ZMEYA_ASSERT((data.size() % alignment) == 0);
+
+        patch_roffset_slots_from_registry();
+
         return Span<char>(data.data(), data.size());
     }
 
@@ -1079,6 +1115,8 @@ class BlobWriter
     ZMEYA_NODISCARD T* allocate() { return impl_->template allocate<T>(); }
 
     ZMEYA_NODISCARD bool contains_pointer(const void* ptr) const { return impl_->contains_pointer(ptr); }
+
+    ZMEYA_NODISCARD detail::BuilderBase* builder_base() const noexcept { return impl_; }
 };
 
 /*
@@ -1117,6 +1155,7 @@ template <typename F, typename T> void deep_copy(const std::vector<F>& from, zm:
 template <typename F, typename Key> void deep_copy(const std::unordered_set<F>& from, zm::goffset_t to_ofs);
 template <typename FK, typename FV, typename Key, typename Value> void deep_copy(const std::unordered_map<FK, FV>& from, zm::goffset_t to_ofs);
 template <typename F1, typename F2, typename T1, typename T2> void deep_copy(const Pair<F1, F2>& from, zm::goffset_t to_ofs);
+template <typename F, typename T> void deep_copy(detail::BuilderBase& builder, const F& from, zm::goffset_t to_ofs);
 
 // Pointer assignment function
 template <typename T> void assign(zm::Pointer<T>& _to, T* from)
@@ -1129,16 +1168,18 @@ template <typename T> void assign(zm::Pointer<T>& _to, T* from)
     {
         zm::Pointer<T>* to = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
         to->relativeOffset = 0; // null pointer
+        builder->register_roffset_slot(to_offset, goffset_t(0));
         return;
     }
 
     // Get offsets and calculate relative offset safely
     ZMEYA_ASSERT(builder->contains_pointer(from) && "Pointer 'from' should belong to the builder");
-    
+
     goffset_t fromOffset = builder->get_global_offset(from);
-    
+
     zm::Pointer<T>* to = reinterpret_cast<zm::Pointer<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
     to->relativeOffset = builder->get_relative_offset(to, fromOffset);
+    builder->register_roffset_slot(to_offset, fromOffset);
 }
 
 // Array of pointers assignment function
@@ -1171,6 +1212,7 @@ template <typename T> void assign(Array<zm::Pointer<T>>& _to, const std::vector<
     to = reinterpret_cast<Array<zm::Pointer<T>>*>(builder->get_ptr_unsafe_to_store(to_offset));
     to->numElements = uint32_t(from.size());
     to->relativeOffset = builder->get_relative_offset(to, arrayDataOffset);
+    builder->register_roffset_slot(to_offset, arrayDataOffset);
 
     // Initialize and fill array elements
     for (size_t i = 0; i < from.size(); ++i)
@@ -1210,6 +1252,7 @@ inline void assign(String& _to, const std::string& from)
 
     String* to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_offset));
     to->data.relativeOffset = builder->get_relative_offset(&to->data, stringDataOffset);
+    builder->register_roffset_slot(builder->get_global_offset(&to->data), stringDataOffset);
 }
 
 inline void assign(String& _to, const char* from)
@@ -1236,6 +1279,7 @@ inline void assign(String& _to, const char* from)
 
     String* to = reinterpret_cast<String*>(builder->get_ptr_unsafe_to_store(to_offset));
     to->data.relativeOffset = builder->get_relative_offset(&to->data, stringDataOffset);
+    builder->register_roffset_slot(builder->get_global_offset(&to->data), stringDataOffset);
 }
 
 // Array conversions - standalone implementation
@@ -1269,6 +1313,7 @@ template <typename T, typename F> void assign(Array<T>& _to, const std::vector<F
     to = reinterpret_cast<Array<T>*>(builder->get_ptr_unsafe_to_store(to_offset));
     to->numElements = uint32_t(from.size());
     to->relativeOffset = builder->get_relative_offset(to, arrayDataOffset);
+    builder->register_roffset_slot(to_offset, arrayDataOffset);
 
     for (size_t i = 0; i < from.size(); ++i)
     {
@@ -1363,6 +1408,8 @@ template <typename Key, typename F> void assign(HashSet<Key>& _to, const std::un
     to->buckets.relativeOffset = builder->get_relative_offset(&to->buckets, bucketsDataOffset);
     to->items.numElements = uint32_t(numElements);
     to->items.relativeOffset = builder->get_relative_offset(&to->items, itemsDataOffset);
+    builder->register_roffset_slot(builder->get_global_offset(&to->buckets), bucketsDataOffset);
+    builder->register_roffset_slot(builder->get_global_offset(&to->items), itemsDataOffset);
 }
 
 // HashMap conversions - standalone implementation
@@ -1458,6 +1505,8 @@ void assign(HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
     to->buckets.relativeOffset = builder->get_relative_offset(&to->buckets, bucketsDataOffset);
     to->items.numElements = uint32_t(numElements);
     to->items.relativeOffset = builder->get_relative_offset(&to->items, itemsDataOffset);
+    builder->register_roffset_slot(builder->get_global_offset(&to->buckets), bucketsDataOffset);
+    builder->register_roffset_slot(builder->get_global_offset(&to->items), itemsDataOffset);
 }
 
 // Deep-copy adapter implementations
@@ -1470,6 +1519,55 @@ template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to
     T* p_to = reinterpret_cast<T*>(builder->get_ptr_unsafe_to_store(to_ofs));
     detail::BuilderBase::placementCtor<T>(p_to);
     *p_to = from; // This will call the appropriate operator= automatically!
+}
+
+template <typename F, typename T> void deep_copy(detail::BuilderBase& builder, const F& from, zm::goffset_t to_ofs)
+{
+    detail::ScopedBuilder scope(&builder);
+    deep_copy<F, T>(from, to_ofs);
+}
+
+template <typename T> void assign(detail::BuilderBase& builder, zm::Pointer<T>& _to, T* from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
+}
+
+template <typename T> void assign(detail::BuilderBase& builder, Array<zm::Pointer<T>>& _to, const std::vector<T*>& from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
+}
+
+inline void assign(detail::BuilderBase& builder, String& _to, const std::string& from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
+}
+
+inline void assign(detail::BuilderBase& builder, String& _to, const char* from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
+}
+
+template <typename T, typename F> void assign(detail::BuilderBase& builder, Array<T>& _to, const std::vector<F>& from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
+}
+
+template <typename Key, typename F> void assign(detail::BuilderBase& builder, HashSet<Key>& _to, const std::unordered_set<F>& from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
+}
+
+template <typename Key, typename Value, typename FK, typename FV>
+void assign(detail::BuilderBase& builder, HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
+{
+    detail::ScopedBuilder scope(&builder);
+    assign(_to, from);
 }
 
 /*

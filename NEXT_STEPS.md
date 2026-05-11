@@ -2,9 +2,11 @@
 
 ## Current API
 
-- **`zm::write_blob<TRoot>(fn)`** returns an owning **`std::vector<char>`** after calling **`fn(w)`** with **`zm::BlobWriter<TRoot>`** (root + **`allocate`**, etc.). Implementation types live in **`zm::detail`** only.
+- **`zm::write_blob<TRoot>(fn)`** returns an owning **`std::vector<char>`** after calling **`fn(w)`** with **`zm::BlobWriter<TRoot>`** (root + **`allocate`**, **`contains_pointer`**, **`builder_base()`**, etc.). Implementation types live in **`zm::detail`** only.
 
-Assignments into **`zm::*`** fields use each type's **`operator=`** (STL-shaped RHS and **`zm::Pointer<T> = T*`**), resolved against the **thread-local** active blob writer installed for that **`zm::write_blob`** call.
+- **`zm::assign(zm::detail::BuilderBase& builder, ...)`** overloads install the builder as the active context for **`assign`** / **`deep_copy`** without relying on **`write_blob`** alone (TLS is still used inside **`operator=`** on **`zm::*`** types for ergonomics).
+
+- Relative-offset slots (**`Pointer`**, **`Array`** headers, **`String::data`**, nested **`HashMap`/`HashSet`** **`Array`** headers) are recorded on **`detail::BuilderBase`** with parallel **`goffset_t`** targets; **`finalize`** runs a patch pass so sealed bytes stay consistent with that metadata.
 
 ## Threading
 
@@ -12,13 +14,13 @@ Do not assign into **`zm::*`** containers from worker threads during **`zm::writ
 
 ## Blob growth (reallocation)
 
-The internal backing store uses **`std::vector<char>`**, which can **reallocate** when it grows. Relative offsets stored in **`zm::*`** fields can become invalid if the buffer moves mid-write; stress tests pass a **large initial reserve** as the second argument to **`zm::write_blob`** so the heap block stays stable for that session.
+The backing store is **`std::vector<char>`**, which can reallocate when it grows.
 
-Possible directions when this becomes a priority:
+**Indices into the arena (`goffset_t`) stay valid across realloc**; self-relative **`roffset_t`** fields written correctly while both sides live in the arena remain coherent when the whole buffer moves together.
 
-- Handle-based construction with a single finalize pass that emits final relative offsets; or
-- Reserve capacity heuristics plus documented **two-pass** write; or
-- Chunked / slab backing storage with stable logical addresses.
+**Raw pointers** returned by **`allocate()`**, **`root()`**, addresses of **`zm::*`** objects in the blob, or pointers returned by **`get()`** can become **stale** after a realloc if you cache them across operations that grow the buffer. Refresh them after growth (e.g. call **`writer.root()`** again before touching nested fields, or keep **`goffset_t`** instead of **`T*`** until finalize).
+
+Stress tests use a **large initial reserve** when capturing many raw pointers across many **`assign`** steps so the implementation stays simple and deterministic.
 
 ## Appendix: tests
 

@@ -2,8 +2,10 @@
 #include "Zmeya.h"
 #include "gtest/gtest.h"
 
+#include <cstring>
 #include <dbghelp.h>
 #include <iostream>
+#include <memory>
 #include <windows.h>
 
 #pragma comment(lib, "dbghelp.lib")
@@ -129,4 +131,106 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
     EXPECT_EQ(fileRoot->nestedArray[2][1], "world");
     EXPECT_EQ(fileRoot->nestedArray[2][2], "nested");
     EXPECT_EQ(fileRoot->nestedArray[2][3], "test");
+}
+
+static void FillBasicTestRoot(TestRoot* root)
+{
+    root->description = "Test description";
+
+    std::vector<int32_t> srcInts = {1, 2, 3, 4, 5};
+    root->intArray = srcInts;
+
+    std::vector<std::string> srcStrings = {"hello", "world", "test"};
+    root->stringArray = srcStrings;
+
+    std::unordered_map<std::string, int32_t> srcMap = {{"one", 1}, {"two", 2}, {"three", 3}};
+    root->hashMap = srcMap;
+
+    std::unordered_set<std::string> srcSet = {"alpha", "beta", "gamma"};
+    root->hashSet = srcSet;
+}
+
+template <typename BlobWriterT>
+static void FillBasicTestRootFresh(BlobWriterT& w)
+{
+    w.root()->description = "Test description";
+
+    const std::vector<int32_t> srcInts = {1, 2, 3, 4, 5};
+    w.root()->intArray = srcInts;
+
+    const std::vector<std::string> srcStrings = {"hello", "world", "test"};
+    w.root()->stringArray = srcStrings;
+
+    const std::unordered_map<std::string, int32_t> srcMap = {{"one", 1}, {"two", 2}, {"three", 3}};
+    w.root()->hashMap = srcMap;
+
+    const std::unordered_set<std::string> srcSet = {"alpha", "beta", "gamma"};
+    w.root()->hashSet = srcSet;
+}
+
+TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
+{
+    std::unique_ptr<zm::detail::Builder<TestRoot>> builder = zm::detail::Builder<TestRoot>::create(8192);
+    TestRoot* root = builder->getRoot();
+
+    zm::assign(*builder, root->description, std::string("Test description"));
+
+    const std::vector<int32_t> srcInts = {1, 2, 3, 4, 5};
+    zm::assign(*builder, root->intArray, srcInts);
+
+    const std::vector<std::string> srcStrings = {"hello", "world", "test"};
+    zm::assign(*builder, root->stringArray, srcStrings);
+
+    const std::unordered_map<std::string, int32_t> srcMap = {{"one", 1}, {"two", 2}, {"three", 3}};
+    zm::assign(*builder, root->hashMap, srcMap);
+
+    const std::unordered_set<std::string> srcSet = {"alpha", "beta", "gamma"};
+    zm::assign(*builder, root->hashSet, srcSet);
+
+    zm::Span<char> span = builder->finalize(4);
+    std::vector<char> blobA(span.data, span.data + span.size);
+
+    std::vector<char> blobB = zm::write_blob<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
+        {
+            FillBasicTestRoot(w.root());
+        });
+
+    ASSERT_EQ(blobA.size(), blobB.size());
+    EXPECT_EQ(std::memcmp(blobA.data(), blobB.data(), blobA.size()), 0);
+}
+
+TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesLargeReserve)
+{
+    constexpr size_t kTinyReserve = 32;
+
+    std::vector<char> golden = zm::write_blob<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
+        {
+            FillBasicTestRootFresh(w);
+        },
+        1024 * 1024,
+        4);
+
+    std::vector<char> stressed = zm::write_blob<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
+        {
+            FillBasicTestRootFresh(w);
+        },
+        kTinyReserve,
+        4);
+
+    ASSERT_EQ(golden.size(), stressed.size());
+    EXPECT_EQ(std::memcmp(golden.data(), stressed.data(), golden.size()), 0);
+}
+
+TEST(ZmeyaTestSuite, NewBuilderAPI_BlobWriterBuilderBaseAccessor)
+{
+    zm::write_blob<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
+        {
+            zm::detail::BuilderBase* bb = w.builder_base();
+            EXPECT_NE(bb, nullptr);
+            EXPECT_TRUE(bb->contains_pointer(w.root()));
+        });
 }
