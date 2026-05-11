@@ -93,10 +93,10 @@ static void generateTestFile(const char* fileName)
 {
     std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-    std::vector<char> bytesCopy = zm::build<SimpleFileTestRoot>(
-        [&objectNames](zm::BuildSession<SimpleFileTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<SimpleFileTestRoot>(
+        [&objectNames](zm::BlobWriter<SimpleFileTestRoot>& w)
         {
-            SimpleFileTestRoot* root = session.root();
+            SimpleFileTestRoot* root = w.root();
             root->magic = 0x59454D5A;
 
             std::vector<ObjectFlat> objs;

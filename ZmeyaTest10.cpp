@@ -143,13 +143,13 @@ static void validate(const MMapTestRoot* root)
     }
 }
 
-static void createChildren(zm::BuildSession<MMapTestRoot>& session, MMapTestNode* parent, size_t count, size_t startIndex)
+static void createChildren(zm::BlobWriter<MMapTestRoot>& w, MMapTestNode* parent, size_t count, size_t startIndex)
 {
     std::vector<MMapTestNode*> childPtrs;
     childPtrs.reserve(count);
     for (size_t i = 0; i < count; i++)
     {
-        MMapTestLeafNode* leaf = session.allocate<MMapTestLeafNode>();
+        MMapTestLeafNode* leaf = w.allocate<MMapTestLeafNode>();
         leaf->nodeType = NodeType::Leaf;
         leaf->name = std::string("leaf_") + std::to_string(startIndex + i);
         leaf->payload = uint32_t(count + startIndex * 13);
@@ -159,9 +159,9 @@ static void createChildren(zm::BuildSession<MMapTestRoot>& session, MMapTestNode
     parent->children = childPtrs;
 }
 
-static MMapTestNode* allocateNode1(zm::BuildSession<MMapTestRoot>& session, MMapTestRoot* root, size_t index)
+static MMapTestNode* allocateNode1(zm::BlobWriter<MMapTestRoot>& w, MMapTestRoot* root, size_t index)
 {
-    MMapTestNode1* node = session.allocate<MMapTestNode1>();
+    MMapTestNode1* node = w.allocate<MMapTestNode1>();
     node->nodeType = NodeType::NodeType1;
     node->name = std::string("node_") + std::to_string(index);
     node->str1 = std::string(kLongDesc);
@@ -169,13 +169,13 @@ static MMapTestNode* allocateNode1(zm::BuildSession<MMapTestRoot>& session, MMap
     node->root = root;
 
     size_t numChildrenNodes = 1 + (index % 6);
-    createChildren(session, node, numChildrenNodes, index);
+    createChildren(w, node, numChildrenNodes, index);
     return node;
 }
 
-static MMapTestNode* allocateNode2(zm::BuildSession<MMapTestRoot>& session, size_t index)
+static MMapTestNode* allocateNode2(zm::BlobWriter<MMapTestRoot>& w, size_t index)
 {
-    MMapTestNode2* node = session.allocate<MMapTestNode2>();
+    MMapTestNode2* node = w.allocate<MMapTestNode2>();
     node->nodeType = NodeType::NodeType2;
     node->name = std::string("item_") + std::to_string(index);
     node->str1 = std::string(kLongDesc);
@@ -184,16 +184,16 @@ static MMapTestNode* allocateNode2(zm::BuildSession<MMapTestRoot>& session, size
     node->hashSet = hs;
 
     size_t numChildrenNodes = 2;
-    createChildren(session, node, numChildrenNodes, index);
+    createChildren(w, node, numChildrenNodes, index);
     return node;
 }
 
 static void generateTestFile(const char* fileName)
 {
-    std::vector<char> bytes = zm::build<MMapTestRoot>(
-        [](zm::BuildSession<MMapTestRoot>& session)
+    std::vector<char> bytes = zm::write_blob<MMapTestRoot>(
+        [](zm::BlobWriter<MMapTestRoot>& w)
         {
-            MMapTestRoot* root = session.root();
+            MMapTestRoot* root = w.root();
             root->magic = 0x59454D5A;
             root->desc = std::string(kLongDesc);
 
@@ -208,11 +208,11 @@ static void generateTestFile(const char* fileName)
             {
                 if ((i & 1) == 0)
                 {
-                    rootNodes.push_back(allocateNode1(session, root, i));
+                    rootNodes.push_back(allocateNode1(w, root, i));
                 }
                 else
                 {
-                    rootNodes.push_back(allocateNode2(session, i));
+                    rootNodes.push_back(allocateNode2(w, i));
                 }
             }
             root->roots = rootNodes;

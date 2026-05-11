@@ -68,10 +68,10 @@ static void validate(const HashSetTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashSetTest)
 {
-    std::vector<char> bytesCopy = zm::build<HashSetTestRoot>(
-        [](zm::BuildSession<HashSetTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<HashSetTestRoot>(
+        [](zm::BlobWriter<HashSetTestRoot>& w)
         {
-            HashSetTestRoot* root = session.root();
+            HashSetTestRoot* root = w.root();
 
             std::unordered_set<int> testSet1 = {5, 7, 3, 11, 99};
             root->set1 = testSet1;

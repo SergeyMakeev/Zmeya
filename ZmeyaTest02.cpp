@@ -33,13 +33,13 @@ static void validate(const PointerTestRoot* root)
 
 TEST(ZmeyaTestSuite, PointerTest)
 {
-    std::vector<char> bytesCopy = zm::build<PointerTestRoot>(
-        [](zm::BuildSession<PointerTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<PointerTestRoot>(
+        [](zm::BlobWriter<PointerTestRoot>& w)
         {
-            PointerTestRoot* root = session.root();
+            PointerTestRoot* root = w.root();
 
-            PointerTestNode* nodeLeft = session.allocate<PointerTestNode>();
-            PointerTestNode* nodeRight = session.allocate<PointerTestNode>();
+            PointerTestNode* nodeLeft = w.allocate<PointerTestNode>();
+            PointerTestNode* nodeRight = w.allocate<PointerTestNode>();
 
             root->left = nodeLeft;
             root->right = nodeRight;

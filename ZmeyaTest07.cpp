@@ -85,10 +85,10 @@ static void validate(const HashMapTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashMapTest)
 {
-    std::vector<char> bytesCopy = zm::build<HashMapTestRoot>(
-        [](zm::BuildSession<HashMapTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<HashMapTestRoot>(
+        [](zm::BlobWriter<HashMapTestRoot>& w)
         {
-            HashMapTestRoot* root = session.root();
+            HashMapTestRoot* root = w.root();
 
             std::unordered_map<int, float> testMap = {{3, 7.0f}, {4, 17.0f}, {9, 79.0f}, {11, 13.0f}, {77, 13.0f}};
             root->hashMap1 = testMap;

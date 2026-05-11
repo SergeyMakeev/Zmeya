@@ -53,10 +53,10 @@ static void validate(const IteratorsTestRoot* root)
 
 TEST(ZmeyaTestSuite, IteratorsTest)
 {
-    std::vector<char> bytesCopy = zm::build<IteratorsTestRoot>(
-        [](zm::BuildSession<IteratorsTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<IteratorsTestRoot>(
+        [](zm::BlobWriter<IteratorsTestRoot>& w)
         {
-            IteratorsTestRoot* root = session.root();
+            IteratorsTestRoot* root = w.root();
 
             std::vector<int> arr_data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
             root->arr = arr_data;

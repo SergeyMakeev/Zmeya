@@ -6,7 +6,7 @@ This file is for humans and coding agents so the next session does not rediscove
 
 | Path | Role |
 |------|------|
-| `Zmeya/Zmeya.h` | Header-only library (deserialize always; serialize/build APIs need `ZMEYA_ENABLE_SERIALIZE_SUPPORT`) |
+| `Zmeya/Zmeya.h` | Header-only library (deserialize always; **`zm::write_blob`** needs `ZMEYA_ENABLE_SERIALIZE_SUPPORT`) |
 | `Zmeya/CMakeLists.txt` | INTERFACE target **`Zmeya`** (include dir + C++17) |
 | Root `CMakeLists.txt` | Executable **`ZmeyaTest`** (all `ZmeyaTest*.cpp` + `TestHelper`) |
 | `extern/googletest` | GoogleTest / gtest_main (pulled as submodule or vendored per your checkout) |
@@ -73,9 +73,9 @@ Some tests write files next to the **current working directory** (e.g. `test.zm`
 
 Root **`build.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs **`OpenCppCoverage.exe`** when that tool is on `PATH`. If OpenCppCoverage is not installed, it runs **`build\Debug\ZmeyaTest.exe`** directly so the script still validates tests.
 
-### Builder growth and raw pointers
+### Blob writer growth and raw pointers
 
-Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Raw pointers returned by **`session.allocate<T>()`** or captured before a large bulk **`operator=`** into zm containers are only valid while the buffer does not move. Stress tests pass a **large initial reserve** as the second argument to **`zm::build`** so the buffer stays stable for that session.
+Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Raw pointers returned by **`w.allocate<T>()`** or captured before a large bulk **`operator=`** into zm containers are only valid while the buffer does not move. Stress tests pass a **large initial reserve** as the second argument to **`zm::write_blob`** so the buffer stays stable for that session.
 
 ### Debug vs Release
 
@@ -86,4 +86,4 @@ Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when
 | File | Purpose |
 |------|---------|
 | `README.md` | Library overview and usage |
-| `NEXT_STEPS.md` | Builder TLS/reallocation notes and follow-ups |
+| `NEXT_STEPS.md` | **`write_blob`** / TLS / reallocation notes and follow-ups |

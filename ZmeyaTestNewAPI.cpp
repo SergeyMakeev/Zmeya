@@ -41,7 +41,7 @@ void onAssertionFailed(const char* expression, const char* srcFile, unsigned int
 
 /*
 
-Test the new simplified Builder API with deep-copy adapters
+Test zm::write_blob / zm::BlobWriter deep-copy adapters for STL-shaped RHS.
 
 */
 
@@ -57,10 +57,10 @@ struct TestRoot
 
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
-    std::vector<char> blob = zm::build<TestRoot>(
-        [](zm::BuildSession<TestRoot>& session)
+    std::vector<char> blob = zm::write_blob<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
         {
-            TestRoot* root = session.root();
+            TestRoot* root = w.root();
             std::string srcDesc = "Test description";
             root->description = srcDesc;
 
@@ -103,10 +103,10 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
-    std::vector<char> blob = zm::build<TestRoot>(
-        [](zm::BuildSession<TestRoot>& session)
+    std::vector<char> blob = zm::write_blob<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
         {
-            TestRoot* root = session.root();
+            TestRoot* root = w.root();
             std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
             root->nestedArray = srcNested;
         });

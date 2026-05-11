@@ -41,12 +41,12 @@ static void validate(const StringTestRoot* root)
 
 TEST(ZmeyaTestSuite, StringTest_Debug)
 {
-    zm::build<StringTestRoot>([](zm::BuildSession<StringTestRoot>& session)
+    zm::write_blob<StringTestRoot>([](zm::BlobWriter<StringTestRoot>& w)
                               {
-                                  StringTestRoot* root = session.root();
+                                  StringTestRoot* root = w.root();
 
-                                  EXPECT_TRUE(session.contains_pointer(root));
-                                  EXPECT_TRUE(session.contains_pointer(&root->strArr1));
+                                  EXPECT_TRUE(w.contains_pointer(root));
+                                  EXPECT_TRUE(w.contains_pointer(&root->strArr1));
 
                                   root->str1 = "test";
 
@@ -57,10 +57,10 @@ TEST(ZmeyaTestSuite, StringTest_Debug)
 
 TEST(ZmeyaTestSuite, StringTest)
 {
-    std::vector<char> bytesCopy = zm::build<StringTestRoot>(
-        [](zm::BuildSession<StringTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<StringTestRoot>(
+        [](zm::BlobWriter<StringTestRoot>& w)
         {
-            StringTestRoot* root = session.root();
+            StringTestRoot* root = w.root();
 
             root->str1 = "Hello World - This is a very long test string. Expected 1000000 instances";
 

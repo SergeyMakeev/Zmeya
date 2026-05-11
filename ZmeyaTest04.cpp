@@ -57,16 +57,16 @@ TEST(ZmeyaTestSuite, ListTest)
     uint32_t numNodes = 1000000;
 #endif
 
-    std::vector<char> bytesCopy = zm::build<ListTestRoot>(
-        [numNodes](zm::BuildSession<ListTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<ListTestRoot>(
+        [numNodes](zm::BlobWriter<ListTestRoot>& w)
         {
-            ListTestRoot* root = session.root();
+            ListTestRoot* root = w.root();
 
             root->numNodes = numNodes;
             ListTestNode* prevNode = nullptr;
             for (uint32_t i = 0; i < numNodes; i++)
             {
-                ListTestNode* node = session.allocate<ListTestNode>();
+                ListTestNode* node = w.allocate<ListTestNode>();
                 node->payload = 13 + i;
                 node->prev = prevNode;
                 if (prevNode)

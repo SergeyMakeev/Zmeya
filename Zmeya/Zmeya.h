@@ -1048,24 +1048,24 @@ template <typename TRoot> class Builder : public BuilderBase
 
 /*
 
-**Serialization session**
+**Blob writing**
 
-User-facing entry is **`zm::build`** and **`BuildSession`** only. Implementation types live in **`zm::detail`**.
+User-facing entry is **`zm::write_blob`** and **`BlobWriter`** only. Implementation types live in **`zm::detail`**.
 
 */
 
 template <typename TRoot, typename Fn>
-std::vector<char> build(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
+std::vector<char> write_blob(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
 
 template <typename TRoot>
-class BuildSession
+class BlobWriter
 {
     struct Private {};
 
     template <typename R, typename Fn>
-    friend std::vector<char> build(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
+    friend std::vector<char> write_blob(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
 
-    explicit BuildSession(detail::Builder<TRoot>* impl, Private)
+    explicit BlobWriter(detail::Builder<TRoot>* impl, Private)
         : impl_(impl)
     {
     }
@@ -1083,19 +1083,19 @@ class BuildSession
 
 /*
 
-**build**
+**write_blob**
 
-Installs TLS, invokes **`fn(session)`**, then finalizes. **`BuildSession`** is the stable handle so internals can evolve without changing call sites.
+Installs TLS, invokes **`fn(writer)`**, then finalizes. **`BlobWriter`** is the stable handle so internals can evolve without changing call sites.
 
 */
 
 template <typename TRoot, typename Fn>
-ZMEYA_NODISCARD inline std::vector<char> build(Fn&& fn, size_t initialSizeInBytes = 2048, size_t finalizeAlignment = 4)
+ZMEYA_NODISCARD inline std::vector<char> write_blob(Fn&& fn, size_t initialSizeInBytes = 2048, size_t finalizeAlignment = 4)
 {
     std::unique_ptr<detail::Builder<TRoot>> builder = detail::Builder<TRoot>::create(initialSizeInBytes);
     detail::ScopedBuilder scope(builder.get());
-    BuildSession<TRoot> session(builder.get(), typename BuildSession<TRoot>::Private{});
-    std::forward<Fn>(fn)(session);
+    BlobWriter<TRoot> writer(builder.get(), typename BlobWriter<TRoot>::Private{});
+    std::forward<Fn>(fn)(writer);
     Span<char> blobSpan = builder->finalize(finalizeAlignment);
     return std::vector<char>(blobSpan.data, blobSpan.data + blobSpan.size);
 }
@@ -1476,7 +1476,7 @@ template <typename F, typename T> void deep_copy(const F& from, zm::goffset_t to
 
 **Helper syntax for clean assignments**
 
-Container and **`zm::Pointer`** types expose **`operator=`** from STL-shaped values (and raw pointers for **`Pointer`**). Prefer normal assignments inside **`zm::build`**.
+Container and **`zm::Pointer`** types expose **`operator=`** from STL-shaped values (and raw pointers for **`Pointer`**). Prefer normal assignments inside **`zm::write_blob`**.
 
 Usage examples:
   root->string_array = src_vector;

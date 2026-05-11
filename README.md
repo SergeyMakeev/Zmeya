@@ -11,7 +11,7 @@ Zmeya is not even a serialization library in the usual sense but rather a set of
 # Features
 
 - Cross-platform compatible
-- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::build`** / serialization)
+- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::write_blob`** / serialization)
 - No code generation required: no IDL or metadata, just use your types directly
 - No macros
 - Heavily optimized for performance
@@ -24,6 +24,31 @@ Zmeya library offering the following memory movable types
 - `String`
 - `HashSet<Key>`
 - `HashMap<Key, Value>`
+
+## Mental model
+
+Zmeya types are meant to live in **one contiguous byte range** (memory-mapped file, received packet, heap block, or the **`std::vector<char>`** returned from **`zm::write_blob`**). They use **self-relative** addressing (offsets from each field's address), not raw pointers into arbitrary memory, so there is **no pointer fixup** when you load data.
+
+**Read path:** treat the blob as bytes, cast to **`const YourRoot*`** (or offset to your root), then use **`zm::`** fields like ordinary nested data. No separate deserialize step.
+
+**Write path:** **`zm::write_blob<YourRoot>(...)`** runs your lambda while a **blob writer** is active in **thread-local storage**. Inside that lambda, **`zm::`** fields behave like **mutable value-like objects**: assign from **`std::vector`**, **`std::string`**, **`std::unordered_*`**, or assign **`zm::Pointer<T> = T*`** where **`T`** is already allocated in the same blob via **`BlobWriter::allocate`**. The library copies data into the growing buffer and wires relative offsets for you. Think of the lambda as a **scoped write** into one blob, not a separate serialization API surface.
+
+**Threading:** all **`zm::`** mutations for one blob must run on the **same thread** as the **`zm::write_blob`** call (TLS is not shared with worker threads).
+
+## Creating a blob
+
+1. Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling the translation units that call **`zm::write_blob`** (see root **`CMakeLists.txt`** for tests).
+
+2. Call **`zm::write_blob<Root>`** with a lambda taking **`zm::BlobWriter<Root>& w`**. Use **`w.root()`** for the root struct, **`=`** from STL-shaped values into **`zm::`** members, and **`w.allocate<T>()`** when you need extra **trivially copyable** objects in the blob (for example list nodes).
+
+3. Optional **second argument:** initial reserve in bytes (reduces reallocations). Optional **third argument:** final alignment for the returned byte vector.
+
+```cpp
+std::vector<char> blob = zm::write_blob<MyRoot>([](zm::BlobWriter<MyRoot>& w) {
+    w.root()->title = std::string("hello");
+    w.root()->nums = std::vector<int>{1, 2, 3};
+});
+```
 
 # Usage
 
@@ -129,26 +154,9 @@ etc...
 
 The only requirement is that we have to have all the data tightly packed in a single memory region or binary blob.
 
-### Building blobs (serialization)
+See **Mental model** and **Creating a blob** above for the write path. **`zm::BlobWriter`** also exposes **`contains_pointer()`** for debugging (see **`Zmeya/Zmeya.h`**).
 
-Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling code that **writes** blobs (see `CMakeLists.txt` in this repo).
-
-**Primary (and only) build API:** **`zm::build<TRoot>`** returns an owning **`std::vector<char>`** after invoking your closure with **`zm::BuildSession<TRoot>&`**. The session exposes **`root()`**, **`allocate<T>()`**, and **`contains_pointer()`**; TLS and finalize are internal (see **`Zmeya/Zmeya.h`**). Example:
-
-```cpp
-std::vector<char> blob = zm::build<MyRoot>([](zm::BuildSession<MyRoot>& s) {
-    s.root()->title = std::string("hello");
-    s.root()->nums = std::vector<int>{1, 2, 3};
-});
-```
-
-Optional second and third arguments set initial reserve size and finalize alignment.
-
-Assignments into **`zm::`** fields use an **active builder** stored in **thread-local storage** for that call chain. **Do not** assign into zm containers from **other threads** inside the same build (worker threads do not share that TLS). Parallel work is fine if zm mutations stay on the thread that started the build.
-
-Recursive **`std::*` → `zm::*`** conversion uses ordinary **`=`** into **`zm::*`** fields (each type provides **`operator=`** where applicable, including **`zm::Pointer<T> = T*`**).
-
-See **`NEXT_STEPS.md`** for builder limitations and follow-up work (e.g. reallocation).
+See **`NEXT_STEPS.md`** for growth/reallocation notes and follow-up work.
 
 # References
 

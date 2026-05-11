@@ -97,10 +97,10 @@ static void validate(const ArrayTestRoot* root)
 
 TEST(ZmeyaTestSuite, ArrayTest)
 {
-    std::vector<char> bytesCopy = zm::build<ArrayTestRoot>(
-        [](zm::BuildSession<ArrayTestRoot>& session)
+    std::vector<char> bytesCopy = zm::write_blob<ArrayTestRoot>(
+        [](zm::BlobWriter<ArrayTestRoot>& w)
         {
-            ArrayTestRoot* root = session.root();
+            ArrayTestRoot* root = w.root();
 
             std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
             root->arr1 = vec;
@@ -122,7 +122,7 @@ TEST(ZmeyaTestSuite, ArrayTest)
             vec5.reserve(793);
             for (size_t i = 0; i < 793; i++)
             {
-                Payload* payload = session.allocate<Payload>();
+                Payload* payload = w.allocate<Payload>();
                 payload->a = 1.3f + float(i) * 0.4f;
                 payload->b = uint32_t(i) + 3;
                 vec5.push_back(payload);
