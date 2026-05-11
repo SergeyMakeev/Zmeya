@@ -190,7 +190,8 @@ static MMapTestNode* allocateNode2(zm::BlobWriter<MMapTestRoot>& w, size_t index
 
 static void generateTestFile(const char* fileName)
 {
-    std::vector<char> bytes = zm::write_blob<MMapTestRoot>(
+    constexpr size_t kStartArenaBytes = 64u * 1024u * 1024u;
+    std::vector<char> bytes = zm::detail::write_blob_with_initial_buffer_bytes<MMapTestRoot>(
         [](zm::BlobWriter<MMapTestRoot>& w)
         {
             MMapTestRoot* root = w.root();
@@ -219,7 +220,7 @@ static void generateTestFile(const char* fileName)
 
             validate(root);
         },
-        64 * 1024 * 1024,
+        kStartArenaBytes,
         32);
 
     EXPECT_TRUE((bytes.size() % 32) == std::size_t(0));

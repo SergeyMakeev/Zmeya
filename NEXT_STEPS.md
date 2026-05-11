@@ -18,9 +18,9 @@ The backing store is **`std::vector<char>`**, which can reallocate when it grows
 
 **Indices into the arena (`goffset_t`) stay valid across realloc**; self-relative **`roffset_t`** fields written correctly while both sides live in the arena remain coherent when the whole buffer moves together.
 
-**Raw pointers** returned by **`allocate()`**, **`root()`**, addresses of **`zm::*`** objects in the blob, or pointers returned by **`get()`** can become **stale** after a realloc if you cache them across operations that grow the buffer. Refresh them after growth (e.g. call **`writer.root()`** again before touching nested fields, or keep **`goffset_t`** instead of **`T*`** until finalize).
+**Raw pointers** returned by **`allocate()`**, **`root()`**, addresses of **`zm::*`** objects in the blob, or pointers returned by **`get()`** can become **stale** after a realloc if you cache them across operations that grow the buffer. Call **`writer.root()`** again after growth, resolve through **`writer.builder_base()`** using **`goffset_t`** plus **`get_ptr_unsafe_to_store`**, or otherwise avoid holding **`T*`** across allocator growth.
 
-Stress tests use a **large initial reserve** when capturing many raw pointers across many **`assign`** steps so the implementation stays simple and deterministic.
+Some unit tests call **`zm::detail::write_blob_with_initial_buffer_bytes`** with a tiny starting arena to force **`std::vector`** reallocations on purpose; that helper is not a supported public workflow for application code.
 
 ## Incremental mutation
 

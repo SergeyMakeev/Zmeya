@@ -52,7 +52,6 @@ TEST(ZmeyaTestSuite, PointerTest)
 
             validate(root);
         },
-        2048,
         16);
 
     EXPECT_TRUE((bytesCopy.size() % 16) == 0);

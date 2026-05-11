@@ -11,6 +11,7 @@ set(ZMEYA_SOURCES
   TestHelper.cpp
   ZmeyaTestNewAPI.cpp
   ZmeyaTestIncremental.cpp
+  ZmeyaTestCoverage.cpp
   ZmeyaTest01.cpp
   ZmeyaTest02.cpp
   ZmeyaTest03.cpp
@@ -29,6 +30,8 @@ add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/Zmeya")
 target_link_libraries(${PROJ_NAME} Zmeya)
+
+target_compile_definitions(${PROJ_NAME} PRIVATE ZMEYA_BUILDER_PARANOID=1)
 
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_NAME})

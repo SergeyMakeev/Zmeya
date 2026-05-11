@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -13,6 +14,7 @@ struct IncrementalIntArrayRoot
     zm::Array<int32_t> values;
 };
 
+// Verifies incremental array_push_back matches one-shot assign from the same STL vector (logical equality).
 TEST(ZmeyaTestSuite, IncrementalArray_PushBackMatchesBulkAssign)
 {
     std::vector<int32_t> src;
@@ -25,20 +27,16 @@ TEST(ZmeyaTestSuite, IncrementalArray_PushBackMatchesBulkAssign)
         [&src](zm::BlobWriter<IncrementalIntArrayRoot>& w)
         {
             w.root()->values = src;
-        },
-        65536,
-        4);
+        }, 4);
 
-    std::vector<char> built = zm::write_blob<IncrementalIntArrayRoot>(
+    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalIntArrayRoot>(
         [&src](zm::BlobWriter<IncrementalIntArrayRoot>& w)
         {
             for (int v : src)
             {
                 w.array_push_back(w.root()->values, v);
             }
-        },
-        32,
-        4);
+        }, 32, 4);
 
     const IncrementalIntArrayRoot* rg = reinterpret_cast<const IncrementalIntArrayRoot*>(golden.data());
     const IncrementalIntArrayRoot* rb = reinterpret_cast<const IncrementalIntArrayRoot*>(built.data());
@@ -49,9 +47,10 @@ TEST(ZmeyaTestSuite, IncrementalArray_PushBackMatchesBulkAssign)
     }
 }
 
+// Exercises erase_at, pop_back, resize-with-fill, clear, then repopulate; checks final array contents match the intended sequence.
 TEST(ZmeyaTestSuite, IncrementalArray_EraseResizePopBack)
 {
-    std::vector<char> blob = zm::write_blob<IncrementalIntArrayRoot>(
+    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalIntArrayRoot>(
         [](zm::BlobWriter<IncrementalIntArrayRoot>& w)
         {
             for (int i = 0; i < 10; ++i)
@@ -66,9 +65,7 @@ TEST(ZmeyaTestSuite, IncrementalArray_EraseResizePopBack)
             {
                 w.array_push_back(w.root()->values, j * 10);
             }
-        },
-        64,
-        4);
+        }, 64, 4);
 
     const IncrementalIntArrayRoot* r = reinterpret_cast<const IncrementalIntArrayRoot*>(blob.data());
     ASSERT_EQ(r->values.size(), 3u);
@@ -82,25 +79,22 @@ struct IncrementalStringRoot
     zm::String text;
 };
 
+// Verifies string_append / operator+= under a tiny reserve produce the same C string as a single bulk assign (append path vs golden).
 TEST(ZmeyaTestSuite, IncrementalString_AppendMatchesAssign)
 {
     std::vector<char> golden = zm::write_blob<IncrementalStringRoot>(
         [](zm::BlobWriter<IncrementalStringRoot>& w)
         {
             w.root()->text = std::string("hello world from zm");
-        },
-        4096,
-        4);
+        }, 4);
 
-    std::vector<char> built = zm::write_blob<IncrementalStringRoot>(
+    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalStringRoot>(
         [](zm::BlobWriter<IncrementalStringRoot>& w)
         {
             w.root()->text = std::string("hello ");
             w.string_append(w.root()->text, "world ");
             w.root()->text += "from zm";
-        },
-        32,
-        4);
+        }, 32, 4);
 
     const IncrementalStringRoot* rg = reinterpret_cast<const IncrementalStringRoot*>(golden.data());
     const IncrementalStringRoot* rb = reinterpret_cast<const IncrementalStringRoot*>(built.data());
@@ -122,6 +116,7 @@ static std::unordered_map<std::string, int32_t> ReadLogicalMap(const zm::HashMap
     return out;
 }
 
+// Verifies repeated hashmap_insert with a small initial buffer matches bulk assign of the same logical map (string keys).
 TEST(ZmeyaTestSuite, IncrementalHashMap_RebuildPathMatchesBulkAssign)
 {
     std::unordered_map<std::string, int32_t> model = {{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}};
@@ -130,29 +125,26 @@ TEST(ZmeyaTestSuite, IncrementalHashMap_RebuildPathMatchesBulkAssign)
         [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             w.root()->map = model;
-        },
-        65536,
-        4);
+        }, 4);
 
-    std::vector<char> built = zm::write_blob<IncrementalHashMapRoot>(
+    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashMapRoot>(
         [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             for (const auto& kv : model)
             {
                 w.hashmap_insert(w.root()->map, kv.first, kv.second);
             }
-        },
-        128,
-        4);
+        }, 128, 4);
 
     auto g = ReadLogicalMap(reinterpret_cast<const IncrementalHashMapRoot*>(golden.data())->map);
     auto b = ReadLogicalMap(reinterpret_cast<const IncrementalHashMapRoot*>(built.data())->map);
     EXPECT_EQ(g, b);
 }
 
+// Verifies erase, overwrite of an existing key, and insert of a new key leave the expected final map contents.
 TEST(ZmeyaTestSuite, IncrementalHashMap_EraseInsertOverwrite)
 {
-    std::vector<char> blob = zm::write_blob<IncrementalHashMapRoot>(
+    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashMapRoot>(
         [](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             w.hashmap_insert(w.root()->map, std::string("x"), 1);
@@ -160,9 +152,7 @@ TEST(ZmeyaTestSuite, IncrementalHashMap_EraseInsertOverwrite)
             w.hashmap_erase(w.root()->map, std::string("x"));
             w.hashmap_insert(w.root()->map, std::string("y"), 99);
             w.hashmap_insert(w.root()->map, std::string("z"), 3);
-        },
-        256,
-        4);
+        }, 256, 4);
 
     const IncrementalHashMapRoot* r = reinterpret_cast<const IncrementalHashMapRoot*>(blob.data());
     auto m = ReadLogicalMap(r->map);
@@ -176,6 +166,7 @@ struct IncrementalHashSetRoot
     zm::HashSet<int32_t> set;
 };
 
+// Verifies incremental hashset_insert for int keys matches bulk assign when canonicalized by sorting element lists.
 TEST(ZmeyaTestSuite, IncrementalHashSet_RebuildMatchesBulkAssign)
 {
     std::unordered_set<int32_t> model = {3, 1, 4, 1, 5, 9, 2, 6};
@@ -184,20 +175,16 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_RebuildMatchesBulkAssign)
         [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             w.root()->set = model;
-        },
-        65536,
-        4);
+        }, 4);
 
-    std::vector<char> built = zm::write_blob<IncrementalHashSetRoot>(
+    std::vector<char> built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashSetRoot>(
         [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             for (int v : model)
             {
                 w.hashset_insert(w.root()->set, v);
             }
-        },
-        128,
-        4);
+        }, 128, 4);
 
     std::vector<int32_t> gvec;
     for (const int32_t& v : reinterpret_cast<const IncrementalHashSetRoot*>(golden.data())->set)
@@ -214,9 +201,10 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_RebuildMatchesBulkAssign)
     EXPECT_EQ(gvec, bvec);
 }
 
+// Verifies erase, clear, then insert leaves exactly the post-clear wave of data in the set.
 TEST(ZmeyaTestSuite, IncrementalHashSet_EraseClear)
 {
-    std::vector<char> blob = zm::write_blob<IncrementalHashSetRoot>(
+    std::vector<char> blob = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashSetRoot>(
         [](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             w.hashset_insert(w.root()->set, 10);
@@ -225,11 +213,34 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_EraseClear)
             w.hashset_insert(w.root()->set, 30);
             w.hashset_clear(w.root()->set);
             w.hashset_insert(w.root()->set, 7);
-        },
-        256,
-        4);
+        }, 256, 4);
 
     const IncrementalHashSetRoot* r = reinterpret_cast<const IncrementalHashSetRoot*>(blob.data());
     EXPECT_EQ(r->set.size(), 1u);
     EXPECT_TRUE(r->set.contains(7));
+}
+
+// Stresses many string replacements so dead ranges accumulate; finalize should compact and leave the final string correct with an empty dead-range list.
+TEST(ZmeyaTestSuite, Compaction_FinalizeShrinksWorkingBufferAfterStringReplacements)
+{
+    auto builder = zm::detail::Builder<IncrementalStringRoot>::create();
+    zm::detail::ScopedBuilder scope(builder.get());
+    IncrementalStringRoot* root = builder->getRoot();
+    size_t peak = 0;
+    const int kRounds = 120;
+    for (int i = 0; i < kRounds; ++i)
+    {
+        zm::assign(root->text, std::string(300, static_cast<char>('A' + (i % 26))));
+        peak = (std::max)(peak, builder->data.size());
+    }
+    const std::string expected(300, static_cast<char>('A' + ((kRounds - 1) % 26)));
+    const size_t pre_finalize = builder->data.size();
+    ASSERT_FALSE(builder->dead_ranges_.empty());
+    zm::Span<char> span = builder->finalize(4);
+    const size_t post = span.size;
+    EXPECT_LT(post, pre_finalize) << "seal-time compaction should drop dead string blobs";
+    EXPECT_LT(post, peak) << "bump peak should exceed sealed size when compaction runs";
+    EXPECT_TRUE(builder->dead_ranges_.empty());
+    const IncrementalStringRoot* rr = reinterpret_cast<const IncrementalStringRoot*>(span.data);
+    EXPECT_EQ(expected, std::string(rr->text.c_str()));
 }

@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -651,6 +652,8 @@ template <typename Key, typename Value> class HashMap
     Array<Bucket> buckets;
     Array<Item> items;
 
+    friend class detail::BuilderBase;
+
     template <typename Adapter, typename Key2> ZMEYA_NODISCARD const Value* findImpl(const Key2& key) const noexcept
     {
         size_t numBuckets = buckets.size();
@@ -906,6 +909,18 @@ template <typename T> constexpr T highest_bit()
 
 namespace detail
 {
+
+/*
+
+**Default write arena capacity**
+
+`std::vector<char>` for the blob writer starts with a modest reserve so typical small blobs avoid an immediate growth step.
+This is not a correctness knob: user code must not cache raw pointers into the arena across operations that can grow the buffer.
+
+*/
+
+inline constexpr size_t kDefaultWriteBlobArenaReserveBytes = size_t(64) * 1024;
+
 inline thread_local BuilderBase* g_tls_active_builder = nullptr;
 
 inline BuilderBase* get_global_builder() noexcept { return g_tls_active_builder; }
@@ -932,6 +947,7 @@ class ScopedBuilder
   public:
     explicit ScopedBuilder(BuilderBase* builder)
     {
+        ZMEYA_ASSERT(builder != nullptr);
         prev = get_global_builder();
         set_global_builder(builder);
     }
@@ -964,9 +980,32 @@ class BuilderBase
         {
             return;
         }
-        ZMEYA_ASSERT(start < goffset_t(data.size()));
-        ZMEYA_ASSERT(start + len <= data.size());
+        ZMEYA_ASSERT(start >= goffset_t(0));
+        ZMEYA_ASSERT(size_t(start) < data.size());
+        ZMEYA_ASSERT(len <= data.size());
+        ZMEYA_ASSERT(size_t(start) <= data.size() - len);
         dead_ranges_.push_back(std::pair<goffset_t, size_t>(start, len));
+        prune_roffset_registry_overlapping_dead(start, len);
+    }
+
+    void prune_roffset_registry_overlapping_dead(goffset_t dStart, size_t dLen)
+    {
+        const goffset_t dEnd = dStart + goffset_t(dLen);
+        for (auto it = roffset_slot_targets_.begin(); it != roffset_slot_targets_.end();)
+        {
+            const goffset_t sg = it->first;
+            const goffset_t tg = it->second;
+            const bool slotInDead = (sg >= dStart && sg < dEnd);
+            const bool tgtInDead = (tg != goffset_t(0) && tg >= dStart && tg < dEnd);
+            if (slotInDead || tgtInDead)
+            {
+                it = roffset_slot_targets_.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
     }
 
     static void merge_intervals(std::vector<std::pair<goffset_t, size_t>>& iv)
@@ -1001,6 +1040,23 @@ class BuilderBase
         iv.swap(out);
     }
 
+#if defined(ZMEYA_BUILDER_PARANOID)
+    void debug_validate_roffset_registry_before_patch() const
+    {
+        const size_t n = data.size();
+        for (const auto& kv : roffset_slot_targets_)
+        {
+            ZMEYA_ASSERT(kv.first >= goffset_t(0));
+            ZMEYA_ASSERT(size_t(kv.first) + sizeof(roffset_t) <= n);
+            if (kv.second != goffset_t(0))
+            {
+                ZMEYA_ASSERT(kv.second >= goffset_t(0));
+                ZMEYA_ASSERT(size_t(kv.second) < n);
+            }
+        }
+    }
+#endif
+
     void compact_arena_and_remap_registry()
     {
         if (dead_ranges_.empty())
@@ -1011,6 +1067,19 @@ class BuilderBase
         merge_intervals(dead_ranges_);
 
         const size_t oldSize = data.size();
+        goffset_t prevDeadEnd = goffset_t(0);
+        for (const auto& d : dead_ranges_)
+        {
+            ZMEYA_ASSERT(d.first >= goffset_t(0));
+            ZMEYA_ASSERT(d.second > 0);
+            ZMEYA_ASSERT(size_t(d.first) < oldSize);
+            ZMEYA_ASSERT(d.second <= oldSize);
+            ZMEYA_ASSERT(size_t(d.first) <= oldSize - d.second);
+            ZMEYA_ASSERT(d.first >= prevDeadEnd);
+            prevDeadEnd = d.first + goffset_t(d.second);
+            ZMEYA_ASSERT(prevDeadEnd <= goffset_t(oldSize));
+        }
+
         goffset_t scan = 0;
         std::vector<char, BufferAllocator<char, ZMEYA_MAX_ALIGN>> newData;
         struct Piece
@@ -1044,7 +1113,11 @@ class BuilderBase
             std::memcpy(newData.data() + size_t(newCursor), data.data() + size_t(scan), runLen);
             pieces.push_back(Piece{scan, goffset_t(oldSize), newCursor});
             newCursor += goffset_t(runLen);
+            scan = goffset_t(oldSize);
         }
+        ZMEYA_ASSERT(scan == goffset_t(oldSize));
+        ZMEYA_ASSERT(newData.size() <= oldSize);
+        ZMEYA_ASSERT(size_t(newCursor) == newData.size());
 
         auto remap_one = [&](goffset_t oldG) -> goffset_t {
             for (const Piece& p : pieces)
@@ -1074,15 +1147,27 @@ class BuilderBase
 
     void register_roffset_slot(goffset_t slot_field_goffset, goffset_t target_goffset)
     {
+        ZMEYA_ASSERT(!data.empty());
+        ZMEYA_ASSERT(slot_field_goffset >= goffset_t(0));
+        ZMEYA_ASSERT(size_t(slot_field_goffset) + sizeof(roffset_t) <= data.size());
+        if (target_goffset != goffset_t(0))
+        {
+            ZMEYA_ASSERT(target_goffset >= goffset_t(0));
+            ZMEYA_ASSERT(size_t(target_goffset) < data.size());
+        }
         roffset_slot_targets_[slot_field_goffset] = target_goffset;
     }
 
     void patch_roffset_slots_from_registry()
     {
+#if defined(ZMEYA_BUILDER_PARANOID)
+        debug_validate_roffset_registry_before_patch();
+#endif
         for (const auto& kv : roffset_slot_targets_)
         {
             goffset_t slot_g = kv.first;
             goffset_t target_g = kv.second;
+            ZMEYA_ASSERT(size_t(slot_g) + sizeof(roffset_t) <= data.size());
             roffset_t* pr = reinterpret_cast<roffset_t*>(&data[slot_g]);
             if (target_g == 0)
             {
@@ -1110,11 +1195,15 @@ class BuilderBase
         // Calculate padding for alignment
         size_t off = cursor & (alignment - 1);
         size_t padding = (off != 0) ? (alignment - off) : 0;
+        ZMEYA_ASSERT(padding <= SIZE_MAX - cursor);
         size_t allocOffset = cursor + padding;
+        ZMEYA_ASSERT(numBytes <= SIZE_MAX - allocOffset);
         size_t totalBytes = numBytes + padding;
+        ZMEYA_ASSERT(totalBytes >= numBytes);
 
         // Resize with zero-initialization
-        data.resize(data.size() + totalBytes, char(0));
+        ZMEYA_ASSERT(cursor <= SIZE_MAX - totalBytes);
+        data.resize(cursor + totalBytes, char(0));
 
         // Verify alignment
         ZMEYA_ASSERT((uintptr_t(&data[allocOffset]) & (alignment - 1)) == 0);
@@ -1129,7 +1218,13 @@ class BuilderBase
         ::new (const_cast<void*>(static_cast<const volatile void*>(ptr))) T(std::forward<_Valty>(_Val)...);
     }
 
-    void* get_ptr_unsafe_to_store(goffset_t g_offs) { return &data[g_offs]; }
+    void* get_ptr_unsafe_to_store(goffset_t g_offs)
+    {
+        ZMEYA_ASSERT(!data.empty());
+        ZMEYA_ASSERT(g_offs >= goffset_t(0));
+        ZMEYA_ASSERT(size_t(g_offs) < data.size());
+        return &data[size_t(g_offs)];
+    }
 
     template <typename T> T* allocate()
     {
@@ -1146,8 +1241,10 @@ class BuilderBase
         {
             return;
         }
+        const size_t n = size_t(arr_hdr->numElements);
+        ZMEYA_ASSERT(n == 0 || sizeof(T) <= SIZE_MAX / n);
         T* pdata = arr_hdr->get_raw_ptr_unsafe_can_be_relocated();
-        note_dead_range(get_global_offset(pdata), size_t(arr_hdr->numElements) * sizeof(T));
+        note_dead_range(get_global_offset(pdata), n * sizeof(T));
     }
 
     template <typename Key> void note_dead_hashset_if_any(HashSet<Key>* hs)
@@ -1215,6 +1312,7 @@ class BuilderBase
         const char* old_ptr = slot->data.get();
         if (old_ptr != nullptr)
         {
+            ZMEYA_ASSERT(contains_pointer(old_ptr));
             note_dead_range(get_global_offset(old_ptr), std::strlen(old_ptr) + 1);
         }
     }
@@ -1225,21 +1323,28 @@ class BuilderBase
         {
             return;
         }
+        ZMEYA_ASSERT(suf != nullptr);
         goffset_t str_g = get_global_offset(&s);
         String* slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
         size_t old_len = 0;
+        goffset_t old_blob_g = goffset_t(0);
         const char* old_ptr = slot->data.get();
         if (old_ptr != nullptr)
         {
+            ZMEYA_ASSERT(contains_pointer(old_ptr));
+            old_blob_g = get_global_offset(old_ptr);
             old_len = std::strlen(old_ptr);
-            note_dead_range(get_global_offset(old_ptr), old_len + 1);
+            note_dead_range(old_blob_g, old_len + 1);
         }
+        ZMEYA_ASSERT(suf_len <= SIZE_MAX - old_len);
+        ZMEYA_ASSERT(old_len + suf_len <= SIZE_MAX - 1);
         goffset_t blob_g = alloc_aligned(old_len + suf_len + 1, 1);
         slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
         char* dest = reinterpret_cast<char*>(get_ptr_unsafe_to_store(blob_g));
-        if (old_ptr != nullptr)
+        if (old_len != 0)
         {
-            std::memcpy(dest, old_ptr, old_len);
+            const char* old_src = reinterpret_cast<const char*>(get_ptr_unsafe_to_store(old_blob_g));
+            std::memcpy(dest, old_src, old_len);
         }
         std::memcpy(dest + old_len, suf, suf_len);
         dest[old_len + suf_len] = '\0';
@@ -1256,6 +1361,7 @@ class BuilderBase
         const char* old_ptr = slot->data.get();
         if (old_ptr != nullptr)
         {
+            ZMEYA_ASSERT(contains_pointer(old_ptr));
             note_dead_range(get_global_offset(old_ptr), std::strlen(old_ptr) + 1);
         }
         slot->data.relativeOffset = 0;
@@ -1279,8 +1385,10 @@ class BuilderBase
         }
         else
         {
+            ZMEYA_ASSERT(old_n <= SIZE_MAX / 2);
             new_cap = (std::max)(new_n, old_n * 2);
         }
+        ZMEYA_ASSERT(new_cap <= SIZE_MAX / sizeOfT);
         if (old_n > 0)
         {
             T* old_data = slot->get_raw_ptr_unsafe_can_be_relocated();
@@ -1382,13 +1490,17 @@ class BuilderBase
 
     Span<char> finalize(size_t alignment = 4)
     {
+        ZMEYA_ASSERT(alignment > 0);
+        ZMEYA_ASSERT(isPowerOfTwo(alignment));
         compact_arena_and_remap_registry();
+        ZMEYA_ASSERT(dead_ranges_.empty());
 
         size_t currentSize = data.size();
         size_t remainder = currentSize % alignment;
         if (remainder != 0)
         {
             size_t paddingNeeded = alignment - remainder;
+            ZMEYA_ASSERT(paddingNeeded <= SIZE_MAX - currentSize);
             data.resize(currentSize + paddingNeeded, char(0));
         }
 
@@ -1403,6 +1515,8 @@ class BuilderBase
     {
         ZMEYA_ASSERT(is_stack_pointer(base) == false && "Stack pointer detected!");
         ZMEYA_ASSERT(contains_pointer(base) && "A pointer should belong to the builder");
+        ZMEYA_ASSERT(ofs >= goffset_t(0));
+        ZMEYA_ASSERT(size_t(ofs) < data.size());
 
         goffset_t baseOffset = get_global_offset(base);
         diff_t diff = ofs - baseOffset;
@@ -1495,6 +1609,7 @@ template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm:
 
 template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::HashSet<Key>& _to, const std::unordered_set<F>& from)
 {
+    ScopedBuilder tls(this);
     goffset_t to_offset = get_global_offset(&_to);
     zm::HashSet<Key>* to = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(to_offset));
     note_dead_hashset_if_any<Key>(to);
@@ -1590,6 +1705,7 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
 template <typename Key, typename Value, typename FK, typename FV>
 void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::unordered_map<FK, FV>& from)
 {
+    ScopedBuilder tls(this);
     goffset_t to_offset = get_global_offset(&_to);
     zm::HashMap<Key, Value>* to = reinterpret_cast<zm::HashMap<Key, Value>*>(get_ptr_unsafe_to_store(to_offset));
     note_dead_hashmap_if_any<Key, Value>(to);
@@ -1701,7 +1817,7 @@ template <typename TRoot> class Builder : public BuilderBase
     }
 
     using TSelf = Builder<TRoot>;
-    static std::unique_ptr<TSelf> create(size_t initialSizeInBytes = 2048)
+    static std::unique_ptr<TSelf> create(size_t initialSizeInBytes = kDefaultWriteBlobArenaReserveBytes)
     {
         std::unique_ptr<TSelf> res = std::make_unique<TSelf>(initialSizeInBytes, PrivateToken{});
         return res;
@@ -1720,8 +1836,14 @@ User-facing entry is **`zm::write_blob`** and **`BlobWriter`** only. Implementat
 
 */
 
+namespace detail
+{
 template <typename TRoot, typename Fn>
-std::vector<char> write_blob(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
+std::vector<char> write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment = 4);
+}
+
+template <typename TRoot, typename Fn>
+std::vector<char> write_blob(Fn&& fn, size_t finalizeAlignment);
 
 template <typename TRoot>
 class BlobWriter
@@ -1729,7 +1851,10 @@ class BlobWriter
     struct Private {};
 
     template <typename R, typename Fn>
-    friend std::vector<char> write_blob(Fn&& fn, size_t initialSizeInBytes, size_t finalizeAlignment);
+    friend std::vector<char> write_blob(Fn&& fn, size_t finalizeAlignment);
+
+    template <typename R, typename Fn>
+    friend std::vector<char> detail::write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment);
 
     explicit BlobWriter(detail::Builder<TRoot>* impl, Private)
         : impl_(impl)
@@ -1784,15 +1909,35 @@ Installs TLS, invokes **`fn(writer)`**, then finalizes. **`BlobWriter`** is the 
 */
 
 template <typename TRoot, typename Fn>
-ZMEYA_NODISCARD inline std::vector<char> write_blob(Fn&& fn, size_t initialSizeInBytes = 2048, size_t finalizeAlignment = 4)
+ZMEYA_NODISCARD inline std::vector<char> write_blob(Fn&& fn, size_t finalizeAlignment = 4)
 {
-    std::unique_ptr<detail::Builder<TRoot>> builder = detail::Builder<TRoot>::create(initialSizeInBytes);
-    detail::ScopedBuilder scope(builder.get());
+    return detail::write_blob_with_initial_buffer_bytes<TRoot>(std::forward<Fn>(fn), detail::kDefaultWriteBlobArenaReserveBytes, finalizeAlignment);
+}
+
+namespace detail
+{
+
+/*
+
+**write_blob_with_initial_buffer_bytes**
+
+Same session as **`zm::write_blob`**, but **`initialBufferBytes`** seeds **`std::vector<char>::reserve`** for the arena.
+Intended for unit tests that intentionally force **`std::vector`** reallocations; application code should use **`zm::write_blob`** and avoid caching raw pointers across growth regardless of starting capacity.
+
+*/
+
+template <typename TRoot, typename Fn>
+ZMEYA_NODISCARD inline std::vector<char> write_blob_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment)
+{
+    std::unique_ptr<Builder<TRoot>> builder = Builder<TRoot>::create(initialBufferBytes);
+    ScopedBuilder scope(builder.get());
     BlobWriter<TRoot> writer(builder.get(), typename BlobWriter<TRoot>::Private{});
     std::forward<Fn>(fn)(writer);
     Span<char> blobSpan = builder->finalize(finalizeAlignment);
     return std::vector<char>(blobSpan.data, blobSpan.data + blobSpan.size);
 }
+
+} // namespace detail
 
 /*
 
@@ -1835,6 +1980,7 @@ template <typename T> void assign_pointer(BuilderBase& builder, zm::Pointer<T>& 
 
 inline void assign_string_std(BuilderBase& builder, String& _to, const std::string& from)
 {
+    ScopedBuilder tls(&builder);
     goffset_t to_offset = builder.get_global_offset(&_to);
     if (from.empty())
     {
@@ -1847,6 +1993,7 @@ inline void assign_string_std(BuilderBase& builder, String& _to, const std::stri
     }
     builder.string_note_dead_existing_blob(_to);
     size_t len = from.size();
+    ZMEYA_ASSERT(len <= SIZE_MAX - 1);
     zm::goffset_t stringDataOffset = builder.alloc_aligned(len + 1, 1);
     char* stringData = reinterpret_cast<char*>(builder.get_ptr_unsafe_to_store(stringDataOffset));
     std::memcpy(stringData, from.data(), len);
@@ -1859,6 +2006,7 @@ inline void assign_string_std(BuilderBase& builder, String& _to, const std::stri
 inline void assign_string_cstr(BuilderBase& builder, String& _to, const char* from)
 {
     ZMEYA_ASSERT(from != nullptr);
+    ScopedBuilder tls(&builder);
     goffset_t to_offset = builder.get_global_offset(&_to);
     size_t len = std::strlen(from);
     if (len == 0)
@@ -1871,6 +2019,7 @@ inline void assign_string_cstr(BuilderBase& builder, String& _to, const char* fr
         return;
     }
     builder.string_note_dead_existing_blob(_to);
+    ZMEYA_ASSERT(len <= SIZE_MAX - 1);
     zm::goffset_t stringDataOffset = builder.alloc_aligned(len + 1, 1);
     char* stringData = reinterpret_cast<char*>(builder.get_ptr_unsafe_to_store(stringDataOffset));
     std::memcpy(stringData, from, len);
@@ -2054,6 +2203,7 @@ template <typename Key> void hashset_clear(detail::BuilderBase& builder, HashSet
 
 template <typename K, typename V, typename FK, typename FV> void hashmap_insert(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key, const FV& val)
 {
+    // Snapshot the full map and re-assign each call (O(hm.size())); large batches should use bulk assign instead.
     if constexpr (std::is_same<K, String>::value)
     {
         std::unordered_map<std::string, V> tmp;
@@ -2164,6 +2314,7 @@ inline void String::clear()
 
 inline String& String::append(const char* suf)
 {
+    ZMEYA_ASSERT(suf != nullptr);
     detail::BuilderBase* b = detail::get_global_builder();
     ZMEYA_ASSERT(b != nullptr);
     b->string_append_cstr(*this, suf, std::strlen(suf));
@@ -2187,7 +2338,11 @@ template <typename K, typename V> template <typename FK> inline void HashMap<K, 
 
 template <typename K, typename V> inline void HashMap<K, V>::clear() { zm::hashmap_clear(*detail::get_global_builder(), *this); }
 
-template <typename TRoot> inline void BlobWriter<TRoot>::string_append(String& s, const char* suf) { impl_->string_append_cstr(s, suf, std::strlen(suf)); }
+template <typename TRoot> inline void BlobWriter<TRoot>::string_append(String& s, const char* suf)
+{
+    ZMEYA_ASSERT(suf != nullptr);
+    impl_->string_append_cstr(s, suf, std::strlen(suf));
+}
 
 template <typename TRoot> inline void BlobWriter<TRoot>::string_clear(String& s) { impl_->string_clear(s); }
 

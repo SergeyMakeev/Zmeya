@@ -122,7 +122,6 @@ static void generateTestFile(const char* fileName)
 
             validate(root);
         },
-        256 * 1024,
         32);
 
     EXPECT_TRUE((bytesCopy.size() % 32) == 0);

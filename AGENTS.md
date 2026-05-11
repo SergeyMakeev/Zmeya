@@ -81,19 +81,21 @@ Some tests write files next to the **current working directory** (e.g. `test.zm`
 
 `ZmeyaTest10` uses memory-mapped files on **Windows**; on other platforms it reads the file into a buffer and validates the same layout.
 
-### `build.cmd` (Windows)
+### Windows build scripts
 
-Root **`build.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs **`OpenCppCoverage.exe`** when that tool is on `PATH`. If OpenCppCoverage is not installed, it runs **`build\Debug\ZmeyaTest.exe`** directly so the script still validates tests.
+Root **`build_debug.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then runs **`OpenCppCoverage.exe`** when that tool is on `PATH`. If OpenCppCoverage is not installed, it runs **`build\Debug\ZmeyaTest.exe`** directly so the script still validates tests.
+
+**`build_release.cmd`** does the same flow for **Release** (`cmake --build` with `--config Release`, tests from **`build\Release\ZmeyaTest.exe`**).
 
 ### Blob writer growth and raw pointers
 
-Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Raw pointers returned by **`w.allocate<T>()`** or captured before a large bulk **`operator=`** into zm containers are only valid while the buffer does not move. Stress tests pass a **large initial reserve** as the second argument to **`zm::write_blob`** so the buffer stays stable for that session.
+Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Treat any raw pointer into the arena (including from **`w.allocate`**, **`w.root()`**, **`get()`**, or element pointers) as **invalid after a growth step** unless you re-derive it from a **`goffset_t`** or call **`w.root()`** / **`builder_base()`** again. **`zm::write_blob`** pre-reserves a fixed default arena size; it does **not** expose a user-controlled initial capacity.
 
 The builder records self-relative **slot** targets in an **`std::unordered_map<goffset_t, goffset_t>`**; **`finalize`** pads to alignment then **patches** every registered word. **`assign` from empty** STL containers or empty strings **clears** the destination **`zm::`** field when it was previously non-empty.
 
 ### Debug vs Release
 
-**`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; it reserves a larger buffer in Release so pointer assignments stay valid.
+**`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; the test links nodes using **`goffset_t`** so it does not cache stale **`T*`** across reallocations.
 
 ## Documentation
 

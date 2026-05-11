@@ -57,6 +57,7 @@ struct TestRoot
     zm::Array<zm::Array<zm::String>> nestedArray;
 };
 
+// Verifies operator= from STL strings, vectors, map, and set into a root blob round-trip on read.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
     std::vector<char> blob = zm::write_blob<TestRoot>(
@@ -103,6 +104,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
     EXPECT_TRUE(fileRoot->hashSet.contains("gamma"));
 }
 
+// Verifies nested vector-of-vector-of-string assigns into zm::Array<zm::Array<zm::String>> and reads back correctly.
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
     std::vector<char> blob = zm::write_blob<TestRoot>(
@@ -168,9 +170,10 @@ static void FillBasicTestRootFresh(BlobWriterT& w)
     w.root()->hashSet = srcSet;
 }
 
+// Verifies zm::assign(BuilderBase&, ...) produces the same bytes as write_blob with the same logical content.
 TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
 {
-    std::unique_ptr<zm::detail::Builder<TestRoot>> builder = zm::detail::Builder<TestRoot>::create(8192);
+    std::unique_ptr<zm::detail::Builder<TestRoot>> builder = zm::detail::Builder<TestRoot>::create();
     TestRoot* root = builder->getRoot();
 
     zm::assign(*builder, root->description, std::string("Test description"));
@@ -200,30 +203,30 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
     EXPECT_EQ(std::memcmp(blobA.data(), blobB.data(), blobA.size()), 0);
 }
 
-TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesLargeReserve)
+// Verifies default arena sizing matches a deliberately tiny arena (realloc + patch correctness).
+TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
 {
-    constexpr size_t kTinyReserve = 32;
+    constexpr size_t kTinyArenaBytes = 32;
 
     std::vector<char> golden = zm::write_blob<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);
-        },
-        1024 * 1024,
-        4);
+        });
 
-    std::vector<char> stressed = zm::write_blob<TestRoot>(
+    std::vector<char> stressed = zm::detail::write_blob_with_initial_buffer_bytes<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);
         },
-        kTinyReserve,
+        kTinyArenaBytes,
         4);
 
     ASSERT_EQ(golden.size(), stressed.size());
     EXPECT_EQ(std::memcmp(golden.data(), stressed.data(), golden.size()), 0);
 }
 
+// Verifies BlobWriter exposes a live builder_base and that the root pointer lies inside the builder arena.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BlobWriterBuilderBaseAccessor)
 {
     zm::write_blob<TestRoot>(

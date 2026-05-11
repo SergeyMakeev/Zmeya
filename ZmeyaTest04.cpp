@@ -50,40 +50,40 @@ static void validate(const ListTestRoot* root)
 TEST(ZmeyaTestSuite, ListTest)
 {
 #ifdef _DEBUG
-    constexpr size_t kReserve = 4 * 1024 * 1024;
     uint32_t numNodes = 3000;
 #else
-    constexpr size_t kReserve = 128 * 1024 * 1024;
     uint32_t numNodes = 1000000;
 #endif
 
     std::vector<char> bytesCopy = zm::write_blob<ListTestRoot>(
         [numNodes](zm::BlobWriter<ListTestRoot>& w)
         {
+            zm::detail::BuilderBase* bb = w.builder_base();
             ListTestRoot* root = w.root();
 
             root->numNodes = numNodes;
-            ListTestNode* prevNode = nullptr;
+            zm::goffset_t prev_g{};
             for (uint32_t i = 0; i < numNodes; i++)
             {
                 ListTestNode* node = w.allocate<ListTestNode>();
                 node->payload = 13 + i;
-                node->prev = prevNode;
-                if (prevNode)
+                node->prev = nullptr;
+                if (i > 0)
                 {
+                    ListTestNode* prevNode = reinterpret_cast<ListTestNode*>(bb->get_ptr_unsafe_to_store(prev_g));
+                    node->prev = prevNode;
                     prevNode->next = node;
                 }
                 else
                 {
-                    EXPECT_TRUE(root->root == nullptr);
-                    root->root = node;
+                    EXPECT_TRUE(w.root()->root == nullptr);
+                    w.root()->root = node;
                 }
-                prevNode = node;
+                prev_g = bb->get_global_offset(node);
             }
 
-            validate(root);
-        },
-        kReserve);
+            validate(w.root());
+        });
 
     const ListTestRoot* rootCopy = (const ListTestRoot*)(bytesCopy.data());
     validate(rootCopy);

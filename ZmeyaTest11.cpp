@@ -93,7 +93,7 @@ static void validate(const ReferToTestRoot* root)
 
 TEST(ZmeyaTestSuite, ReferToTest)
 {
-    std::vector<char> bytesCopy = zm::write_blob<ReferToTestRoot>(
+    std::vector<char> bytesCopy = zm::detail::write_blob_with_initial_buffer_bytes<ReferToTestRoot>(
         [](zm::BlobWriter<ReferToTestRoot>& w)
         {
             ReferToTestRoot* root = w.root();
@@ -118,11 +118,12 @@ TEST(ZmeyaTestSuite, ReferToTest)
             std::vector<ReferToNodeInit> nodeInits;
             nodeInits.resize(10000, proto);
 
-            root->nodes = nodeInits;
+            w.root()->nodes = nodeInits;
 
-            validate(root);
+            validate(w.root());
         },
-        128 * 1024 * 1024);
+        128u * 1024u * 1024u,
+        4);
 
     const ReferToTestRoot* rootCopy = (const ReferToTestRoot*)(bytesCopy.data());
     validate(rootCopy);

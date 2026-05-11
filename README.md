@@ -41,7 +41,7 @@ Zmeya types are meant to live in **one contiguous byte range** (memory-mapped fi
 
 2. Call **`zm::write_blob<Root>`** with a lambda taking **`zm::BlobWriter<Root>& w`**. Use **`w.root()`** for the root struct, **`=`** from STL-shaped values into **`zm::`** members, and **`w.allocate<T>()`** when you need extra **trivially copyable** objects in the blob (for example list nodes).
 
-3. Optional **second argument:** initial reserve in bytes (reduces reallocations). Optional **third argument:** final alignment for the returned byte vector.
+3. Optional **second argument:** final alignment for the returned **`std::vector<char>`** (defaults to **4**). The writer pre-reserves a fixed internal starting capacity for the backing buffer; do not cache raw pointers into the arena across growth.
 
 ```cpp
 std::vector<char> blob = zm::write_blob<MyRoot>([](zm::BlobWriter<MyRoot>& w) {

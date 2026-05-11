@@ -181,7 +181,7 @@ The sealing step **must** produce a buffer that satisfies **Q10**: **self-relati
 **Target migration (**Q7**, **Q8**):**
 
 - Builder state lives on an **explicit writer** object (or handle), not **only** TLS.
-- **Registration + writer-driven fixup** on realloc subsume ad-hoc pointer stability rules for supported APIs.
+- **Registration + writer-driven fixup** on realloc replaces ad-hoc rules about keeping raw **`T*`** alive across **`vector`** growth for supported APIs.
 
 Until implementation lands, the **current** code path remains authoritative for behavior; this document specifies the **replacement** contract.
 
