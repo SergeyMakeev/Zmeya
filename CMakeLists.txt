@@ -1,10 +1,12 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.14)
 set(PROJ_NAME ZmeyaTest)
 project(${PROJ_NAME})
 
 set (CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
+
+option(ZMEYA_BUILD_BENCHMARKS "Build ZmeyaBench (Google Benchmark via FetchContent at configure time)" OFF)
 
 set(ZMEYA_SOURCES 
   TestHelper.h
@@ -50,6 +52,26 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 # add gtest
 add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "extern/googletest")
 target_link_libraries(${PROJ_NAME} gtest_main)
+
+if(ZMEYA_BUILD_BENCHMARKS)
+    include(FetchContent)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        googlebenchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG v1.9.4
+    )
+    FetchContent_MakeAvailable(googlebenchmark)
+
+    add_executable(ZmeyaBench ZmeyaBench.cpp ZmeyaBenchSupport.cpp)
+    target_link_libraries(ZmeyaBench PRIVATE benchmark::benchmark_main Zmeya)
+    if(MSVC)
+        target_compile_options(ZmeyaBench PRIVATE /W4)
+    else()
+        target_compile_options(ZmeyaBench PRIVATE -Wall -Wextra -pedantic)
+    endif()
+endif()
 
 
 

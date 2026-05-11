@@ -1,6 +1,6 @@
 # audit-performance reference rubric
 
-Use this when filling in the performance audit report. Every important claim should tie to **observed code** or **stated uncertainty** (e.g. "needs benchmark").
+Use this when filling in the performance audit report. Every important claim should tie to **observed code** or **stated uncertainty** (e.g. "needs benchmark"). **Do not treat unmeasured performance as fact:** prefer real numbers from the project's benchmark harness; if none exist, say so and propose concrete tests.
 
 ## Dimensions to cover
 
@@ -53,10 +53,13 @@ Use this when filling in the performance audit report. Every important claim sho
 
 ## Benchmarks section
 
-If no numbers exist, add a short **Suggested benchmarks** subsection: inputs sizes, what to compare (logical equivalence vs byte identity), Release vs Debug caveats.
+- **Authority:** Measured latency, throughput, or allocation counts from a controlled run beat intuition. Cite a table snippet, log path, or state that benches were not run this session; never invent **x%** or nanoseconds.
+- **Gaps in the report:** When coverage is missing, the audit **must** include a **Benchmark coverage and gaps** section (skill template section 9): list each missing scenario as a **proposed** `BENCHMARK` (or profiler scenario): name, inputs, what to compare, and how to know it passed (e.g. logical equality after deserialize).
+- **Zmeya:** Prefer **`ZmeyaBench`** / **`run_perf_tests.cmd`**; extend **`ZmeyaBench.cpp`** for new cases called out in the audit.
+- If no numbers exist yet, keep a short **Suggested benchmarks** subsection under gaps: input sizes, what to compare (logical equivalence vs byte identity), Release vs Debug caveats, and **`--benchmark_repetitions`** for noisy cases.
 
 ## What not to do
 
-- Do not claim a specific **x% speedup** without measurements.
+- Do not claim a specific **x% speedup** or absolute timing without measurements.
 - Do not recommend breaking wire format without labeling it as a **compatibility** decision.
 - Avoid non-ASCII characters in the generated audit file.

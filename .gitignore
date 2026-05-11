@@ -1,6 +1,9 @@
 ﻿build2019
 build2022
 build
+build-bench
 *.log
 *.zm
 CoverageReport-*
+build-bench
+build-default-test
