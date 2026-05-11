@@ -972,6 +972,8 @@ class BuilderBase
 
     std::unordered_map<goffset_t, goffset_t> roffset_slot_targets_;
 
+    std::unordered_map<goffset_t, size_t> string_blob_phys_bytes_;
+
     std::vector<std::pair<goffset_t, size_t>> dead_ranges_;
 
     void note_dead_range(goffset_t start, size_t len)
@@ -985,19 +987,32 @@ class BuilderBase
         ZMEYA_ASSERT(len <= data.size());
         ZMEYA_ASSERT(size_t(start) <= data.size() - len);
         dead_ranges_.push_back(std::pair<goffset_t, size_t>(start, len));
-        prune_roffset_registry_overlapping_dead(start, len);
     }
 
-    void prune_roffset_registry_overlapping_dead(goffset_t dStart, size_t dLen)
+    static bool goffset_in_any_merged_dead_range(goffset_t g, const std::vector<std::pair<goffset_t, size_t>>& merged)
     {
-        const goffset_t dEnd = dStart + goffset_t(dLen);
+        if (g == goffset_t(0))
+        {
+            return false;
+        }
+        for (const auto& d : merged)
+        {
+            const goffset_t dEnd = d.first + goffset_t(d.second);
+            if (g >= d.first && g < dEnd)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void prune_roffset_registry_overlapping_merged_dead(const std::vector<std::pair<goffset_t, size_t>>& merged)
+    {
         for (auto it = roffset_slot_targets_.begin(); it != roffset_slot_targets_.end();)
         {
             const goffset_t sg = it->first;
             const goffset_t tg = it->second;
-            const bool slotInDead = (sg >= dStart && sg < dEnd);
-            const bool tgtInDead = (tg != goffset_t(0) && tg >= dStart && tg < dEnd);
-            if (slotInDead || tgtInDead)
+            if (goffset_in_any_merged_dead_range(sg, merged) || goffset_in_any_merged_dead_range(tg, merged))
             {
                 it = roffset_slot_targets_.erase(it);
             }
@@ -1065,6 +1080,7 @@ class BuilderBase
         }
 
         merge_intervals(dead_ranges_);
+        prune_roffset_registry_overlapping_merged_dead(dead_ranges_);
 
         const size_t oldSize = data.size();
         goffset_t prevDeadEnd = goffset_t(0);
@@ -1120,15 +1136,12 @@ class BuilderBase
         ZMEYA_ASSERT(size_t(newCursor) == newData.size());
 
         auto remap_one = [&](goffset_t oldG) -> goffset_t {
-            for (const Piece& p : pieces)
-            {
-                if (oldG >= p.old_lo && oldG < p.old_hi)
-                {
-                    return p.new_lo + (oldG - p.old_lo);
-                }
-            }
-            ZMEYA_ASSERT(false && "goffset not in any live piece after compaction");
-            return goffset_t(0);
+            ZMEYA_ASSERT(!pieces.empty());
+            auto it = std::upper_bound(pieces.begin(), pieces.end(), oldG, [](goffset_t g, const Piece& p) { return g < p.old_lo; });
+            ZMEYA_ASSERT(it != pieces.begin());
+            --it;
+            ZMEYA_ASSERT(oldG >= it->old_lo && oldG < it->old_hi);
+            return it->new_lo + (oldG - it->old_lo);
         };
 
         std::unordered_map<goffset_t, goffset_t> newMap;
@@ -1143,6 +1156,7 @@ class BuilderBase
 
         data.swap(newData);
         dead_ranges_.clear();
+        string_blob_phys_bytes_.clear();
     }
 
     void register_roffset_slot(goffset_t slot_field_goffset, goffset_t target_goffset)
@@ -1156,6 +1170,11 @@ class BuilderBase
             ZMEYA_ASSERT(size_t(target_goffset) < data.size());
         }
         roffset_slot_targets_[slot_field_goffset] = target_goffset;
+    }
+
+    void string_blob_phys_register(goffset_t blob_start, size_t nbytes)
+    {
+        string_blob_phys_bytes_[blob_start] = nbytes;
     }
 
     void patch_roffset_slots_from_registry()
@@ -1313,7 +1332,16 @@ class BuilderBase
         if (old_ptr != nullptr)
         {
             ZMEYA_ASSERT(contains_pointer(old_ptr));
-            note_dead_range(get_global_offset(old_ptr), std::strlen(old_ptr) + 1);
+            goffset_t blob_g = get_global_offset(old_ptr);
+            size_t logical_len = std::strlen(old_ptr);
+            size_t phys = logical_len + 1;
+            auto it = string_blob_phys_bytes_.find(blob_g);
+            if (it != string_blob_phys_bytes_.end())
+            {
+                phys = it->second;
+                string_blob_phys_bytes_.erase(it);
+            }
+            note_dead_range(blob_g, phys);
         }
     }
 
@@ -1329,16 +1357,46 @@ class BuilderBase
         size_t old_len = 0;
         goffset_t old_blob_g = goffset_t(0);
         const char* old_ptr = slot->data.get();
+        size_t old_phys_for_growth = 0;
         if (old_ptr != nullptr)
         {
             ZMEYA_ASSERT(contains_pointer(old_ptr));
             old_blob_g = get_global_offset(old_ptr);
             old_len = std::strlen(old_ptr);
-            note_dead_range(old_blob_g, old_len + 1);
+            old_phys_for_growth = old_len + 1;
+            auto pit = string_blob_phys_bytes_.find(old_blob_g);
+            if (pit != string_blob_phys_bytes_.end())
+            {
+                old_phys_for_growth = pit->second;
+                string_blob_phys_bytes_.erase(pit);
+            }
+            note_dead_range(old_blob_g, old_phys_for_growth);
         }
         ZMEYA_ASSERT(suf_len <= SIZE_MAX - old_len);
         ZMEYA_ASSERT(old_len + suf_len <= SIZE_MAX - 1);
-        goffset_t blob_g = alloc_aligned(old_len + suf_len + 1, 1);
+        const size_t new_len = old_len + suf_len;
+        size_t alloc_bytes = new_len + 1;
+        if (old_ptr != nullptr)
+        {
+            if (old_phys_for_growth >= alloc_bytes)
+            {
+                alloc_bytes = old_phys_for_growth;
+            }
+            else
+            {
+                size_t cap = (std::max)(old_phys_for_growth, size_t(8));
+                while (cap < alloc_bytes && cap <= SIZE_MAX / 2)
+                {
+                    cap *= 2;
+                }
+                if (cap < alloc_bytes)
+                {
+                    cap = alloc_bytes;
+                }
+                alloc_bytes = cap;
+            }
+        }
+        goffset_t blob_g = alloc_aligned(alloc_bytes, 1);
         slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
         char* dest = reinterpret_cast<char*>(get_ptr_unsafe_to_store(blob_g));
         if (old_len != 0)
@@ -1347,11 +1405,12 @@ class BuilderBase
             std::memcpy(dest, old_src, old_len);
         }
         std::memcpy(dest + old_len, suf, suf_len);
-        dest[old_len + suf_len] = '\0';
+        dest[new_len] = '\0';
         slot = reinterpret_cast<String*>(get_ptr_unsafe_to_store(str_g));
         goffset_t ptr_slot_g = get_global_offset(&slot->data);
         slot->data.relativeOffset = get_relative_offset(&slot->data, blob_g);
         register_roffset_slot(ptr_slot_g, blob_g);
+        string_blob_phys_bytes_[blob_g] = alloc_bytes;
     }
 
     void string_clear(String& s)
@@ -1362,7 +1421,15 @@ class BuilderBase
         if (old_ptr != nullptr)
         {
             ZMEYA_ASSERT(contains_pointer(old_ptr));
-            note_dead_range(get_global_offset(old_ptr), std::strlen(old_ptr) + 1);
+            goffset_t blob_g = get_global_offset(old_ptr);
+            size_t phys = std::strlen(old_ptr) + 1;
+            auto it = string_blob_phys_bytes_.find(blob_g);
+            if (it != string_blob_phys_bytes_.end())
+            {
+                phys = it->second;
+                string_blob_phys_bytes_.erase(it);
+            }
+            note_dead_range(blob_g, phys);
         }
         slot->data.relativeOffset = 0;
         register_roffset_slot(get_global_offset(&slot->data), goffset_t(0));
@@ -1639,18 +1706,24 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
         BuilderBase::placementCtor<typename zm::HashSet<Key>::Bucket>(&buckets[i], typename zm::HashSet<Key>::Bucket{0, 0});
     }
 
+    std::vector<size_t> item_hashes;
+    item_hashes.reserve(from.size());
     for (const auto& item : from)
     {
-        size_t hash;
+        size_t h;
         if constexpr (std::is_same_v<F, std::string>)
         {
-            hash = HashUtils::hashString(item.c_str());
+            h = HashUtils::hashString(item.c_str());
         }
         else
         {
-            hash = HashUtils::hasher(item);
+            h = HashUtils::hasher(item);
         }
-        size_t bucketIndex = hash % hashMod;
+        item_hashes.push_back(h);
+    }
+    for (size_t hi = 0; hi < item_hashes.size(); ++hi)
+    {
+        size_t bucketIndex = item_hashes[hi] % hashMod;
         buckets[bucketIndex].beginIndex++;
     }
 
@@ -1671,18 +1744,10 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
     Key* items = reinterpret_cast<Key*>(get_ptr_unsafe_to_store(itemsDataOffset));
     buckets = reinterpret_cast<typename zm::HashSet<Key>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
 
+    size_t hi = 0;
     for (const auto& item : from)
     {
-        size_t hash;
-        if constexpr (std::is_same_v<F, std::string>)
-        {
-            hash = HashUtils::hashString(item.c_str());
-        }
-        else
-        {
-            hash = HashUtils::hasher(item);
-        }
-        size_t bucketIndex = hash % hashMod;
+        size_t bucketIndex = item_hashes[hi++] % hashMod;
         typename zm::HashSet<Key>::Bucket& bucket = buckets[bucketIndex];
 
         Key* element = &items[bucket.endIndex];
@@ -1735,19 +1800,27 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
         BuilderBase::placementCtor<typename zm::HashMap<Key, Value>::Bucket>(&buckets[i], typename zm::HashMap<Key, Value>::Bucket{0, 0});
     }
 
+    std::vector<size_t> key_hashes;
+    key_hashes.reserve(from.size());
     for (const auto& kv : from)
     {
         const FK& key = kv.first;
-        size_t hash;
+        size_t h;
         if constexpr (std::is_same_v<FK, std::string>)
         {
-            hash = HashUtils::hashString(key.c_str());
+            h = HashUtils::hashString(key.c_str());
         }
         else
         {
-            hash = HashUtils::hasher(key);
+            h = HashUtils::hasher(key);
         }
-        size_t bucketIndex = hash % hashMod;
+        key_hashes.push_back(h);
+    }
+    size_t khi = 0;
+    for (const auto& kv : from)
+    {
+        (void)kv;
+        size_t bucketIndex = key_hashes[khi++] % hashMod;
         buckets[bucketIndex].beginIndex++;
     }
 
@@ -1769,20 +1842,12 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
     ItemType* items = reinterpret_cast<ItemType*>(get_ptr_unsafe_to_store(itemsDataOffset));
     buckets = reinterpret_cast<typename zm::HashMap<Key, Value>::Bucket*>(get_ptr_unsafe_to_store(bucketsDataOffset));
 
+    khi = 0;
     for (const auto& kv : from)
     {
         const FK& key = kv.first;
         const FV& value = kv.second;
-        size_t hash;
-        if constexpr (std::is_same_v<FK, std::string>)
-        {
-            hash = HashUtils::hashString(key.c_str());
-        }
-        else
-        {
-            hash = HashUtils::hasher(key);
-        }
-        size_t bucketIndex = hash % hashMod;
+        size_t bucketIndex = key_hashes[khi++] % hashMod;
         typename zm::HashMap<Key, Value>::Bucket& bucket = buckets[bucketIndex];
 
         ItemType* element = &items[bucket.endIndex];
@@ -2001,6 +2066,7 @@ inline void assign_string_std(BuilderBase& builder, String& _to, const std::stri
     String* to = reinterpret_cast<String*>(builder.get_ptr_unsafe_to_store(to_offset));
     to->data.relativeOffset = builder.get_relative_offset(&to->data, stringDataOffset);
     builder.register_roffset_slot(builder.get_global_offset(&to->data), stringDataOffset);
+    builder.string_blob_phys_register(stringDataOffset, len + 1);
 }
 
 inline void assign_string_cstr(BuilderBase& builder, String& _to, const char* from)
@@ -2027,6 +2093,7 @@ inline void assign_string_cstr(BuilderBase& builder, String& _to, const char* fr
     String* to = reinterpret_cast<String*>(builder.get_ptr_unsafe_to_store(to_offset));
     to->data.relativeOffset = builder.get_relative_offset(&to->data, stringDataOffset);
     builder.register_roffset_slot(builder.get_global_offset(&to->data), stringDataOffset);
+    builder.string_blob_phys_register(stringDataOffset, len + 1);
 }
 
 } // namespace detail
@@ -2141,6 +2208,20 @@ void assign(detail::BuilderBase& builder, HashMap<Key, Value>& _to, const std::u
 
 template <typename Key, typename F> void hashset_insert(detail::BuilderBase& builder, HashSet<Key>& hs, const F& item)
 {
+    if constexpr (std::is_same_v<Key, String> && std::is_same_v<F, std::string>)
+    {
+        if (hs.contains(item.c_str()))
+        {
+            return;
+        }
+    }
+    else if constexpr (std::is_same_v<Key, F>)
+    {
+        if (hs.contains(item))
+        {
+            return;
+        }
+    }
     std::unordered_set<F> tmp;
     tmp.reserve(hs.size() + 16);
     for (const Key& k : hs)
@@ -2203,6 +2284,22 @@ template <typename Key> void hashset_clear(detail::BuilderBase& builder, HashSet
 
 template <typename K, typename V, typename FK, typename FV> void hashmap_insert(detail::BuilderBase& builder, HashMap<K, V>& hm, const FK& key, const FV& val)
 {
+    if constexpr (std::is_same_v<K, String> && std::is_same_v<FK, std::string>)
+    {
+        if (V* pv = hm.find(key.c_str()))
+        {
+            *pv = val;
+            return;
+        }
+    }
+    else if constexpr (std::is_same_v<FK, K>)
+    {
+        if (V* pv = hm.find(key))
+        {
+            *pv = val;
+            return;
+        }
+    }
     // Snapshot the full map and re-assign each call (O(hm.size())); large batches should use bulk assign instead.
     if constexpr (std::is_same<K, String>::value)
     {
