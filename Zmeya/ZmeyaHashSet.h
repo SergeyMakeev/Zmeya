@@ -76,6 +76,11 @@ template <typename Key> class HashSet
                 mark_end();
                 return;
             }
+            if (m->empty())
+            {
+                mark_end();
+                return;
+            }
             for (bi = 0; bi < m->buckets.size(); ++bi)
             {
                 ni = m->buckets[bi].head;

@@ -393,6 +393,65 @@ static void BM_HashMapStringInt32_IncrementalInsert_Reserved(benchmark::State& s
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(n));
 }
 
+static void BM_HashMapInt32_EraseHeavy(benchmark::State& state)
+{
+    const size_t n = static_cast<size_t>(state.range(0));
+    for (auto _ : state)
+    {
+        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+            [n](zm::BlobWriter<RootMapIntInt>& w)
+            {
+                for (size_t i = 0; i < n; ++i)
+                {
+                    w.hashmap_insert(w.root()->map, static_cast<int32_t>(i), static_cast<int32_t>(i * 3));
+                }
+                for (size_t i = 0; i < n; i += 2)
+                {
+                    w.hashmap_erase(w.root()->map, static_cast<int32_t>(i));
+                }
+                const size_t need = (n + 1) / 2;
+                for (size_t j = 0; j < need; ++j)
+                {
+                    const int32_t k = static_cast<int32_t>(2000000000 + static_cast<int32_t>(j));
+                    w.hashmap_insert(w.root()->map, k, static_cast<int32_t>(j * 11));
+                }
+            },
+            4);
+        benchmark::DoNotOptimize(blob.data());
+        benchmark::DoNotOptimize(blob.size());
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(n));
+}
+
+static void BM_HashMapInt32_IterateAll(benchmark::State& state)
+{
+    const size_t n = static_cast<size_t>(state.range(0));
+    std::unordered_map<int32_t, int32_t> model;
+    model.reserve(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        const int32_t k = static_cast<int32_t>(i);
+        model[k] = static_cast<int32_t>(i * 3);
+    }
+    zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+        [&model](zm::BlobWriter<RootMapIntInt>& w)
+        {
+            w.root()->map = model;
+        },
+        4);
+    const RootMapIntInt* root = reinterpret_cast<const RootMapIntInt*>(blob.data());
+    for (auto _ : state)
+    {
+        size_t cnt = 0;
+        for (auto it = root->map.begin(); it != root->map.end(); ++it)
+        {
+            ++cnt;
+        }
+        benchmark::DoNotOptimize(cnt);
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(n));
+}
+
 static void BM_HashMapInt32_FindMiss(benchmark::State& state)
 {
     const size_t n = static_cast<size_t>(state.range(0));
@@ -544,6 +603,8 @@ BENCHMARK(BM_HashMapStringInt32_BulkAssign)->RangeMultiplier(8)->Range(8, 512);
 BENCHMARK(BM_HashMapStringInt32_IncrementalInsert)->RangeMultiplier(8)->Range(8, 512);
 BENCHMARK(BM_HashMapStringInt32_IncrementalInsert_Reserved)->RangeMultiplier(8)->Range(8, 512);
 BENCHMARK(BM_HashMapInt32_IncrementalEraseReinsert)->RangeMultiplier(8)->Range(8, 4096);
+BENCHMARK(BM_HashMapInt32_EraseHeavy)->RangeMultiplier(8)->Range(8, 4096);
+BENCHMARK(BM_HashMapInt32_IterateAll)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashSetInt32_BulkAssign)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashSetInt32_IncrementalInsert)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashSetInt32_IncrementalInsert_Reserved)->RangeMultiplier(8)->Range(8, 4096);

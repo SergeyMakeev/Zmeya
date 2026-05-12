@@ -13,14 +13,27 @@
 
     static bool goffset_in_any_merged_dead_range(goffset_t g, const std::vector<std::pair<goffset_t, size_t>>& merged)
     {
-        if (g == goffset_t(0))
+        if (g == goffset_t(0) || merged.empty())
         {
             return false;
         }
-        for (const auto& d : merged)
+        // `merge_intervals` yields sorted disjoint ranges; binary search a containing interval.
+        size_t lo = 0;
+        size_t hi = merged.size();
+        while (lo < hi)
         {
-            const goffset_t dEnd = d.first + goffset_t(d.second);
-            if (g >= d.first && g < dEnd)
+            const size_t mid = lo + (hi - lo) / 2;
+            const goffset_t s = merged[mid].first;
+            const goffset_t e = s + goffset_t(merged[mid].second);
+            if (g < s)
+            {
+                hi = mid;
+            }
+            else if (g >= e)
+            {
+                lo = mid + 1;
+            }
+            else
             {
                 return true;
             }
