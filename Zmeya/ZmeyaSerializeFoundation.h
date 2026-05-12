@@ -161,7 +161,8 @@ inline void set_global_builder(BuilderBase* builder) noexcept { g_tls_active_bui
 **Stack pointer guard**
 
 `get_relative_offset` refuses stack addresses because their absolute location is not stable relative to
-the arena. On non-Windows platforms this check is conservatively disabled.
+the arena. On non-Windows platforms this check is conservatively disabled (always returns false): there
+is no small, portable stack-range query wired here yet.
 
 */
 

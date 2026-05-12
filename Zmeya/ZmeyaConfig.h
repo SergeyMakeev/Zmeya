@@ -94,7 +94,3 @@ void onAssertionFailed(const char* expression, const char* srcFile, unsigned int
 #endif
 
 #define ZMEYA_MAX_ALIGN (64)
-
-#ifdef _DEBUG
-#define ZMEYA_VALIDATE_HASH_DUPLICATES
-#endif

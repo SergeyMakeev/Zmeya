@@ -5,6 +5,18 @@
 Arena compaction, registry/patching, allocation, strings, arrays, and finalize live in separate
 `ZmeyaBuilderBase*.inc` fragments so navigation matches subsystems without changing the single class.
 
+**Include order (read / debug)**
+
+1. `ZmeyaBuilderBaseArena.inc` -- arena bytes, `contains_pointer`, dead ranges
+2. `ZmeyaBuilderBaseRegistry.inc` -- `roffset` slot registry, patching
+3. `ZmeyaBuilderBaseAlloc.inc` -- `alloc_aligned`, placement helpers
+4. `ZmeyaBuilderBaseCtor.inc` -- construction helpers
+5. `ZmeyaBuilderBaseStrings.inc` -- string slab ops (`string_append`, `string_clear`, ...)
+6. `ZmeyaBuilderBaseArrays.inc` -- array slab ops
+7. `ZmeyaBuilderBaseFinalize.inc` -- `finalize`, compaction
+
+Chained hash insert/rehash/erase live in `ZmeyaBuilderHashChain.inc` (included from `ZmeyaBuilderBase.h`, not here).
+
 */
 
 class BuilderBase

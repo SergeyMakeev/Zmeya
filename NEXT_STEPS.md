@@ -20,7 +20,7 @@ The backing store is **`std::vector<char>`**, which can reallocate when it grows
 
 **Raw pointers** returned by **`allocate()`**, **`root()`**, addresses of **`zm::*`** objects in the blob, or pointers returned by **`get()`** can become **stale** after a realloc if you cache them across operations that grow the buffer. Call **`writer.root()`** again after growth, resolve through **`writer.builder_base()`** using **`goffset_t`** plus **`get_ptr_unsafe_to_store`**, or otherwise avoid holding **`T*`** across allocator growth.
 
-Some unit tests call **`zm::detail::write_scope_with_initial_buffer_bytes`** with a tiny starting arena to force **`std::vector`** reallocations on purpose; that helper is not a supported public workflow for application code.
+Some unit tests call **`zmeya_test::write_scope_stressed`** (see **`TestHelper.h`**) with a tiny starting arena to force **`std::vector`** reallocations on purpose; it forwards to **`zm::detail::write_scope_with_initial_buffer_bytes`** and is not a supported public workflow for application code.
 
 ## Incremental mutation
 

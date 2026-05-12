@@ -14,7 +14,11 @@ set(ZMEYA_SOURCES
   ZmeyaTestNewAPI.cpp
   ZmeyaTestMemorySafety.cpp
   ZmeyaTestIncremental.cpp
-  ZmeyaTestCoverage.cpp
+  ZmeyaTestCoverageCommon.h
+  ZmeyaTestCoverage_P0P1.cpp
+  ZmeyaTestCoverage_P2P4.cpp
+  ZmeyaTestCoverage_P5P9.cpp
+  ZmeyaTestCoverage_DeathAndTail.cpp
   ZmeyaTest01.cpp
   ZmeyaTest02.cpp
   ZmeyaTest03.cpp

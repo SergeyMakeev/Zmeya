@@ -15,6 +15,11 @@ then re-derive `p` via `get_ptr_unsafe_to_store(hm_g)` after growth. Never call 
 or `arena_byte_offset_of(&hs...)` after a growth step in the same function unless you re-bound `hm`/`hs`
 from `p` (prefer `&p->nodes` etc.).
 
+**Reviewer checklist (after edits)**
+
+- After any step that can grow the arena, rebind `p` with `get_ptr_unsafe_to_store(hm_g)` / `hs_g` before using `hm`/`hs` or addresses derived from them.
+- When walking chains, use `p->nodes` / `p->buckets` only from a freshly rebound `p`.
+
 */
 
 template <typename Key> inline size_t zm_hash_bucket_index_stored(const Key& k, size_t mod)

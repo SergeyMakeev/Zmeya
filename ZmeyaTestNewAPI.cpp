@@ -286,7 +286,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
             FillBasicTestRootFresh(w);
         });
 
-    zm::BlobBuffer stressed = zm::detail::write_scope_with_initial_buffer_bytes<TestRoot>(
+    zm::BlobBuffer stressed = zmeya_test::write_scope_stressed<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);

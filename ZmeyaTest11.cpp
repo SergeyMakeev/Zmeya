@@ -93,7 +93,7 @@ static void validate(const ReferToTestRoot* root)
 
 TEST(ZmeyaTestSuite, ReferToTest)
 {
-    zm::BlobBuffer bytesCopy = zm::detail::write_scope_with_initial_buffer_bytes<ReferToTestRoot>(
+    zm::BlobBuffer bytesCopy = zmeya_test::write_scope_stressed<ReferToTestRoot>(
         [](zm::BlobWriter<ReferToTestRoot>& w)
         {
             ReferToTestRoot* root = w.root();

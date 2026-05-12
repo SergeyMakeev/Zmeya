@@ -1,6 +1,35 @@
 namespace detail
 {
 
+inline size_t string_slot_old_phys_bytes(BuilderBase& builder, const char* old_ptr)
+{
+    ZMEYA_ASSERT(old_ptr != nullptr);
+    ZMEYA_ASSERT(builder.contains_pointer(old_ptr));
+    const goffset_t old_blob_g = builder.arena_byte_offset_of(old_ptr);
+    size_t old_phys_pre_dead = std::strlen(old_ptr) + 1;
+    const auto pit = builder.string_blob_phys_bytes_.find(old_blob_g);
+    if (pit != builder.string_blob_phys_bytes_.end())
+    {
+        old_phys_pre_dead = pit->second;
+    }
+    return old_phys_pre_dead;
+}
+
+inline size_t string_alloc_total_bytes(size_t need, bool had_old, size_t old_phys_pre_dead)
+{
+    if (!had_old)
+    {
+        constexpr size_t kMinFirstBlob = 32;
+        return (std::max)(need, kMinFirstBlob);
+    }
+    size_t cap = (std::max)(old_phys_pre_dead, size_t(8));
+    while (cap < need && cap <= SIZE_MAX / 2)
+    {
+        cap *= 2;
+    }
+    return (std::max)(need, cap);
+}
+
 template <typename T> void assign_pointer(BuilderBase& builder, zm::Pointer<T>& _to, T* from)
 {
     goffset_t to_offset = builder.arena_byte_offset_of(&_to);
@@ -38,39 +67,14 @@ inline void assign_string_std(BuilderBase& builder, String& _to, const std::stri
     ZMEYA_ASSERT(len <= SIZE_MAX - 1);
     const size_t need = len + 1;
 
-    size_t old_phys_pre_dead = 0;
     const bool had_old = old_ptr != nullptr;
-    if (had_old)
-    {
-        ZMEYA_ASSERT(builder.contains_pointer(old_ptr));
-        const goffset_t old_blob_g = builder.arena_byte_offset_of(old_ptr);
-        old_phys_pre_dead = std::strlen(old_ptr) + 1;
-        const auto pit = builder.string_blob_phys_bytes_.find(old_blob_g);
-        if (pit != builder.string_blob_phys_bytes_.end())
-        {
-            old_phys_pre_dead = pit->second;
-        }
-    }
+    const size_t old_phys_pre_dead = had_old ? string_slot_old_phys_bytes(builder, old_ptr) : size_t(0);
 
     builder.string_note_dead_existing_blob(_to);
 
     to = reinterpret_cast<String*>(builder.get_ptr_unsafe_to_store(to_offset));
 
-    size_t alloc_bytes = need;
-    if (!had_old)
-    {
-        constexpr size_t kMinFirstBlob = 32;
-        alloc_bytes = (std::max)(need, kMinFirstBlob);
-    }
-    else
-    {
-        size_t cap = (std::max)(old_phys_pre_dead, size_t(8));
-        while (cap < need && cap <= SIZE_MAX / 2)
-        {
-            cap *= 2;
-        }
-        alloc_bytes = (std::max)(need, cap);
-    }
+    const size_t alloc_bytes = string_alloc_total_bytes(need, had_old, old_phys_pre_dead);
 
     zm::goffset_t stringDataOffset = builder.alloc_aligned(alloc_bytes, 1);
     char* stringData = reinterpret_cast<char*>(builder.get_ptr_unsafe_to_store(stringDataOffset));
@@ -103,39 +107,14 @@ inline void assign_string_cstr(BuilderBase& builder, String& _to, const char* fr
     ZMEYA_ASSERT(len <= SIZE_MAX - 1);
     const size_t need = len + 1;
 
-    size_t old_phys_pre_dead = 0;
     const bool had_old = old_ptr != nullptr;
-    if (had_old)
-    {
-        ZMEYA_ASSERT(builder.contains_pointer(old_ptr));
-        const goffset_t old_blob_g = builder.arena_byte_offset_of(old_ptr);
-        old_phys_pre_dead = std::strlen(old_ptr) + 1;
-        const auto pit = builder.string_blob_phys_bytes_.find(old_blob_g);
-        if (pit != builder.string_blob_phys_bytes_.end())
-        {
-            old_phys_pre_dead = pit->second;
-        }
-    }
+    const size_t old_phys_pre_dead = had_old ? string_slot_old_phys_bytes(builder, old_ptr) : size_t(0);
 
     builder.string_note_dead_existing_blob(_to);
 
     to = reinterpret_cast<String*>(builder.get_ptr_unsafe_to_store(to_offset));
 
-    size_t alloc_bytes = need;
-    if (!had_old)
-    {
-        constexpr size_t kMinFirstBlob = 32;
-        alloc_bytes = (std::max)(need, kMinFirstBlob);
-    }
-    else
-    {
-        size_t cap = (std::max)(old_phys_pre_dead, size_t(8));
-        while (cap < need && cap <= SIZE_MAX / 2)
-        {
-            cap *= 2;
-        }
-        alloc_bytes = (std::max)(need, cap);
-    }
+    const size_t alloc_bytes = string_alloc_total_bytes(need, had_old, old_phys_pre_dead);
 
     zm::goffset_t stringDataOffset = builder.alloc_aligned(alloc_bytes, 1);
     char* stringData = reinterpret_cast<char*>(builder.get_ptr_unsafe_to_store(stringDataOffset));
