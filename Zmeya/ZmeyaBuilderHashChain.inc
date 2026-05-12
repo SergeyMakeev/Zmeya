@@ -207,20 +207,21 @@ template <typename Key, typename F> void BuilderBase::hashset_chain_insert(zm::H
         idx = p->free_head_;
         p->free_head_ = nodePtr[idx].next;
         nodePtr[idx].key = item;
-        nodePtr[idx].next = ZMEYA_HASH_CHAIN_NIL;
+        p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
+        nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
     }
     else
     {
-        typename zm::HashSet<Key>::Node node;
-        BuilderBase::placementCtor<Key>(&node.key);
-        node.key = item;
-        node.next = ZMEYA_HASH_CHAIN_NIL;
-        // `hs` may dangle after bucket init alloc above; use p from hs_g for any member address.
-        p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
         goffset_t nodes_hdr_g = arena_byte_offset_of(&p->nodes);
-        array_push_back(*reinterpret_cast<Array<typename zm::HashSet<Key>::Node>*>(get_ptr_unsafe_to_store(nodes_hdr_g)), node);
+        hash_chain_nodes_array_grow_append_default_hashset<Key>(
+            *reinterpret_cast<Array<typename zm::HashSet<Key>::Node>*>(get_ptr_unsafe_to_store(nodes_hdr_g)));
         p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
         idx = uint32_t(p->nodes.size() - 1);
+        nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
+        nodePtr[idx].key = item;
+        p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
         nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
         bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
     }
@@ -351,23 +352,29 @@ template <typename K, typename V, typename FK, typename FV> void BuilderBase::ha
         idx = p->free_head_;
         p->free_head_ = nodePtr[idx].next;
         nodePtr[idx].key = key;
+        p = reload_hm();
+        nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
         nodePtr[idx].value = val;
-        nodePtr[idx].next = ZMEYA_HASH_CHAIN_NIL;
+        p = reload_hm();
+        nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
     }
     else
     {
-        typename zm::HashMap<K, V>::Node node;
-        BuilderBase::placementCtor<K>(&node.key);
-        BuilderBase::placementCtor<V>(&node.value);
-        node.key = key;
-        node.value = val;
-        node.next = ZMEYA_HASH_CHAIN_NIL;
-        // `hm` may dangle after bucket init alloc above; use p from hm_g for any member address.
-        p = reload_hm();
         goffset_t nodes_hdr_g = arena_byte_offset_of(&p->nodes);
-        array_push_back(*reinterpret_cast<Array<typename zm::HashMap<K, V>::Node>*>(get_ptr_unsafe_to_store(nodes_hdr_g)), node);
+        hash_chain_nodes_array_grow_append_default_hashmap<K, V>(
+            *reinterpret_cast<Array<typename zm::HashMap<K, V>::Node>*>(get_ptr_unsafe_to_store(nodes_hdr_g)));
         p = reload_hm();
         idx = uint32_t(p->nodes.size() - 1);
+        nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
+        nodePtr[idx].key = key;
+        p = reload_hm();
+        nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
+        nodePtr[idx].value = val;
+        p = reload_hm();
         nodePtr = p->nodes.get_raw_ptr_unsafe_can_be_relocated();
         bucketPtr = p->buckets.get_raw_ptr_unsafe_can_be_relocated();
     }
@@ -435,4 +442,216 @@ template <typename K, typename V> void BuilderBase::hashmap_chain_clear(zm::Hash
     p->nodes.relativeOffset = 0;
     register_roffset_slot(arena_byte_offset_of(&p->buckets), goffset_t(0));
     register_roffset_slot(arena_byte_offset_of(&p->nodes), goffset_t(0));
+}
+
+template <typename Key> void BuilderBase::hashset_chain_reserve_node_pool(zm::HashSet<Key>& hs, size_t min_node_pool_capacity)
+{
+    ScopedBuilder tls(this);
+    if (min_node_pool_capacity == 0)
+    {
+        return;
+    }
+    ZMEYA_HARD_ASSERT(min_node_pool_capacity <= size_t(std::numeric_limits<uint32_t>::max()) && "node pool capacity exceeds uint32_t");
+
+    goffset_t hs_g = arena_byte_offset_of(&hs);
+    zm::HashSet<Key>* p = reinterpret_cast<zm::HashSet<Key>*>(get_ptr_unsafe_to_store(hs_g));
+    goffset_t hdr_g = arena_byte_offset_of(&p->nodes);
+
+    if (p->nodes.numElements == 0 && p->nodes.relativeOffset == 0)
+    {
+        size_t& h = hash_chain_nodes_first_alloc_hint_[hdr_g];
+        h = (std::max)(h, min_node_pool_capacity);
+        return;
+    }
+
+    using Node = typename zm::HashSet<Key>::Node;
+    constexpr size_t alignOfNode = std::alignment_of<Node>::value;
+    constexpr size_t sizeOfNode = sizeof(Node);
+
+    const size_t old_n = size_t(p->nodes.numElements);
+    ZMEYA_ASSERT(old_n > 0);
+
+    size_t old_cap = old_n;
+    const auto itPhys = hash_chain_nodes_phys_bytes_.find(hdr_g);
+    if (itPhys != hash_chain_nodes_phys_bytes_.end())
+    {
+        ZMEYA_ASSERT(itPhys->second % sizeOfNode == 0);
+        old_cap = itPhys->second / sizeOfNode;
+    }
+    if (old_cap >= min_node_pool_capacity)
+    {
+        return;
+    }
+
+    ZMEYA_ASSERT(old_n <= SIZE_MAX / 2);
+    const size_t new_cap = (std::max)(min_node_pool_capacity, old_cap * 2);
+    ZMEYA_ASSERT(new_cap <= SIZE_MAX / sizeOfNode);
+
+    zm::Array<Node>* slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+    size_t dead_slab_bytes = old_n * sizeOfNode;
+    if (itPhys != hash_chain_nodes_phys_bytes_.end())
+    {
+        dead_slab_bytes = itPhys->second;
+    }
+    Node* old_data = slot->get_raw_ptr_unsafe_can_be_relocated();
+    note_dead_range(arena_byte_offset_of(old_data), dead_slab_bytes);
+
+    goffset_t new_blob_g = alloc_aligned(sizeOfNode * new_cap, alignOfNode);
+    slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+    for (size_t i = 0; i < old_n; ++i)
+    {
+        slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+        Node* old_row = slot->get_raw_ptr_unsafe_can_be_relocated();
+        const uint32_t saved_next = old_row[i].next;
+
+        std::string old_key_copy;
+        Key old_key_copy_trivial{};
+        if constexpr (std::is_same<Key, zm::String>::value)
+        {
+            old_key_copy.assign(old_row[i].key.c_str());
+        }
+        else
+        {
+            old_key_copy_trivial = old_row[i].key;
+        }
+
+        Node* new_row = reinterpret_cast<Node*>(get_ptr_unsafe_to_store(new_blob_g + goffset_t(i * sizeOfNode)));
+        BuilderBase::placementCtor<Key>(&new_row->key);
+        if constexpr (std::is_same<Key, zm::String>::value)
+        {
+            assign_string_std(*this, new_row->key, old_key_copy);
+        }
+        else
+        {
+            new_row->key = old_key_copy_trivial;
+        }
+        new_row = reinterpret_cast<Node*>(get_ptr_unsafe_to_store(new_blob_g + goffset_t(i * sizeOfNode)));
+        new_row->next = saved_next;
+
+        slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+        old_row = slot->get_raw_ptr_unsafe_can_be_relocated();
+        old_row[i].~Node();
+    }
+
+    slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+    slot->numElements = uint32_t(old_n);
+    slot->relativeOffset = get_relative_offset(slot, new_blob_g);
+    register_roffset_slot(hdr_g, new_blob_g);
+    hash_chain_nodes_phys_bytes_[hdr_g] = new_cap * sizeOfNode;
+}
+
+template <typename K, typename V> void BuilderBase::hashmap_chain_reserve_node_pool(zm::HashMap<K, V>& hm, size_t min_node_pool_capacity)
+{
+    ScopedBuilder tls(this);
+    if (min_node_pool_capacity == 0)
+    {
+        return;
+    }
+    ZMEYA_HARD_ASSERT(min_node_pool_capacity <= size_t(std::numeric_limits<uint32_t>::max()) && "node pool capacity exceeds uint32_t");
+
+    goffset_t hm_g = arena_byte_offset_of(&hm);
+    zm::HashMap<K, V>* p = reinterpret_cast<zm::HashMap<K, V>*>(get_ptr_unsafe_to_store(hm_g));
+    goffset_t hdr_g = arena_byte_offset_of(&p->nodes);
+
+    if (p->nodes.numElements == 0 && p->nodes.relativeOffset == 0)
+    {
+        size_t& h = hash_chain_nodes_first_alloc_hint_[hdr_g];
+        h = (std::max)(h, min_node_pool_capacity);
+        return;
+    }
+
+    using Node = typename zm::HashMap<K, V>::Node;
+    constexpr size_t alignOfNode = std::alignment_of<Node>::value;
+    constexpr size_t sizeOfNode = sizeof(Node);
+
+    const size_t old_n = size_t(p->nodes.numElements);
+    ZMEYA_ASSERT(old_n > 0);
+
+    size_t old_cap = old_n;
+    const auto itPhys = hash_chain_nodes_phys_bytes_.find(hdr_g);
+    if (itPhys != hash_chain_nodes_phys_bytes_.end())
+    {
+        ZMEYA_ASSERT(itPhys->second % sizeOfNode == 0);
+        old_cap = itPhys->second / sizeOfNode;
+    }
+    if (old_cap >= min_node_pool_capacity)
+    {
+        return;
+    }
+
+    ZMEYA_ASSERT(old_n <= SIZE_MAX / 2);
+    const size_t new_cap = (std::max)(min_node_pool_capacity, old_cap * 2);
+    ZMEYA_ASSERT(new_cap <= SIZE_MAX / sizeOfNode);
+
+    zm::Array<Node>* slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+    size_t dead_slab_bytes = old_n * sizeOfNode;
+    if (itPhys != hash_chain_nodes_phys_bytes_.end())
+    {
+        dead_slab_bytes = itPhys->second;
+    }
+    Node* old_data = slot->get_raw_ptr_unsafe_can_be_relocated();
+    note_dead_range(arena_byte_offset_of(old_data), dead_slab_bytes);
+
+    goffset_t new_blob_g = alloc_aligned(sizeOfNode * new_cap, alignOfNode);
+    slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+    for (size_t i = 0; i < old_n; ++i)
+    {
+        slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+        Node* old_row = slot->get_raw_ptr_unsafe_can_be_relocated();
+        const uint32_t saved_next = old_row[i].next;
+
+        std::string old_key_copy;
+        std::string old_val_copy;
+        K old_key_copy_trivial{};
+        V old_val_copy_trivial{};
+        if constexpr (std::is_same<K, zm::String>::value)
+        {
+            old_key_copy.assign(old_row[i].key.c_str());
+        }
+        else
+        {
+            old_key_copy_trivial = old_row[i].key;
+        }
+        if constexpr (std::is_same<V, zm::String>::value)
+        {
+            old_val_copy.assign(old_row[i].value.c_str());
+        }
+        else
+        {
+            old_val_copy_trivial = old_row[i].value;
+        }
+
+        Node* new_row = reinterpret_cast<Node*>(get_ptr_unsafe_to_store(new_blob_g + goffset_t(i * sizeOfNode)));
+        BuilderBase::placementCtor<K>(&new_row->key);
+        BuilderBase::placementCtor<V>(&new_row->value);
+        if constexpr (std::is_same<K, zm::String>::value)
+        {
+            assign_string_std(*this, new_row->key, old_key_copy);
+            new_row = reinterpret_cast<Node*>(get_ptr_unsafe_to_store(new_blob_g + goffset_t(i * sizeOfNode)));
+        }
+        else
+        {
+            new_row->key = old_key_copy_trivial;
+        }
+        if constexpr (std::is_same<V, zm::String>::value)
+        {
+            assign_string_std(*this, new_row->value, old_val_copy);
+        }
+        else
+        {
+            new_row->value = old_val_copy_trivial;
+        }
+        new_row = reinterpret_cast<Node*>(get_ptr_unsafe_to_store(new_blob_g + goffset_t(i * sizeOfNode)));
+        new_row->next = saved_next;
+
+        slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+        old_row = slot->get_raw_ptr_unsafe_can_be_relocated();
+        old_row[i].~Node();
+    }
+
+    slot = reinterpret_cast<zm::Array<Node>*>(get_ptr_unsafe_to_store(hdr_g));
+    slot->numElements = uint32_t(old_n);
+    slot->relativeOffset = get_relative_offset(slot, new_blob_g);
+    register_roffset_slot(hdr_g, new_blob_g);
+    hash_chain_nodes_phys_bytes_[hdr_g] = new_cap * sizeOfNode;
 }

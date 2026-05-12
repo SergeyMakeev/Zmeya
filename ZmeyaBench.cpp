@@ -285,14 +285,59 @@ static void BM_StringRepeatedAssignFinalize(benchmark::State& state)
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(rounds));
 }
 
+static void BM_HashMapInt32_IncrementalInsert_Reserved(benchmark::State& state)
+{
+    const size_t n = static_cast<size_t>(state.range(0));
+    for (auto _ : state)
+    {
+        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+            [n](zm::BlobWriter<RootMapIntInt>& w)
+            {
+                w.hashmap_reserve_nodes(w.root()->map, n);
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const int32_t k = static_cast<int32_t>(i);
+                    w.hashmap_insert(w.root()->map, k, static_cast<int32_t>(i * 3));
+                }
+            },
+            4);
+        benchmark::DoNotOptimize(blob.data());
+        benchmark::DoNotOptimize(blob.size());
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(n));
+}
+
+static void BM_HashSetInt32_IncrementalInsert_Reserved(benchmark::State& state)
+{
+    const size_t n = static_cast<size_t>(state.range(0));
+    for (auto _ : state)
+    {
+        zm::BlobBuffer blob = zm::write_blob<RootSetInt>(
+            [n](zm::BlobWriter<RootSetInt>& w)
+            {
+                w.hashset_reserve_nodes(w.root()->set, n);
+                for (size_t i = 0; i < n; ++i)
+                {
+                    w.hashset_insert(w.root()->set, static_cast<int32_t>(i * 17 + 3));
+                }
+            },
+            4);
+        benchmark::DoNotOptimize(blob.data());
+        benchmark::DoNotOptimize(blob.size());
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(n));
+}
+
 } // namespace
 
 BENCHMARK(BM_HashMapInt32_BulkAssign)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashMapInt32_IncrementalInsert)->RangeMultiplier(8)->Range(8, 4096);
+BENCHMARK(BM_HashMapInt32_IncrementalInsert_Reserved)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashMapStringInt32_BulkAssign)->RangeMultiplier(8)->Range(8, 512);
 BENCHMARK(BM_HashMapStringInt32_IncrementalInsert)->RangeMultiplier(8)->Range(8, 512);
 BENCHMARK(BM_HashSetInt32_BulkAssign)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashSetInt32_IncrementalInsert)->RangeMultiplier(8)->Range(8, 4096);
+BENCHMARK(BM_HashSetInt32_IncrementalInsert_Reserved)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_ArrayInt32_BulkAssign)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_ArrayInt32_PushBack)->RangeMultiplier(8)->Range(8, 4096);
 BENCHMARK(BM_HashMapInt32_FindHit)->RangeMultiplier(8)->Range(8, 4096);

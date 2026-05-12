@@ -24,6 +24,13 @@ class BuilderBase
 
     std::unordered_map<goffset_t, size_t> string_blob_phys_bytes_;
 
+    // Builder-only: tracks node slab byte size (may exceed nodes.numElements*sizeof) and first-slab hints.
+    std::unordered_map<goffset_t, size_t> hash_chain_nodes_phys_bytes_;
+    std::unordered_map<goffset_t, size_t> hash_chain_nodes_first_alloc_hint_;
+
+    // Builder-only: backing store bytes for Array slabs (may exceed numElements*sizeof(T)); keys Array header goffsets.
+    std::unordered_map<goffset_t, size_t> array_slab_phys_bytes_;
+
     std::vector<std::pair<goffset_t, size_t>> dead_ranges_;
 
 #include "ZmeyaBuilderBaseArena.inc"

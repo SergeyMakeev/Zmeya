@@ -176,6 +176,38 @@
         }
         roffset_slot_targets_ = std::move(newMap);
 
+        if (!hash_chain_nodes_phys_bytes_.empty())
+        {
+            std::unordered_map<goffset_t, size_t> newPhys;
+            newPhys.reserve(hash_chain_nodes_phys_bytes_.size() + 1);
+            for (const auto& kv : hash_chain_nodes_phys_bytes_)
+            {
+                newPhys[remap_one(kv.first)] = kv.second;
+            }
+            hash_chain_nodes_phys_bytes_ = std::move(newPhys);
+        }
+        if (!hash_chain_nodes_first_alloc_hint_.empty())
+        {
+            std::unordered_map<goffset_t, size_t> newHint;
+            newHint.reserve(hash_chain_nodes_first_alloc_hint_.size() + 1);
+            for (const auto& kv : hash_chain_nodes_first_alloc_hint_)
+            {
+                newHint[remap_one(kv.first)] = kv.second;
+            }
+            hash_chain_nodes_first_alloc_hint_ = std::move(newHint);
+        }
+
+        if (!array_slab_phys_bytes_.empty())
+        {
+            std::unordered_map<goffset_t, size_t> newArrayPhys;
+            newArrayPhys.reserve(array_slab_phys_bytes_.size() + 1);
+            for (const auto& kv : array_slab_phys_bytes_)
+            {
+                newArrayPhys[remap_one(kv.first)] = kv.second;
+            }
+            array_slab_phys_bytes_ = std::move(newArrayPhys);
+        }
+
         data.swap(newData);
 #if defined(_DEBUG) || defined(ZMEYA_DEBUG_ARENA_EPOCH)
         ++arena_realloc_epoch_;

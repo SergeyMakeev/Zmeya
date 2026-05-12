@@ -220,6 +220,68 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_EraseClear)
     EXPECT_TRUE(r->set.contains(7));
 }
 
+// Verifies hashset_reserve_nodes then inserts match bulk assign (same logical set).
+TEST(ZmeyaTestSuite, IncrementalHashSet_ReserveNodesMatchesBulkAssign)
+{
+    std::unordered_set<int32_t> model = {3, 1, 4, 1, 5, 9, 2, 6};
+
+    zm::BlobBuffer golden = zm::write_blob<IncrementalHashSetRoot>(
+        [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
+        {
+            w.root()->set = model;
+        }, 4);
+
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashSetRoot>(
+        [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
+        {
+            w.hashset_reserve_nodes(w.root()->set, model.size());
+            for (int v : model)
+            {
+                w.hashset_insert(w.root()->set, v);
+            }
+        }, 128, 4);
+
+    std::vector<int32_t> gvec;
+    for (const int32_t& v : reinterpret_cast<const IncrementalHashSetRoot*>(golden.data())->set)
+    {
+        gvec.push_back(v);
+    }
+    std::vector<int32_t> bvec;
+    for (const int32_t& v : reinterpret_cast<const IncrementalHashSetRoot*>(built.data())->set)
+    {
+        bvec.push_back(v);
+    }
+    std::sort(gvec.begin(), gvec.end());
+    std::sort(bvec.begin(), bvec.end());
+    EXPECT_EQ(gvec, bvec);
+}
+
+// Verifies hashmap_reserve_nodes (empty table hint) plus inserts match bulk assign for string keys.
+TEST(ZmeyaTestSuite, IncrementalHashMap_ReserveNodesMatchesBulkAssign)
+{
+    std::unordered_map<std::string, int32_t> model = {{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}};
+
+    zm::BlobBuffer golden = zm::write_blob<IncrementalHashMapRoot>(
+        [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
+        {
+            w.root()->map = model;
+        }, 4);
+
+    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashMapRoot>(
+        [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
+        {
+            w.hashmap_reserve_nodes(w.root()->map, model.size());
+            for (const auto& kv : model)
+            {
+                w.hashmap_insert(w.root()->map, kv.first, kv.second);
+            }
+        }, 128, 4);
+
+    auto g = ReadLogicalMap(reinterpret_cast<const IncrementalHashMapRoot*>(golden.data())->map);
+    auto b = ReadLogicalMap(reinterpret_cast<const IncrementalHashMapRoot*>(built.data())->map);
+    EXPECT_EQ(g, b);
+}
+
 // Stresses many string replacements so dead ranges accumulate; finalize should compact and leave the final string correct with an empty dead-range list.
 TEST(ZmeyaTestSuite, Compaction_FinalizeShrinksWorkingBufferAfterStringReplacements)
 {

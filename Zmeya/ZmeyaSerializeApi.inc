@@ -8,6 +8,7 @@ split across `ZmeyaSerializeApi*.inc` fragments included below.
 */
 
 #include "ZmeyaSerializeApiAssignDetail.inc"
+#include "ZmeyaBuilderHashChainNodesGrow.inc"
 #include "ZmeyaSerializeApiAssign.inc"
 #include "ZmeyaSerializeApiIncremental.inc"
 #include "ZmeyaSerializeApiInstMembers.inc"

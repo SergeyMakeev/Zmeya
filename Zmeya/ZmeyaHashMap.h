@@ -335,8 +335,7 @@ template <typename Key, typename Value> class HashMap
 };
 
 template <typename Key, typename Value>
-struct zm_hashmap_chain_incremental_ok
-    : std::integral_constant<bool, detail::zm_array_push_back_ok<Key>::value && detail::zm_array_push_back_ok<Value>::value>
+struct zm_hashmap_chain_incremental_ok : std::true_type
 {
 };
 

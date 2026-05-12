@@ -65,6 +65,10 @@
         return roffset_t(byte_delta);
     }
 
+    template <typename Key> void hash_chain_nodes_array_grow_append_default_hashset(zm::Array<typename zm::HashSet<Key>::Node>& arr);
+
+    template <typename K, typename V> void hash_chain_nodes_array_grow_append_default_hashmap(zm::Array<typename zm::HashMap<K, V>::Node>& arr);
+
     template <typename Key, typename F> void hashset_chain_insert(zm::HashSet<Key>& hs, const F& item);
 
     template <typename Key, typename F> void hashset_chain_erase(zm::HashSet<Key>& hs, const F& key);
@@ -80,3 +84,7 @@
     template <typename K, typename V> void hashmap_chain_clear(zm::HashMap<K, V>& hm);
 
     template <typename K, typename V> void hashmap_rehash_impl(zm::HashMap<K, V>& hm, size_t new_num_buckets);
+
+    template <typename Key> void hashset_chain_reserve_node_pool(zm::HashSet<Key>& hs, size_t min_node_pool_capacity);
+
+    template <typename K, typename V> void hashmap_chain_reserve_node_pool(zm::HashMap<K, V>& hm, size_t min_node_pool_capacity);

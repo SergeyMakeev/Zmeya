@@ -7,3 +7,4 @@ build-bench
 CoverageReport-*
 build-bench
 build-default-test
+build-agent

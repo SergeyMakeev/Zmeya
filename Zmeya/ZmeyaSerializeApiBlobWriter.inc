@@ -28,6 +28,11 @@ template <typename TRoot> template <typename Key, typename F> inline void BlobWr
 
 template <typename TRoot> template <typename Key> inline void BlobWriter<TRoot>::hashset_clear(HashSet<Key>& hs) { zm::hashset_clear(*impl_, hs); }
 
+template <typename TRoot> template <typename Key> inline void BlobWriter<TRoot>::hashset_reserve_nodes(HashSet<Key>& hs, size_t min_node_pool_capacity)
+{
+    zm::hashset_reserve_nodes(*impl_, hs, min_node_pool_capacity);
+}
+
 template <typename TRoot> template <typename K, typename V, typename FK, typename FV>
 inline void BlobWriter<TRoot>::hashmap_insert(HashMap<K, V>& hm, const FK& key, const FV& val)
 {
@@ -40,3 +45,8 @@ template <typename TRoot> template <typename K, typename V, typename FK> inline 
 }
 
 template <typename TRoot> template <typename K, typename V> inline void BlobWriter<TRoot>::hashmap_clear(HashMap<K, V>& hm) { zm::hashmap_clear(*impl_, hm); }
+
+template <typename TRoot> template <typename K, typename V> inline void BlobWriter<TRoot>::hashmap_reserve_nodes(HashMap<K, V>& hm, size_t min_node_pool_capacity)
+{
+    zm::hashmap_reserve_nodes(*impl_, hm, min_node_pool_capacity);
+}

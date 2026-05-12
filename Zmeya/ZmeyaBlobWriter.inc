@@ -65,11 +65,15 @@ class BlobWriter
 
     template <typename Key> void hashset_clear(HashSet<Key>& hs);
 
+    template <typename Key> void hashset_reserve_nodes(HashSet<Key>& hs, size_t min_node_pool_capacity);
+
     template <typename K, typename V, typename FK, typename FV> void hashmap_insert(HashMap<K, V>& hm, const FK& key, const FV& val);
 
     template <typename K, typename V, typename FK> void hashmap_erase(HashMap<K, V>& hm, const FK& key);
 
     template <typename K, typename V> void hashmap_clear(HashMap<K, V>& hm);
+
+    template <typename K, typename V> void hashmap_reserve_nodes(HashMap<K, V>& hm, size_t min_node_pool_capacity);
 };
 
 /*

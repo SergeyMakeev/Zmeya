@@ -59,27 +59,82 @@
 
     template <typename T> void note_dead_array_slab_if_any(Array<T>* arr_hdr)
     {
+        const goffset_t hdr_g = arena_byte_offset_of(arr_hdr);
         if (arr_hdr->numElements == 0 && arr_hdr->relativeOffset == 0)
         {
+            array_slab_phys_bytes_.erase(hdr_g);
             return;
         }
         const size_t n = size_t(arr_hdr->numElements);
         ZMEYA_ASSERT(n == 0 || sizeof(T) <= SIZE_MAX / n);
+        const size_t sizeOfT = sizeof(T);
+        size_t slabBytes = n * sizeOfT;
+        const auto itPhys = array_slab_phys_bytes_.find(hdr_g);
+        if (itPhys != array_slab_phys_bytes_.end())
+        {
+            slabBytes = itPhys->second;
+            array_slab_phys_bytes_.erase(itPhys);
+        }
+        if (slabBytes == 0)
+        {
+            return;
+        }
         T* pdata = arr_hdr->get_raw_ptr_unsafe_can_be_relocated();
-        note_dead_range(arena_byte_offset_of(pdata), n * sizeof(T));
+        note_dead_range(arena_byte_offset_of(pdata), slabBytes);
     }
 
     template <typename Key> void note_dead_hashset_if_any(HashSet<Key>* hs)
     {
         note_dead_array_slab_if_any<typename HashSet<Key>::Bucket>(&hs->buckets);
-        note_dead_array_slab_if_any<typename HashSet<Key>::Node>(&hs->nodes);
+        using Node = typename HashSet<Key>::Node;
+        const goffset_t nodes_hdr_g = arena_byte_offset_of(&hs->nodes);
+        hash_chain_nodes_first_alloc_hint_.erase(nodes_hdr_g);
+        if (hs->nodes.numElements == 0 && hs->nodes.relativeOffset == 0)
+        {
+            return;
+        }
+        const auto itPhys = hash_chain_nodes_phys_bytes_.find(nodes_hdr_g);
+        const size_t sizeOfNode = sizeof(Node);
+        const size_t usedBytes = size_t(hs->nodes.numElements) * sizeOfNode;
+        size_t slabBytes = usedBytes;
+        if (itPhys != hash_chain_nodes_phys_bytes_.end())
+        {
+            slabBytes = itPhys->second;
+            hash_chain_nodes_phys_bytes_.erase(itPhys);
+        }
+        if (slabBytes == 0)
+        {
+            return;
+        }
+        Node* pdata = hs->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        note_dead_range(arena_byte_offset_of(pdata), slabBytes);
     }
 
     template <typename K, typename V> void note_dead_hashmap_if_any(HashMap<K, V>* hm)
     {
         note_dead_array_slab_if_any<typename HashMap<K, V>::Bucket>(&hm->buckets);
         using NodeType = typename HashMap<K, V>::Node;
-        note_dead_array_slab_if_any<NodeType>(&hm->nodes);
+        const goffset_t nodes_hdr_g = arena_byte_offset_of(&hm->nodes);
+        hash_chain_nodes_first_alloc_hint_.erase(nodes_hdr_g);
+        if (hm->nodes.numElements == 0 && hm->nodes.relativeOffset == 0)
+        {
+            return;
+        }
+        const auto itPhys = hash_chain_nodes_phys_bytes_.find(nodes_hdr_g);
+        const size_t sizeOfNode = sizeof(NodeType);
+        const size_t usedBytes = size_t(hm->nodes.numElements) * sizeOfNode;
+        size_t slabBytes = usedBytes;
+        if (itPhys != hash_chain_nodes_phys_bytes_.end())
+        {
+            slabBytes = itPhys->second;
+            hash_chain_nodes_phys_bytes_.erase(itPhys);
+        }
+        if (slabBytes == 0)
+        {
+            return;
+        }
+        NodeType* pdata = hm->nodes.get_raw_ptr_unsafe_can_be_relocated();
+        note_dead_range(arena_byte_offset_of(pdata), slabBytes);
     }
 
     // Helper methods for assignment functions

@@ -25,6 +25,7 @@ template <typename T> void BuilderBase::impl_assign_pointer_array(zm::Array<zm::
             to->relativeOffset = 0;
             register_roffset_slot(to_offset, goffset_t(0));
         }
+        array_slab_phys_bytes_.erase(to_offset);
         return;
     }
     zm::Array<zm::Pointer<T>>* to = reinterpret_cast<zm::Array<zm::Pointer<T>>*>(get_ptr_unsafe_to_store(to_offset));
@@ -36,6 +37,7 @@ template <typename T> void BuilderBase::impl_assign_pointer_array(zm::Array<zm::
         register_roffset_slot(to_offset, goffset_t(0));
         to = reinterpret_cast<zm::Array<zm::Pointer<T>>*>(get_ptr_unsafe_to_store(to_offset));
     }
+    array_slab_phys_bytes_.erase(to_offset);
     constexpr size_t alignOfPtr = std::alignment_of<zm::Pointer<T>>::value;
     constexpr size_t sizeOfPtr = sizeof(zm::Pointer<T>);
     zm::goffset_t arrayDataOffset = alloc_aligned(sizeOfPtr * from.size(), alignOfPtr);
@@ -51,6 +53,7 @@ template <typename T> void BuilderBase::impl_assign_pointer_array(zm::Array<zm::
         BuilderBase::placementCtor<zm::Pointer<T>>(element);
         assign_pointer(*this, *element, from[i]);
     }
+    array_slab_phys_bytes_[to_offset] = from.size() * sizeOfPtr;
 }
 
 template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm::Array<T>& _to, const std::vector<F>& from)
@@ -66,6 +69,7 @@ template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm:
             to->relativeOffset = 0;
             register_roffset_slot(to_offset, goffset_t(0));
         }
+        array_slab_phys_bytes_.erase(to_offset);
         return;
     }
     zm::Array<T>* to = reinterpret_cast<zm::Array<T>*>(get_ptr_unsafe_to_store(to_offset));
@@ -77,6 +81,7 @@ template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm:
         register_roffset_slot(to_offset, goffset_t(0));
         to = reinterpret_cast<zm::Array<T>*>(get_ptr_unsafe_to_store(to_offset));
     }
+    array_slab_phys_bytes_.erase(to_offset);
     constexpr size_t alignOfT = std::alignment_of<T>::value;
     constexpr size_t sizeOfT = sizeof(T);
     zm::goffset_t arrayDataOffset = alloc_aligned(sizeOfT * from.size(), alignOfT);
@@ -90,6 +95,7 @@ template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm:
         zm::goffset_t elementOffset = zm::goffset_t(arrayDataOffset + i * sizeOfT);
         zm::deep_copy<F, T>(*this, from[i], elementOffset);
     }
+    array_slab_phys_bytes_[to_offset] = from.size() * sizeOfT;
 }
 
 template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::HashSet<Key>& _to, const std::unordered_set<F>& from)
@@ -108,6 +114,8 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
         to->nodes.relativeOffset = 0;
         register_roffset_slot(arena_byte_offset_of(&to->buckets), goffset_t(0));
         register_roffset_slot(arena_byte_offset_of(&to->nodes), goffset_t(0));
+        hash_chain_nodes_phys_bytes_.erase(arena_byte_offset_of(&to->nodes));
+        hash_chain_nodes_first_alloc_hint_.erase(arena_byte_offset_of(&to->nodes));
         return;
     }
 
@@ -156,6 +164,8 @@ template <typename Key, typename F> void BuilderBase::impl_assign_hashset(zm::Ha
     to->nodes.relativeOffset = get_relative_offset(&to->nodes, nodesDataOffset);
     register_roffset_slot(arena_byte_offset_of(&to->buckets), bucketsDataOffset);
     register_roffset_slot(arena_byte_offset_of(&to->nodes), nodesDataOffset);
+    hash_chain_nodes_phys_bytes_[arena_byte_offset_of(&to->nodes)] = numElements * sizeOfNode;
+    hash_chain_nodes_first_alloc_hint_.erase(arena_byte_offset_of(&to->nodes));
 }
 
 template <typename Key, typename Value, typename FK, typename FV>
@@ -175,6 +185,8 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
         to->nodes.relativeOffset = 0;
         register_roffset_slot(arena_byte_offset_of(&to->buckets), goffset_t(0));
         register_roffset_slot(arena_byte_offset_of(&to->nodes), goffset_t(0));
+        hash_chain_nodes_phys_bytes_.erase(arena_byte_offset_of(&to->nodes));
+        hash_chain_nodes_first_alloc_hint_.erase(arena_byte_offset_of(&to->nodes));
         return;
     }
 
@@ -230,4 +242,6 @@ void BuilderBase::impl_assign_hashmap(zm::HashMap<Key, Value>& _to, const std::u
     to->nodes.relativeOffset = get_relative_offset(&to->nodes, nodesDataOffset);
     register_roffset_slot(arena_byte_offset_of(&to->buckets), bucketsDataOffset);
     register_roffset_slot(arena_byte_offset_of(&to->nodes), nodesDataOffset);
+    hash_chain_nodes_phys_bytes_[arena_byte_offset_of(&to->nodes)] = numElements * sizeOfNode;
+    hash_chain_nodes_first_alloc_hint_.erase(arena_byte_offset_of(&to->nodes));
 }

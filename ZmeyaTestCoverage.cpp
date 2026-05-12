@@ -802,8 +802,7 @@ TEST(ZmeyaTestSuite, Coverage_P1_SingleElementMapAndSet)
     EXPECT_EQ(count, 1);
 }
 
-// P1-09: Large-N incremental hash insert matches golden.
-// Incremental hashmap_insert copies the whole map into an std::unordered_map and re-assigns each time (O(size) per call), so N inserts cost O(N^2) overall; keep Debug N small so the suite stays interactive.
+// P1-09: Large-N incremental hash insert matches golden (chain table + rehash; O(n) inserts total).
 TEST(ZmeyaTestSuite, Coverage_P1_LargeNIncrementalHashMapVsGolden)
 {
     std::unordered_map<int32_t, int32_t> model;

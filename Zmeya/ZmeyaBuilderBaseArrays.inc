@@ -8,6 +8,25 @@
         size_t new_n = old_n + 1;
         constexpr size_t alignOfT = std::alignment_of<T>::value;
         constexpr size_t sizeOfT = sizeof(T);
+
+        size_t old_cap = old_n;
+        const auto itPhys = array_slab_phys_bytes_.find(hdr_g);
+        if (itPhys != array_slab_phys_bytes_.end())
+        {
+            ZMEYA_ASSERT(itPhys->second % sizeOfT == 0);
+            old_cap = itPhys->second / sizeOfT;
+        }
+
+        if (old_cap > 0 && new_n <= old_cap)
+        {
+            slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+            T* base = slot->get_raw_ptr_unsafe_can_be_relocated();
+            placementCtor<T>(&base[old_n], std::forward<U>(value));
+            slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
+            slot->numElements = uint32_t(new_n);
+            return;
+        }
+
         size_t new_cap = new_n;
         if (old_n == 0)
         {
@@ -15,15 +34,25 @@
         }
         else
         {
-            ZMEYA_ASSERT(old_n <= SIZE_MAX / 2);
-            new_cap = (std::max)(new_n, old_n * 2);
+            ZMEYA_ASSERT(old_cap >= old_n);
+            ZMEYA_ASSERT(old_cap <= SIZE_MAX / 2);
+            const size_t doubled = old_cap * 2;
+            new_cap = (std::max)(new_n, doubled);
         }
         ZMEYA_ASSERT(new_cap <= SIZE_MAX / sizeOfT);
+
+        size_t dead_slab_bytes = old_n * sizeOfT;
+        if (itPhys != array_slab_phys_bytes_.end())
+        {
+            dead_slab_bytes = itPhys->second;
+            array_slab_phys_bytes_.erase(itPhys);
+        }
         if (old_n > 0)
         {
             T* old_data = slot->get_raw_ptr_unsafe_can_be_relocated();
-            note_dead_range(arena_byte_offset_of(old_data), old_n * sizeOfT);
+            note_dead_range(arena_byte_offset_of(old_data), dead_slab_bytes);
         }
+
         goffset_t new_blob_g = alloc_aligned(sizeOfT * new_cap, alignOfT);
         slot = reinterpret_cast<Array<T>*>(get_ptr_unsafe_to_store(hdr_g));
         T* new_data = reinterpret_cast<T*>(get_ptr_unsafe_to_store(new_blob_g));
@@ -37,6 +66,7 @@
         slot->numElements = uint32_t(new_n);
         slot->relativeOffset = get_relative_offset(slot, new_blob_g);
         register_roffset_slot(hdr_g, new_blob_g);
+        array_slab_phys_bytes_[hdr_g] = new_cap * sizeOfT;
     }
 
     template <typename T> void array_pop_back(Array<T>& arr)

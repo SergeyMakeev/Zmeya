@@ -14,9 +14,10 @@ Buckets hold a head index into a dense node pool (`next` links form per-bucket c
 marks an absent link or empty bucket. `live_count_` is the number of live elements; `nodes` may hold
 extra slots on a free list after erase during serialization.
 
-**Incremental insert / erase** use amortized O(1) bucket work when `zm_hashset_chain_incremental_ok<Key>`
-is true (trivial slab-safe nodes). `String` and other non-trivial keys still use bulk rebuild from STL
-snapshots in the serialize API.
+**Incremental insert / erase** use amortized O(1) chain mutation in the builder (`hashset_chain_*`).
+Dense `nodes[]` growth uses `BuilderBase::hash_chain_nodes_array_grow_append_default_hashset` (typed
+relocate into a larger slab; string keys use `assign_string_std`, not a full-table `std::unordered_set`
+snapshot).
 
 **Invalidation (same idea as `std::unordered_set`)**
 
@@ -241,7 +242,7 @@ template <typename Key> class HashSet
 };
 
 template <typename Key>
-struct zm_hashset_chain_incremental_ok : std::integral_constant<bool, detail::zm_array_push_back_ok<Key>::value>
+struct zm_hashset_chain_incremental_ok : std::true_type
 {
 };
 
