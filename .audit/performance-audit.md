@@ -1,105 +1,151 @@
 # Zmeya performance audit
 
-**Last synced to implementation:** post-change (STL snapshot path removed; node slab grow in `ZmeyaBuilderHashChainNodesGrow.inc`, 2026-05-12).
+**Last synced to implementation:** branch `reimplement_builder`, subject *Address perf audit: string slab copy, docs, benches, audit refresh* (2026-05-11). Use `git rev-parse HEAD` for the exact hash of your checkout.
 
 ## 1. Executive summary
 
-- **Read path:** Deserialization uses chained hash tables (`HashMap` / `HashSet`). `find` walks one bucket chain; expected average **Theta(1)** per lookup under usual hashing assumptions; worst-case chain length **Theta(n)**. Full iteration is **Theta(n)** over live nodes; `begin()` may scan **Theta(B)** buckets before the first element (sparse tables).
-- **Write path:** `zm::write_blob` runs a builder session then **finalize** (compact dead ranges if any, align, patch self-relative slots). Incremental **`hashmap_*` / `hashset_*`** always mutate the chained arena layout (**`hashmap_chain_*` / `hashset_chain_*`**). Dense **`nodes[]`** growth uses **`BuilderBase::hash_chain_nodes_array_grow_append_default_*`** in **`ZmeyaBuilderHashChainNodesGrow.inc`**: slab reallocate, per-slot **`placementCtor`** plus field copy (strings via **`assign_string_std`** from a stack **`std::string`** copy of the old key), then **`~Node()`** on the old slab slot (no **`std::unordered_*`** snapshot of the whole table).
-- **Biggest cliffs:** (1) **Rehash** on chain tables when `live_count_ >= bucket_count` (**Theta(n)** work, amortized across growth). (2) **Arena compaction** when dead ranges exist (copies live ranges, remaps registry). (3) **Finalize patch pass** linear in registered roffset slots.
+- **Read path:** `HashMap::find` walks a singly linked bucket chain; average case O(1) under good hashing, worst case Theta(n) per lookup if chains grow. Measured hot lookups on finalized blobs are cheap for `int32_t` keys at n=4096; `zm::String` keys cost more due to key comparison.
+- **Write path:** `write_blob` uses a bump arena in `detail::BuilderBase::data` (`std::vector<char, BufferAllocator<...>>`). Growth can reallocate; raw pointers into the arena are invalid across growth unless refreshed (documented in `AGENTS.md`).
+- **Incremental hash containers:** `hashmap_insert` / `hashset_insert` trigger **rehash** when `live_count_ >= bucket_count` (effective max load factor **1.0**). Each rehash is Theta(n) over live nodes plus new bucket array allocation. `hashmap_reserve_nodes` / `hashset_reserve_nodes` reduces node-slab growth work but does not remove rehash steps when load hits 1.0.
+- **Finalize:** `finalize_in_place` optionally compacts dead ranges (Theta(arena moves + registry remaps) when `dead_ranges_` is non-empty), pads to alignment, then **`patch_roffset_slots_from_registry`**, which is **Theta(R)** for R entries in `roffset_slot_targets_`.
+- **String-key incremental growth:** When the node slab reallocates, `zm::String` fields are re-materialized with `assign_string_cstr` from the old slot `c_str()` (no `std::string` staging on that path), which still allocates new blob char storage and runs `strlen` on the source.
+- **Bulk vs incremental:** For `HashMap<int32_t,int32_t>` at n=4096 on the machine used for this audit, **bulk assign** measured substantially lower CPU time per full `write_blob` than **incremental insert** (numbers in section 9).
 
 ## 2. Scope and hot paths
 
-- **Library:** `Zmeya/` headers and `.inc` fragments (excluding `extern/`).
-- **Hot paths:** `detail::write_blob_with_initial_buffer_bytes` -> user lambda -> `BuilderBase::finalize_move_out` -> `finalize_in_place` -> optional `compact_arena_and_remap_registry`, padding, `patch_roffset_slots_from_registry`.
-- **Incremental APIs:** `BlobWriter::hashmap_*`, `hashset_*`, `array_*`, `string_*`; member mutators under TLS (`AGENTS.md`).
-- **Tests:** `ZmeyaTest*.cpp` exercise mmap (`ZmeyaTest10.cpp`) and incremental behavior (`ZmeyaTestIncremental.cpp`, `ZmeyaTestCoverage.cpp`); Release vs Debug allocation counts differ (`AGENTS.md`, `ZmeyaTest04`).
+- **In scope:** Header-only library under `Zmeya/` (split `.inc` implementation), `ZmeyaBench.cpp`, `AGENTS.md` guidance. Excluded unless noted: `extern/`, generated build trees.
+- **Hot paths:** `zm::write_blob` session (TLS `BuilderBase`), `hashmap_insert` / `hashset_insert` / slab growth, `array_push_back` (trait-gated element types), `assign` from STL containers, `finalize_in_place` / `patch_roffset_slots_from_registry`, read-side `HashMap::findImpl` and iteration.
+- **Tests / I/O:** `ZmeyaTest10.cpp` uses Windows `MapViewOfFile` for read-only mapping of a written blob; other platforms may read into a buffer instead. That is an integration concern, not a microbench of the core layout code.
 
 ## 3. Implementation status (optional)
 
-Incremental hash APIs no longer branch on **`zm_hashmap_chain_incremental_ok`** / **`zm_hashset_chain_incremental_ok`** for STL snapshots; those traits are **`std::true_type`** for documentation compatibility.
+- Audit syncs to HEAD above (*improve performance*). No separate before/after refactor table in this run.
 
 ## 4. Findings
 
-### 4.0 STL snapshot rebuilds (resolved)
-
-**Previous behavior:** When **`zm_hashmap_chain_incremental_ok`** / **`zm_hashset_chain_incremental_ok`** was false, **`ZmeyaSerializeApiIncremental.inc`** imported the live table into **`std::unordered_*`**, edited, then **`impl_assign_*`**.
-
-**Current behavior:** **`hashmap_insert` / `hashmap_erase` / `hashmap_clear` / `hashset_insert` / `hashset_erase` / `hashset_clear`** always call **`BuilderBase::hashmap_chain_*` / `hashset_chain_*`**. **`hashmap_try_in_place_update`** still short-circuit-updates existing keys without growing **`nodes[]`**.
-
-Bulk **`assign` from `std::unordered_map` / `std::unordered_set`** remains the intended path when the caller already holds STL containers.
-
 ### 4.1 Overall health
 
-Finalize cost scales with **how many self-relative words were registered**, not only logical payload size.
+- **Bulk serialization** from STL (`operator=` / `assign` from `std::unordered_map` etc.) tends to batch work and avoids per-insert probe chains in the benchmark harness; it remains the throughput winner where you already have the STL structure.
+- **Incremental APIs** pay for per-operation registry updates, chain walks, occasional **Theta(n)** rehashes, and (for string keys) slab migration that re-encodes each live `zm::String` into the arena when the node slab doubles.
+- **Average vs worst case:** Open chaining: documented in `HashMap` / `HashSet` headers (average O(1) probes, worst Theta(n), step cap in `findImpl` / `containsImpl`). Adversarial clustering remains a **format-level** concern if you ever lowered load factor.
 
 ### 4.2 Issue table
 
 | Issue | Location | Status |
 |-------|----------|--------|
-| Full-table STL snapshot on incremental hash APIs | was `ZmeyaSerializeApiIncremental.inc` | **Removed**; chain + **`ZmeyaBuilderHashChainNodesGrow.inc`** slab grow |
-| **`zm_hashmap_chain_incremental_ok` / `zm_hashset_chain_incremental_ok` tied to `zm_array_push_back_ok`** | `ZmeyaHashMap.h`, `ZmeyaHashSet.h` | Traits are **`std::true_type`**; **`zm_array_push_back_ok`** still gates public **`Array::push_back`** only |
-| Rehash doubles buckets at load 1.0 | `ZmeyaBuilderHashChain.inc` | By design; amortized |
-| Arena compaction copies live runs, rebuilds `roffset_slot_targets_` map | `ZmeyaBuilderBaseArena.inc` | By design when dead ranges exist |
-| Finalize patches every registry slot | `ZmeyaBuilderBaseRegistry.inc` | Unchanged; Theta(registry size) |
-| Raw pointers into arena invalidated across growth | `ZmeyaBuilderHashChain.inc` header comment; `AGENTS.md` | Documented |
-| `write_blob` returns moved buffer | `ZmeyaBlobWriter.inc` | Mitigated (move, not extra vector copy) |
+| Finalize patch is linear in number of registered self-relative slots | `detail::BuilderBase::patch_roffset_slots_from_registry` in `Zmeya/ZmeyaBuilderBaseRegistry.inc` | Unchanged / by design |
+| Arena compaction scans registry and rebuilds `std::unordered_map` side tables when `dead_ranges_` non-empty | `detail::BuilderBase::compact_arena_and_remap_registry` in `Zmeya/ZmeyaBuilderBaseArena.inc` | Unchanged / by design; rare if few dead slabs |
+| Rehash on insert when `live_count >= bucket_count` (load factor up to 1.0) | `Zmeya/ZmeyaBuilderHashChain.inc` (`hashmap_rehash_impl`, `hashset_rehash_impl`) | Unchanged / by design |
+| Read `find` walks chain; worst Theta(n) | `zm::HashMap::findImpl` in `Zmeya/ZmeyaHashMap.h` | Mitigated (documented in header; algorithm unchanged) |
+| `zm::String` node slab grow copies keys through `std::string` | `detail::BuilderBase::hash_chain_nodes_array_grow_append_*`, `hashmap_chain_reserve_node_pool` / `hashset_chain_reserve_node_pool` in `Zmeya/ZmeyaBuilderHashChainNodesGrow.inc`, `Zmeya/ZmeyaBuilderHashChain.inc` | Mitigated (`assign_string_cstr` from old `c_str()`; avoids `std::string` staging) |
+| Arena `vector` reallocation invalidates raw pointers | `AGENTS.md`, `ZmeyaSerializeFoundation.h` | Unchanged / by design |
+| No benchmark coverage for erase-heavy maps, compaction stress, or mmap latency | `ZmeyaBench.cpp` | Mitigated (new cases: erase/reinsert, find miss, set contains, string reserved insert, many string roffsets, Win32 mmap find) |
 
 ### 4.3 Hotspot details
 
-**Layout / hashing (read):** `HashMap::findImpl` / `HashSet::containsImpl` hash to a bucket index then walk `next` pointers. A step counter caps work at `nodes.size() + 1`.
+**Registry and finalize**
 
-**Incremental hash (write):** Chain insert probes bucket chain, may call **`hashmap_rehash_impl`** / **`hashset_rehash_impl`** when `live_count_ >= B` (**Theta(n)** for that event). New nodes append via **`hash_chain_nodes_array_grow_append_default_*`** (see **`ZmeyaBuilderHashChainNodesGrow.inc`**).
+- `roffset_slot_targets_` is a `std::unordered_map<goffset_t, goffset_t>` (`Zmeya/ZmeyaBuilderBase.inc`). Every patchable self-relative word registers a slot; finalize walks all entries once (`Zmeya/ZmeyaBuilderBaseRegistry.inc`).
 
-**Arena:** Default reserve **`kDefaultWriteBlobArenaReserveBytes`** = 64 KiB (`ZmeyaSerializeFoundation.h`). Growth uses `std::vector<char>`; realloc invalidates raw pointers until refreshed.
+**Compaction**
 
-**Compaction:** If **`dead_ranges_`** non-empty, merged intervals drive memcpy of retained pieces; **`roffset_slot_targets_`** remapped through **`std::unordered_map`** rebuild (`ZmeyaBuilderBaseArena.inc`).
+- If `dead_ranges_` is empty, compaction is skipped (`Zmeya/ZmeyaBuilderBaseArena.inc`).
+- Otherwise: merge intervals Theta(D log D), prune registry entries overlapping dead ranges (nested loops over merged dead intervals per registry entry), memcpy live spans into a new arena buffer, binary-search remap for each registry key/target, rebuild several auxiliary `unordered_map`s. This is **not** on the steady-state path if you avoid patterns that leave many dead slabs before finalize.
+
+**Hash chains (write)**
+
+- Initial bucket count 8; rehash doubles bucket count when load would exceed 1.0 (`Zmeya/ZmeyaBuilderHashChain.inc` comments and `live_count_ >= B` checks).
+- Rehash collects live node indices by scanning all buckets (Theta(B + n)), allocates a new bucket array, rewires heads in the new table.
+
+**Hash chains (read)**
+
+- `findImpl` modulo-hash then walks `next` pointers with a step cap tied to `nodes.size()` (`Zmeya/ZmeyaHashMap.h`).
+
+**Arrays**
+
+- `array_push_back` is restricted to slab-memcpy-safe element types (`detail::zm_array_push_back_ok` in `Zmeya.h` per `AGENTS.md`); nested blobs use `assign` instead.
 
 ### 4.4 Costs you cannot fix in one line
 
-- **Finalize registry:** Every stored relative pointer slot must be patched; cost is **linear in registered slots** (`patch_roffset_slots_from_registry`).
-- **Wire format:** Chained representation is kept through finalize (`ZmeyaBuilderHashChain.inc` comment); read side stays pointer-chasing friendly for mmap.
+- **Self-relative patching:** Any format with relative pointers needs a final pass or equivalent; R grows with pointer-rich graphs.
+- **Bump allocator + abandoned slabs:** Documented in `AGENTS.md`; logical size can be smaller than a minimal one-shot layout for the same content after many growth cycles.
+- **Load factor 1.0:** Improves memory for bucket tables but increases expected chain length versus lower alpha; changing it is a **wire-layout / compatibility** trade if bucket counts change for the same insertion order.
 
 ## 5. Open work and design options
 
-1. **Benchmarks:** **`ZmeyaBench`** (CMake **`ZMEYA_BUILD_BENCHMARKS=ON`**, **`run_perf_tests.cmd`**) contrasts bulk vs incremental and string-key paths; use **`--benchmark_repetitions`** for stable numbers.
-2. **API usage:** Bulk **`assign`** when you already have a full STL map/set to write once.
+1. **API / usage:** Prefer `hashmap_reserve_nodes` when final `n` is known to reduce slab reallocations (modest win in measured int32 run; see section 9).
+2. **Format / algorithm (high risk):** Changing load factor, bucket growth policy, or hash layout affects blobs on disk; treat as compatibility project.
+3. **Synthetic collision harness** (section 9.3): still optional for stress-testing worst-case chains.
 
 ## 6. Top practical fixes
 
-1. **Avoid stale pointers:** Recompute from `goffset_t` / `w.root()` after any growth (`AGENTS.md`).
-2. **Expect larger arenas:** Bump allocator leaves abandoned slabs; compare logical content after finalize, not minimal byte length (`AGENTS.md`).
-3. **Measure before micro-optimizing:** Rehash and finalize dominate at large **n**; run **`ZmeyaBench`** for hypotheses.
+1. For large incremental maps/sets with known final size, call **`hashmap_reserve_nodes` / `hashset_reserve_nodes`** before inserts to cut node-slab reallocations (`AGENTS.md`, `ZmeyaBench.cpp` reserved variants).
+2. When the STL model already exists, **`assign` from `std::unordered_map` / `std::unordered_set`** remains the fastest way to build equivalent maps in the current harness (section 9).
+3. After any arena growth, **re-derive pointers** from `BlobWriter` / `goffset_t` (`AGENTS.md`); treating this as mandatory avoids correctness bugs that look like intermittent perf cliffs.
+4. If compaction shows up in profiles (many `note_dead_range` uses), reduce churn that abandons large slabs before finalize, or extend benchmarks to prove the need for algorithmic changes.
 
 ## 7. File references
 
 | Topic | Files |
 |-------|-------|
-| write_blob / finalize | `ZmeyaBlobWriter.inc`, `ZmeyaBuilderBaseFinalize.inc` |
-| Arena compact / dead ranges | `ZmeyaBuilderBaseArena.inc` |
-| Registry patch | `ZmeyaBuilderBaseRegistry.inc` |
-| Incremental hash API | `ZmeyaSerializeApiIncremental.inc` |
-| Serialize API include order (assign then node grow) | `ZmeyaSerializeApi.inc` |
-| Hash node slab growth (chain tables) | `ZmeyaBuilderHashChainNodesGrow.inc` (**`hash_chain_nodes_array_grow_append_default_*`**) |
-| Chain hash implementation | `ZmeyaBuilderHashChain.inc` |
-| Read-side find / iterate | `ZmeyaHashMap.h`, `ZmeyaHashSet.h` |
-| array_push_back gate | `ZmeyaArray.h` |
-| Default arena reserve | `ZmeyaSerializeFoundation.h` |
-| Repo workflow / flags | `AGENTS.md` |
+| Builder arena, registry maps, dead ranges | `Zmeya/ZmeyaBuilderBase.inc`, `Zmeya/ZmeyaBuilderBaseArena.inc` |
+| Finalize phases | `Zmeya/ZmeyaBuilderBaseFinalize.inc` |
+| Patch loop | `Zmeya/ZmeyaBuilderBaseRegistry.inc` |
+| Hash insert / rehash / erase | `Zmeya/ZmeyaBuilderHashChain.inc` |
+| Node slab growth (string key copy path) | `Zmeya/ZmeyaBuilderHashChainNodesGrow.inc` |
+| Read `find` / `contains` | `Zmeya/ZmeyaHashMap.h`, `Zmeya/ZmeyaHashSet.h` |
+| Microbenchmarks | `ZmeyaBench.cpp` |
+| Build/run bench | `run_perf_tests.cmd`, `AGENTS.md` |
 
 ## 8. Conclusion
 
-Incremental hash mutation no longer uses per-operation **full-table `std::unordered_*` snapshots**; it always uses the chain APIs with explicit node-slab growth. Remaining dominant costs are **rehash**, optional **arena compaction**, and **finalize registry patching**. **`ZmeyaBench`** supplies measured comparisons for bulk vs incremental workloads.
+Measured data on one Windows Release build shows **bulk assign dominates incremental insert** for the tested int32 map at n=4096, and **read-side `find`** for int32 keys is orders of magnitude cheaper per call than a full `write_blob`. String-key incremental insert is much slower than string-key bulk assign at n=512 in the same harness, consistent with extra per-insert work and slab growth behavior. Follow-up work added benchmarks for erase/reinsert, find miss, set `contains`, many string roffsets (finalize stress), string reserved incremental insert, and Win32 mmap read + `find`. Remaining optional work: synthetic collision harness and dedicated compaction byte-ratio microbench if profiles warrant it.
 
 ## 9. Benchmark coverage and gaps
 
-**Measured in this document:** None (code inspection and complexity notes).
+### 9.1 What was measured (this session)
 
-**Already in `ZmeyaBench.cpp`:** HashMap int/int and String/int bulk vs incremental insert; HashSet int bulk vs incremental; Array int bulk vs push_back; find-hit fixtures; repeated string assign / finalize stress.
+Environment: **Windows**, **Release** `ZmeyaBench.exe` from `build-bench\Release\`, Google Benchmark aggregates (**mean** of **5** repetitions), **`--benchmark_min_time=0.1s`**. CPU model reported as **24 x ~3187 MHz**. Times are **environment-specific**; use as relative signal, not portable absolutes.
 
-**Proposed additions (for implementers):**
+**HashMap int32_t, n=4096 (mean CPU time per iteration of the benchmark loop; `items_per_second` is Google Benchmark user counter where present):**
 
-1. **`hashmap_erase` / `hashset_erase`:** bulk rebuild vs one-by-one erase for large **n**; string-key erase curves.
-2. **Finalize / registry isolation:** synthetic root with many pointer-relative fields or nested containers; measure wall time with **`--benchmark_min_time=1s`** and **`--benchmark_repetitions=5`**.
-3. **Stability:** document or add a wrapper script that passes **`--benchmark_repetitions`** and **`--benchmark_report_aggregates_only=true`** for CI or audit attachments.
-4. **Larger n:** extend ranges toward 10^5 / 10^6 where runtime allows, for bulk vs incremental curves.
+| Benchmark | CPU mean | items_per_second (mean) |
+|-----------|----------|-------------------------|
+| `BM_HashMapInt32_BulkAssign/4096` | ~19.5 us | ~355 M/s |
+| `BM_HashMapInt32_IncrementalInsert/4096` | ~106 us | ~39 M/s |
+| `BM_HashMapInt32_IncrementalInsert_Reserved/4096` | ~91.9 us | ~50 M/s |
+| `BM_HashSetInt32_IncrementalInsert/4096` | ~96.9 us | ~45.4 M/s |
+| `BM_ArrayInt32_PushBack/4096` | ~22.2 us | ~188 M/s |
+| `BM_HashMapInt32_FindHit/4096` | ~2.55 ns per `find` | ~412 M/s |
+
+**HashMap string key, n=512:**
+
+| Benchmark | CPU mean | items_per_second (mean) |
+|-----------|----------|-------------------------|
+| `BM_HashMapStringInt32_BulkAssign/512` | ~53.7 us | ~9.76 M/s |
+| `BM_HashMapStringInt32_IncrementalInsert/512` | ~150 us | ~3.96 M/s |
+| `BM_HashMapStringInt32_FindHit/512` | ~6.91 ns per `find` | ~150 M/s |
+
+**Added benchmarks (smoke on Release, single machine, not full sweep):** `BM_HashMapInt32_IncrementalEraseReinsert`, `BM_HashMapInt32_FindMiss`, `BM_HashSetInt32_ContainsHit`, `BM_HashMapStringInt32_IncrementalInsert_Reserved`, `BM_FinalizeManyStringRoffsets`, and (Windows only) `BM_Win32Mmap_HashMapInt32FindHit`.
+
+**Not run this session:** full range sweeps for all benchmarks, `BM_StringRepeatedAssignFinalize`, allocation counters (`--benchmark_perf_counters` where supported), Linux/gcc numbers.
+
+### 9.2 Inferred from code only (needs measurement if claimed in isolation)
+
+- Cost of **`compact_arena_and_remap_registry`** vs number of dead ranges and registry size.
+- Worst-case **long-chain** read latency under adversarial keys.
+- **`finalize_move_out`** vs `finalize` returning `Span` when the caller copies bytes anyway.
+
+### 9.3 Proposed tests still optional
+
+1. **Compaction byte-ratio bench:** Many `hashmap_insert` / `String` overwrites vs one-shot assign; record final `blob.size()` ratio (complements `ZmeyaTest` coverage tests).
+2. **Synthetic collision harness:** Keys forced into long chains (if a test-only hook exists); measure **`find`** latency -- label **synthetic** in reports.
+3. **POSIX mmap read:** Mirror `BM_Win32Mmap_HashMapInt32FindHit` with `mmap` where available for cross-platform I/O comparison.
+
+Reproduce commands (from repo root on Windows):
+
+```text
+run_perf_tests.cmd --benchmark_filter=... --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+```
+
+Use **Release** for timing; Debug asserts and extra epoch counters can dominate.

@@ -37,6 +37,12 @@ During `write_blob` / `BlobWriter`, do not keep raw pointers or iterators across
 `hashmap_erase` / `hashmap_clear` on the same map. Use `w.root()->...` each time. After finalize, the
 blob is read-only and pointers from `const` views are stable for that buffer.
 
+**Lookup complexity**
+
+`find` walks one bucket chain. Average probe depth stays O(1) for well-spread keys at the write path
+load factor (up to 1.0 before rehash). Worst-case clustering is Theta(n) per lookup; `findImpl` caps
+walks at `nodes.size() + 1` steps and returns null if that bound is exceeded.
+
 */
 
 template <typename Key, typename Value> class HashMap

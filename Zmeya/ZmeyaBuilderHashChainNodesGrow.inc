@@ -69,13 +69,8 @@ template <typename Key> void BuilderBase::hash_chain_nodes_array_grow_append_def
             Node* old_row = slot->get_raw_ptr_unsafe_can_be_relocated();
             const uint32_t saved_next = old_row[i].next;
 
-            std::string old_key_copy;
             Key old_key_copy_trivial{};
-            if constexpr (std::is_same<Key, zm::String>::value)
-            {
-                old_key_copy.assign(old_row[i].key.c_str());
-            }
-            else
+            if constexpr (!std::is_same<Key, zm::String>::value)
             {
                 old_key_copy_trivial = old_row[i].key;
             }
@@ -84,7 +79,7 @@ template <typename Key> void BuilderBase::hash_chain_nodes_array_grow_append_def
             BuilderBase::placementCtor<Key>(&new_row->key);
             if constexpr (std::is_same<Key, zm::String>::value)
             {
-                assign_string_std(*this, new_row->key, old_key_copy);
+                assign_string_cstr(*this, new_row->key, old_row[i].key.c_str());
             }
             else
             {
@@ -177,23 +172,13 @@ template <typename K, typename V> void BuilderBase::hash_chain_nodes_array_grow_
             Node* old_row = slot->get_raw_ptr_unsafe_can_be_relocated();
             const uint32_t saved_next = old_row[i].next;
 
-            std::string old_key_copy;
-            std::string old_val_copy;
             K old_key_copy_trivial{};
             V old_val_copy_trivial{};
-            if constexpr (std::is_same<K, zm::String>::value)
-            {
-                old_key_copy.assign(old_row[i].key.c_str());
-            }
-            else
+            if constexpr (!std::is_same<K, zm::String>::value)
             {
                 old_key_copy_trivial = old_row[i].key;
             }
-            if constexpr (std::is_same<V, zm::String>::value)
-            {
-                old_val_copy.assign(old_row[i].value.c_str());
-            }
-            else
+            if constexpr (!std::is_same<V, zm::String>::value)
             {
                 old_val_copy_trivial = old_row[i].value;
             }
@@ -203,7 +188,7 @@ template <typename K, typename V> void BuilderBase::hash_chain_nodes_array_grow_
             BuilderBase::placementCtor<V>(&new_row->value);
             if constexpr (std::is_same<K, zm::String>::value)
             {
-                assign_string_std(*this, new_row->key, old_key_copy);
+                assign_string_cstr(*this, new_row->key, old_row[i].key.c_str());
                 new_row = reinterpret_cast<Node*>(get_ptr_unsafe_to_store(new_blob_g + goffset_t(i * sizeOfNode)));
             }
             else
@@ -212,7 +197,7 @@ template <typename K, typename V> void BuilderBase::hash_chain_nodes_array_grow_
             }
             if constexpr (std::is_same<V, zm::String>::value)
             {
-                assign_string_std(*this, new_row->value, old_val_copy);
+                assign_string_cstr(*this, new_row->value, old_row[i].value.c_str());
             }
             else
             {

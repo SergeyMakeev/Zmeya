@@ -16,8 +16,13 @@ extra slots on a free list after erase during serialization.
 
 **Incremental insert / erase** use amortized O(1) chain mutation in the builder (`hashset_chain_*`).
 Dense `nodes[]` growth uses `BuilderBase::hash_chain_nodes_array_grow_append_default_hashset` (typed
-relocate into a larger slab; string keys use `assign_string_std`, not a full-table `std::unordered_set`
-snapshot).
+relocate into a larger slab; string keys copy through `assign_string_cstr` from the old slot, not a
+full-table `std::unordered_set` snapshot).
+
+**Lookup complexity**
+
+`contains` walks one bucket chain. Average depth is O(1) for well-spread keys; worst-case clustering is
+Theta(n) per call, with the same step cap pattern as `HashMap::findImpl`.
 
 **Invalidation (same idea as `std::unordered_set`)**
 
