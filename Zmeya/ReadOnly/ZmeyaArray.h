@@ -98,7 +98,6 @@ template <typename T> class Array
     void clear();
     void erase_at(size_t index);
     void resize(size_t new_size, const T& fill = T{});
-#endif
 
     template <typename F> Array<T>& operator=(const std::vector<F>& other)
     {
@@ -111,6 +110,8 @@ template <typename T> class Array
     template <typename Key, typename Value, typename FK, typename FV>
     friend void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from);
     template <typename T> friend void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from);
+#endif
+
     friend class detail::BuilderBase;
 };
 

@@ -233,6 +233,7 @@ template <typename Key, typename Value> class HashMap
 
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return find(key) != nullptr; }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     ZMEYA_NODISCARD Value* find(const Key& key) noexcept
     {
         typedef HashKeyAdapterGeneric<Key> Adapter;
@@ -244,6 +245,7 @@ template <typename Key, typename Value> class HashMap
         }
         return const_cast<Value*>(res);
     }
+#endif
     ZMEYA_NODISCARD const Value* find(const Key& key) const noexcept
     {
         typedef HashKeyAdapterGeneric<Key> Adapter;
@@ -269,6 +271,7 @@ template <typename Key, typename Value> class HashMap
         return find(key) != nullptr;
     }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     ZMEYA_NODISCARD Value* find(const char* key) noexcept
     {
         static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
@@ -281,6 +284,7 @@ template <typename Key, typename Value> class HashMap
         }
         return const_cast<Value*>(res);
     }
+#endif
     ZMEYA_NODISCARD const Value* find(const char* key) const noexcept
     {
         static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
@@ -329,20 +333,20 @@ template <typename Key, typename Value> class HashMap
         return valueIfNotFound;
     }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     template <typename FK, typename FV> HashMap<Key, Value>& operator=(const std::unordered_map<FK, FV>& other)
     {
         assign(*this, other);
         return *this;
     }
 
-#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     template <typename FK, typename FV> void insert(const FK& key, const FV& value);
     template <typename FK> void erase(const FK& key);
     void clear();
-#endif
 
     template <typename K, typename V, typename FK, typename FV>
     friend void assign(HashMap<K, V>& to, const std::unordered_map<FK, FV>& from);
+#endif
 };
 
 template <typename Key, typename Value>

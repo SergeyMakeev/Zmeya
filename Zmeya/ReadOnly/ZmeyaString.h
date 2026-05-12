@@ -5,9 +5,6 @@
 namespace zm
 {
 
-void assign(String& to, const std::string& from);
-void assign(String& to, const char* from);
-
 /*
 
 **Blob string**
@@ -64,6 +61,7 @@ class String
         return !isEqual(other.c_str());
     }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     String& operator=(const std::string& other)
     {
         assign(*this, other);
@@ -79,7 +77,6 @@ class String
     friend void assign(String& to, const std::string& from);
     friend void assign(String& to, const char* from);
 
-#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     void clear();
     String& append(const char* suf);
     String& append(const char* suf, size_t suf_len);

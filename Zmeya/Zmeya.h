@@ -25,8 +25,9 @@
 
 **Zmeya umbrella header**
 
-The library is split into focused headers (containers, serialization, hashing). Include this file to
-get the same surface area as a single monolithic header.
+Read-only blob views live under `ReadOnly/` (this include pulls them via the `Zmeya` target include
+paths). Serialization / `write_scope` / builders live under `Serialize/` and are included only when
+`ZMEYA_ENABLE_SERIALIZE_SUPPORT` is defined.
 
 */
 

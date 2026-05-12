@@ -236,19 +236,19 @@ template <typename Key> class HashSet
 
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return containsImpl<HashKeyAdapterGeneric<Key>, Key>(key); }
 
+#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     template <typename F> HashSet<Key>& operator=(const std::unordered_set<F>& other)
     {
         assign(*this, other);
         return *this;
     }
 
-#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
     template <typename F> void insert(const F& item);
     template <typename F> void erase(const F& key);
     void clear();
-#endif
 
     template <typename K, typename F> friend void assign(HashSet<K>& to, const std::unordered_set<F>& from);
+#endif
 };
 
 template <typename Key>
