@@ -12,7 +12,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 
 | ID | Name / idea | Description | Implementation plan |
 |----|----------------|-------------|----------------------|
-| P0-01 | String append after many reallocs | `string_append_cstr` must not use raw `char*` into the vector across `alloc_aligned` growth; stress with tiny initial reserve and long chain of appends. | `write_blob` with initial size 16..64; loop append 500 times single-char or random-length chunks; compare to one `std::string` built the same way then assigned once. |
+| P0-01 | String append after many reallocs | `string_append_cstr` must not use raw `char*` into the vector across `alloc_aligned` growth; stress with tiny initial reserve and long chain of appends. | `write_scope` with initial size 16..64; loop append 500 times single-char or random-length chunks; compare to one `std::string` built the same way then assigned once. |
 | P0-02 | String clear then append | Cleared string has null `Pointer`; re-assign and append must match fresh string. | `string_clear`; then `string_append` and `operator=`; compare golden. |
 | P0-03 | Empty string assign and append | `text = ""` then append non-empty; avoid strlen/UB on empty. | Golden `std::string` empty then +=; incremental clear + append. |
 | P0-04 | Array push_back across realloc boundary | Same class of bug as strings: capture old slab only by **offset** after growth if any code path still uses stale pointer (regression guard). | Tiny reserve; push 200+ ints; golden `vector`; memcmp or element-wise. |
@@ -23,7 +23,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 | P0-09 | Compaction with HashMap String keys | Freed key blobs must not leave stale `roffset` registry entries (historical bug). | Many `hashmap_insert` / `hashmap_erase` with `std::string` keys; small reserve; optional `peak_size` vs `finalized_size`; logical map equality to golden. |
 | P0-10 | Compaction many disjoint dead ranges | Interleave string replaces and array slab replaces; finalize must remap all slots. | Mixed root: several strings + `Array<int>` push cycles; compare digest of final blob or logical values. |
 | P0-11 | Finalize alignment matrix | Wrong alignment can leave inconsistent padding or violate consumer assumptions. | Same minimal blob written with `finalizeAlignment` in `{1,2,4,8,16,32}`; assert `blob.size() % align == 0` and payload still parses. |
-| P0-12 | Explicit `assign(BuilderBase&, ...)` under realloc | Nested string assign during hash rebuild must see valid TLS (`ScopedBuilder` paths). | `detail::Builder` + `ScopedBuilder`; `assign(builder, map, ...)` with values triggering inner `String` assign; match `write_blob` golden. |
+| P0-12 | Explicit `assign(BuilderBase&, ...)` under realloc | Nested string assign during hash rebuild must see valid TLS (`ScopedBuilder` paths). | `detail::Builder` + `ScopedBuilder`; `assign(builder, map, ...)` with values triggering inner `String` assign; match `write_scope` golden. |
 | P0-13 | `deep_copy(detail::BuilderBase&, ...)` nesting | Second overload used when TLS must be scoped per builder. | Allocate side object with `deep_copy(builder, from, offset)` where `from` contains nested strings; read back. |
 | P0-14 | `allocate()` pointer graph under stress | `w.allocate` nodes then wire `Pointer`s; validate after finalize. | Similar to `PointerTest` but with 32-byte reserve and more nodes to force realloc. |
 | P0-15 | `contains_pointer` API | BlobWriter exposes containment; misuse should be detectable in tests. | Allocate object; `EXPECT_TRUE(writer.contains_pointer(p))`; stack variable `EXPECT_FALSE`. |
@@ -90,7 +90,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 | P5-01 | Blob size with alignment 1 | No padding added when already aligned. | Root size multiple of 1 trivial; assert sizes. |
 | P5-02 | Odd-size root with align 8 | Forces padding bytes non-zero init (zeros). | Write blob; last padding bytes should be zero (memcmp tail). |
 | P5-03 | Deserialize-only build | If CI can build without `ZMEYA_ENABLE_SERIALIZE_SUPPORT`, ensure read tests still compile. | Optional second target in CMake (future); document. |
-| P5-04 | Span returned from finalize | Internal `Span<char>` length matches vector after finalize (unit-test via duplicate write_blob). | Compare returned size to `vector::size` indirectly by file round-trip. |
+| P5-04 | Span returned from finalize | Internal `Span<char>` length matches vector after finalize (unit-test via duplicate write_scope). | Compare returned size to `vector::size` indirectly by file round-trip. |
 
 ---
 
@@ -101,7 +101,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 | P6-01 | Mmap with non-default finalize alignment | Current test may use one alignment; vary alignment vs mmap read path. | Write with align 16; mmap; validate magic. |
 | P6-02 | Empty file / truncated file | Reader should fail safe (if APIs exist). | Document behavior; add test if error path exists. |
 | P6-03 | SimpleFileTest cross-platform | Today may be Windows-centric; ensure Linux path in CI. | Guard with `#ifdef` or portable temp file API. |
-| P6-04 | Write blob to disk and read back | Full round-trip byte identity. | `write_blob` to `vector`, fwrite, fread, memcmp. |
+| P6-04 | Write blob to disk and read back | Full round-trip byte identity. | `write_scope` to `vector`, fwrite, fread, memcmp. |
 
 ---
 
@@ -140,7 +140,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 
 | ID | Name / idea | Description | Implementation plan |
 |----|----------------|-------------|----------------------|
-| P10-01 | `assign` without TLS | Calling `assign` outside `write_blob` should assert (current design). | `EXPECT_DEATH` or platform-specific; skip if `ZMEYA_ASSERT` does not abort in test build. |
+| P10-01 | `assign` without TLS | Calling `assign` outside `write_scope` should assert (current design). | `EXPECT_DEATH` or platform-specific; skip if `ZMEYA_ASSERT` does not abort in test build. |
 | P10-02 | `string_append` nullptr | Must assert before strlen. | Death test with `ASSERT_DEATH` for `writer.string_append(s, nullptr)` if supported on MSVC. |
 | P10-03 | `finalize` alignment 0 | Invalid; assert. | Death test `alignment=0` via friend/internal test hook or document-only if not exposable. |
 | P10-04 | `get_relative_offset` stack pointer | If test can construct call with stack base (hard), expect assert. | Low value; document UB instead. |
@@ -151,7 +151,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 
 | ID | Name / idea | Description | Implementation plan |
 |----|----------------|-------------|----------------------|
-| P11-01 | One root with all container kinds | Single blob touches string, array, hashmap, hashset, pointer, nested array. | One `write_blob` lambda filling every field; read everything. |
+| P11-01 | One root with all container kinds | Single blob touches string, array, hashmap, hashset, pointer, nested array. | One `write_scope` lambda filling every field; read everything. |
 | P11-02 | MMapTest-shaped tree built incrementally | Mix incremental and bulk in same blob. | Half nodes `allocate` + manual fields, half assign from init structs. |
 | P11-03 | Version field + forward compatibility | Root starts with magic + version uint32; readers ignore unknown tail (future). | Placeholder test documenting pattern. |
 
@@ -161,7 +161,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 
 | ID | Name / idea | Description | Implementation plan |
 |----|----------------|-------------|----------------------|
-| P12-01 | Same seed golden twice | Two `write_blob` same lambda; optional byte-identical if allocator deterministic. | `memcmp` two vectors; if non-deterministic bucket order, compare canonicalized logical model instead. |
+| P12-01 | Same seed golden twice | Two `write_scope` same lambda; optional byte-identical if allocator deterministic. | `memcmp` two vectors; if non-deterministic bucket order, compare canonicalized logical model instead. |
 | P12-02 | Canonicalize HashMap for compare | Sort key-value pairs by key string before EXPECT. | Shared helper in TestHelper for all map tests. |
 | P12-03 | Canonicalize HashSet | Sort elements to `vector` then compare. | Already used in incremental hashset test; extract helper. |
 

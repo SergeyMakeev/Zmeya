@@ -33,7 +33,7 @@ static void validate(const PointerTestRoot* root)
 
 TEST(ZmeyaTestSuite, PointerTest)
 {
-    zm::BlobBuffer bytesCopy = zm::write_blob<PointerTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_scope<PointerTestRoot>(
         [](zm::BlobWriter<PointerTestRoot>& w)
         {
             PointerTestRoot* root = w.root();

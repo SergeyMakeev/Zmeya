@@ -57,7 +57,7 @@ Per registered word (or per logical edge):
 
 - **`BuilderBase::register_slot(...)`** ( **`detail`** ), called from **`assign`** and ctors.
 - **Debug build:** **`assert`** that every **`relativeOffset`** write touches a registered slot (optional hash set of allowed offsets).
-- Unit tests: register count matches expected for small **`write_blob`** examples.
+- Unit tests: register count matches expected for small **`write_scope`** examples.
 
 ## Dependencies
 

@@ -46,7 +46,7 @@ void onAssertionFailed(const char* expression, const char* srcFile, unsigned int
 
 /*
 
-Test zm::write_blob / zm::BlobWriter deep-copy adapters for STL-shaped RHS.
+Test zm::write_scope / zm::BlobWriter deep-copy adapters for STL-shaped RHS.
 
 */
 
@@ -63,7 +63,7 @@ struct TestRoot
 // Verifies operator= from STL strings, vectors, map, and set into a root blob round-trip on read.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
-    zm::BlobBuffer blob = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blob = zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             TestRoot* root = w.root();
@@ -110,7 +110,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 // Verifies nested vector-of-vector-of-string assigns into zm::Array<zm::Array<zm::String>> and reads back correctly.
 TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
 {
-    zm::BlobBuffer blob = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blob = zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             TestRoot* root = w.root();
@@ -243,7 +243,7 @@ static void ExpectTestRootLogicalEqual(const A& a, const B& b)
     }
 }
 
-// Verifies zm::assign(BuilderBase&, ...) matches write_blob logical content for the same TestRoot fields.
+// Verifies zm::assign(BuilderBase&, ...) matches write_scope logical content for the same TestRoot fields.
 TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
 {
     std::unique_ptr<zm::detail::Builder<TestRoot>> builder = zm::detail::Builder<TestRoot>::create();
@@ -266,7 +266,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
     zm::Span<char> span = builder->finalize(4);
     std::vector<char> blobA(span.data, span.data + span.size);
 
-    zm::BlobBuffer blobB = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blobB = zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRoot(w.root());
@@ -280,13 +280,13 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
 {
     constexpr size_t kTinyArenaBytes = 32;
 
-    zm::BlobBuffer golden = zm::write_blob<TestRoot>(
+    zm::BlobBuffer golden = zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);
         });
 
-    zm::BlobBuffer stressed = zm::detail::write_blob_with_initial_buffer_bytes<TestRoot>(
+    zm::BlobBuffer stressed = zm::detail::write_scope_with_initial_buffer_bytes<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             FillBasicTestRootFresh(w);
@@ -300,7 +300,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
 // Verifies BlobWriter exposes a live builder_base and that the root pointer lies inside the builder arena.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BlobWriterBuilderBaseAccessor)
 {
-    zm::write_blob<TestRoot>(
+    zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             zm::detail::BuilderBase* bb = w.builder_base();

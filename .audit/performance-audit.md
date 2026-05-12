@@ -5,7 +5,7 @@
 ## 1. Executive summary
 
 - **Read path:** `HashMap::find` / `HashSet::contains` walk one bucket chain; average O(1) under good hashing; worst-case chain length is bounded in code but can approach Theta(n). Measured hot lookups on this machine are single-digit nanoseconds per op at n=4096 (see section 9).
-- **Write path:** `zm::write_blob` runs the user lambda under TLS (`ScopedBuilder`), then `finalize_move_out` compacts dead ranges if any, pads to alignment, and patches every registered `roffset_t` slot. Patch cost is Theta(|registry|). Arena growth uses `std::vector<char>`; raw pointers into the arena invalidate across realloc (documented in `AGENTS.md` and `ZmeyaBlobWriter.inc`).
+- **Write path:** `zm::write_scope` runs the user lambda under TLS (`ScopedBuilder`), then `finalize_move_out` compacts dead ranges if any, pads to alignment, and patches every registered `roffset_t` slot. Patch cost is Theta(|registry|). Arena growth uses `std::vector<char>`; raw pointers into the arena invalidate across realloc (documented in `AGENTS.md` and `ZmeyaBlobWriter.inc`).
 - **Incremental containers:** `HashMap` / `HashSet` use chained buckets with prepend; rehash when `live_count_ >= bucket_count` (load factor up to 1.0). Each rehash allocates a new bucket slab, walks all live nodes into a scratch `std::vector<uint32_t>`, and re-links; old bucket array is `note_dead_range` and compacted at finalize. Amortized behavior is typical of dynamic hashing; pathological keys keep worst-case chains.
 - **Bulk vs incremental:** For int32 keys at n=4096, bulk `assign` from `std::unordered_map` is several times faster per completed blob than incremental `hashmap_insert` in `ZmeyaBench` (numbers in section 9). `hashmap_reserve_nodes` / `hashset_reserve_nodes` reduce repeated slab growth but do not remove per-insert chain work.
 - **Strings / roffset pressure:** `BM_FinalizeManyStringRoffsets` and repeated string assign stress many relative offsets; cost grows with element count and registry size (patch pass is linear in registry).
@@ -14,7 +14,7 @@
 
 - **In scope:** Header-only library under `Zmeya/` (deserialize always; serialize paths behind `ZMEYA_ENABLE_SERIALIZE_SUPPORT`), builder fragments (`ZmeyaBuilder*.inc`), chained hash implementation (`ZmeyaHashMap.h`, `ZmeyaHashSet.h`, `ZmeyaBuilderHashChain.inc`), arena compaction (`ZmeyaBuilderBaseArena.inc`), registry patch (`ZmeyaBuilderBaseRegistry.inc`), benchmarks `ZmeyaBench.cpp`.
 - **Excluded unless needed:** `extern/`, generated build trees.
-- **Hot paths:** `detail::write_blob_with_initial_buffer_bytes` (lambda + `finalize_move_out`), `BuilderBase::finalize_in_place` / `compact_arena_and_remap_registry`, `patch_roffset_slots_from_registry`, `hashmap_insert` / `hashset_insert` / rehash, read-side `find` / `contains`, `const_iterator` traversal.
+- **Hot paths:** `detail::write_scope_with_initial_buffer_bytes` (lambda + `finalize_move_out`), `BuilderBase::finalize_in_place` / `compact_arena_and_remap_registry`, `patch_roffset_slots_from_registry`, `hashmap_insert` / `hashset_insert` / rehash, read-side `find` / `contains`, `const_iterator` traversal.
 
 ## 3. Implementation status (optional)
 
@@ -51,7 +51,7 @@ Finalize always walks the full `roffset_slot_targets_` map to write self-relativ
 
 **Read lookup:** `findImpl` modulo bucket count, walks chain with step cap `nodes.size() + 1` to detect corruption or pathological loops (`ZmeyaHashMap.h`).
 
-**TLS write session:** `write_blob_with_initial_buffer_bytes` constructs `Builder`, installs `ScopedBuilder`, invokes functor, returns `finalize_move_out` which moves `std::vector<char>` out without an extra full-buffer copy of the finalized bytes (`ZmeyaBlobWriter.inc`).
+**TLS write session:** `write_scope_with_initial_buffer_bytes` constructs `Builder`, installs `ScopedBuilder`, invokes functor, returns `finalize_move_out` which moves `std::vector<char>` out without an extra full-buffer copy of the finalized bytes (`ZmeyaBlobWriter.inc`).
 
 ### 4.4 Costs you cannot fix in one line
 
@@ -76,7 +76,7 @@ Finalize always walks the full `roffset_slot_targets_` map to write self-relativ
 
 | Topic | Files |
 |-------|-------|
-| `write_blob` / finalize entry | `Zmeya/ZmeyaBlobWriter.inc` |
+| `write_scope` / finalize entry | `Zmeya/ZmeyaBlobWriter.inc` |
 | Builder arena, compaction, registry prune | `Zmeya/ZmeyaBuilderBase.inc`, `Zmeya/ZmeyaBuilderBaseArena.inc` |
 | Roffset patch pass | `Zmeya/ZmeyaBuilderBaseRegistry.inc`, `Zmeya/ZmeyaBuilderBaseFinalize.inc` |
 | Incremental hash insert/rehash/erase | `Zmeya/ZmeyaBuilderHashChain.inc` |
@@ -143,12 +143,12 @@ Not run this session: full default range sweeps, Linux mmap, allocator profiling
    **Pass criteria:** Stable `items_per_second` trend; optional manual profile to confirm time in `hashmap_rehash_impl`.
 
 2. **Name:** `BM_HashMapInt32_EraseHeavy` (**landed**)  
-   **Shape:** Insert n, erase half (even keys), insert `need` fresh keys in one `write_blob`.  
+   **Shape:** Insert n, erase half (even keys), insert `need` fresh keys in one `write_scope`.  
    **Compare:** Against `BM_HashMapInt32_IncrementalEraseReinsert`.  
    **Pass criteria:** Detect regressions in erase plus refill behavior.
 
 3. **Name:** `BM_CompactionManyRehashesSmallMap`  
-   **Shape:** Repeatedly grow a small map until k rehashes occur in one session (tune n and insert pattern) producing multiple `note_dead_range` segments; measure full `write_blob` time.  
+   **Shape:** Repeatedly grow a small map until k rehashes occur in one session (tune n and insert pattern) producing multiple `note_dead_range` segments; measure full `write_scope` time.  
    **Compare:** Against same final element count built with bulk assign (no intermediate dead ranges).  
    **Pass criteria:** Quantify compaction + remap overhead when `dead_ranges_.size()` is large.
 

@@ -68,7 +68,7 @@ static void validate(const HashSetTestRoot* root)
 
 TEST(ZmeyaTestSuite, HashSetTest)
 {
-    zm::BlobBuffer bytesCopy = zm::write_blob<HashSetTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_scope<HashSetTestRoot>(
         [](zm::BlobWriter<HashSetTestRoot>& w)
         {
             HashSetTestRoot* root = w.root();

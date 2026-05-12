@@ -62,7 +62,7 @@ static void BM_HashMapInt32_BulkAssign(benchmark::State& state)
     }
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
             [&model](zm::BlobWriter<RootMapIntInt>& w)
             {
                 w.root()->map = model;
@@ -79,7 +79,7 @@ static void BM_HashMapInt32_IncrementalInsert(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
             [n](zm::BlobWriter<RootMapIntInt>& w)
             {
                 for (size_t i = 0; i < n; ++i)
@@ -106,7 +106,7 @@ static void BM_HashMapStringInt32_BulkAssign(benchmark::State& state)
     }
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapStringInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapStringInt>(
             [&model](zm::BlobWriter<RootMapStringInt>& w)
             {
                 w.root()->map = model;
@@ -123,7 +123,7 @@ static void BM_HashMapStringInt32_IncrementalInsert(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapStringInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapStringInt>(
             [n](zm::BlobWriter<RootMapStringInt>& w)
             {
                 for (size_t i = 0; i < n; ++i)
@@ -149,7 +149,7 @@ static void BM_HashSetInt32_BulkAssign(benchmark::State& state)
     }
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootSetInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootSetInt>(
             [&model](zm::BlobWriter<RootSetInt>& w)
             {
                 w.root()->set = model;
@@ -166,7 +166,7 @@ static void BM_HashSetInt32_IncrementalInsert(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootSetInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootSetInt>(
             [n](zm::BlobWriter<RootSetInt>& w)
             {
                 for (size_t i = 0; i < n; ++i)
@@ -191,7 +191,7 @@ static void BM_ArrayInt32_BulkAssign(benchmark::State& state)
     }
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootArrayInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootArrayInt>(
             [&src](zm::BlobWriter<RootArrayInt>& w)
             {
                 w.root()->values = src;
@@ -208,7 +208,7 @@ static void BM_ArrayInt32_PushBack(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootArrayInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootArrayInt>(
             [n](zm::BlobWriter<RootArrayInt>& w)
             {
                 for (size_t i = 0; i < n; ++i)
@@ -233,7 +233,7 @@ static void BM_HashMapInt32_FindHit(benchmark::State& state)
         const int32_t k = static_cast<int32_t>(i);
         model[k] = static_cast<int32_t>(i * 3);
     }
-    zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+    zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
         [&model](zm::BlobWriter<RootMapIntInt>& w)
         {
             w.root()->map = model;
@@ -262,7 +262,7 @@ static void BM_HashMapStringInt32_FindHit(benchmark::State& state)
         keys.push_back("k" + std::to_string(i));
         model[keys.back()] = static_cast<int32_t>(i);
     }
-    zm::BlobBuffer blob = zm::write_blob<RootMapStringInt>(
+    zm::BlobBuffer blob = zm::write_scope<RootMapStringInt>(
         [&model](zm::BlobWriter<RootMapStringInt>& w)
         {
             w.root()->map = model;
@@ -283,7 +283,7 @@ static void BM_StringRepeatedAssignFinalize(benchmark::State& state)
     const int rounds = static_cast<int>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootString>(
+        zm::BlobBuffer blob = zm::write_scope<RootString>(
             [rounds](zm::BlobWriter<RootString>& w)
             {
                 for (int i = 0; i < rounds; ++i)
@@ -303,7 +303,7 @@ static void BM_HashMapInt32_IncrementalInsert_Reserved(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
             [n](zm::BlobWriter<RootMapIntInt>& w)
             {
                 w.hashmap_reserve_nodes(w.root()->map, n);
@@ -325,7 +325,7 @@ static void BM_HashSetInt32_IncrementalInsert_Reserved(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootSetInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootSetInt>(
             [n](zm::BlobWriter<RootSetInt>& w)
             {
                 w.hashset_reserve_nodes(w.root()->set, n);
@@ -346,7 +346,7 @@ static void BM_HashMapInt32_IncrementalEraseReinsert(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
             [n](zm::BlobWriter<RootMapIntInt>& w)
             {
                 for (size_t i = 0; i < n; ++i)
@@ -377,7 +377,7 @@ static void BM_HashMapStringInt32_IncrementalInsert_Reserved(benchmark::State& s
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapStringInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapStringInt>(
             [n](zm::BlobWriter<RootMapStringInt>& w)
             {
                 w.hashmap_reserve_nodes(w.root()->map, n);
@@ -398,7 +398,7 @@ static void BM_HashMapInt32_EraseHeavy(benchmark::State& state)
     const size_t n = static_cast<size_t>(state.range(0));
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+        zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
             [n](zm::BlobWriter<RootMapIntInt>& w)
             {
                 for (size_t i = 0; i < n; ++i)
@@ -433,7 +433,7 @@ static void BM_HashMapInt32_IterateAll(benchmark::State& state)
         const int32_t k = static_cast<int32_t>(i);
         model[k] = static_cast<int32_t>(i * 3);
     }
-    zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+    zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
         [&model](zm::BlobWriter<RootMapIntInt>& w)
         {
             w.root()->map = model;
@@ -462,7 +462,7 @@ static void BM_HashMapInt32_FindMiss(benchmark::State& state)
         const int32_t k = static_cast<int32_t>(i);
         model[k] = static_cast<int32_t>(i * 3);
     }
-    zm::BlobBuffer blob = zm::write_blob<RootMapIntInt>(
+    zm::BlobBuffer blob = zm::write_scope<RootMapIntInt>(
         [&model](zm::BlobWriter<RootMapIntInt>& w)
         {
             w.root()->map = model;
@@ -488,7 +488,7 @@ static void BM_HashSetInt32_ContainsHit(benchmark::State& state)
     {
         model.insert(static_cast<int32_t>(i * 17 + 3));
     }
-    zm::BlobBuffer blob = zm::write_blob<RootSetInt>(
+    zm::BlobBuffer blob = zm::write_scope<RootSetInt>(
         [&model](zm::BlobWriter<RootSetInt>& w)
         {
             w.root()->set = model;
@@ -516,7 +516,7 @@ static void BM_FinalizeManyStringRoffsets(benchmark::State& state)
     }
     for (auto _ : state)
     {
-        zm::BlobBuffer blob = zm::write_blob<RootStrArray>(
+        zm::BlobBuffer blob = zm::write_scope<RootStrArray>(
             [&src](zm::BlobWriter<RootStrArray>& w)
             {
                 w.root()->items = src;
@@ -544,7 +544,7 @@ static void BM_Win32Mmap_HashMapInt32FindHit(benchmark::State& state)
         const int32_t k = static_cast<int32_t>(i);
         model[k] = static_cast<int32_t>(i * 3);
     }
-    zm::BlobBuffer init = zm::write_blob<RootMapIntInt>(
+    zm::BlobBuffer init = zm::write_scope<RootMapIntInt>(
         [&model](zm::BlobWriter<RootMapIntInt>& w)
         {
             w.root()->map = model;

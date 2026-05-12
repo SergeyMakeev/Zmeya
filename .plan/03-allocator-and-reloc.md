@@ -53,7 +53,7 @@ Therefore **Q8** implies: either
 
 1. Add **`BuilderBase::note_arena_moved()`** called from every growth path.
 2. Implement **`recompute_relative_offsets()`** using registry (**depends on 02**).
-3. Add **stress test**: small initial **`write_blob`** size forcing multiple **reallocs** during **`assign`**; verify final blob matches large-reserve run (**golden**).
+3. Add **stress test**: small initial **`write_scope`** size forcing multiple **reallocs** during **`assign`**; verify final blob matches large-reserve run (**golden**).
 
 ## Future: bump + free + holes (**Q2 end goal**)
 

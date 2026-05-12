@@ -15,7 +15,7 @@ when `ZMEYA_ENABLE_SERIALIZE_SUPPORT` is enabled.
 
 **Invalidation (same idea as `std::vector`)**
 
-During `write_blob` / `BlobWriter`, do not cache raw pointers or iterators into this array's elements
+During `write_scope` / `BlobWriter`, do not cache raw pointers or iterators into this array's elements
 across `push_back` / `resize` / `erase_at` / similar on the same array. Use `w.root()->...` each time.
 After finalize, a `const` view over the returned blob is stable for that buffer.
 

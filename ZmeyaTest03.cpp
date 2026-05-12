@@ -97,7 +97,7 @@ static void validate(const ArrayTestRoot* root)
 
 TEST(ZmeyaTestSuite, ArrayTest)
 {
-    zm::BlobBuffer bytesCopy = zm::write_blob<ArrayTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_scope<ArrayTestRoot>(
         [](zm::BlobWriter<ArrayTestRoot>& w)
         {
             ArrayTestRoot* root = w.root();

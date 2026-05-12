@@ -6,7 +6,7 @@ This file is for humans and coding agents so the next session does not rediscove
 
 | Path | Role |
 |------|------|
-| `Zmeya/Zmeya.h` | Header-only library (deserialize always; **`zm::write_blob`** needs `ZMEYA_ENABLE_SERIALIZE_SUPPORT`) |
+| `Zmeya/Zmeya.h` | Header-only library (deserialize always; **`zm::write_scope`** needs `ZMEYA_ENABLE_SERIALIZE_SUPPORT`) |
 | `Zmeya/CMakeLists.txt` | INTERFACE target **`Zmeya`** (include dir + C++17) |
 | Root `CMakeLists.txt` | Executable **`ZmeyaTest`** (all **`ZmeyaTest*.cpp`** including **`ZmeyaTestIncremental.cpp`**, plus **`TestHelper`**) |
 | `ZmeyaBench.cpp` | Optional **`ZmeyaBench`** executable (Google Benchmark microbenchmarks; enable with **`ZMEYA_BUILD_BENCHMARKS`**) |
@@ -17,17 +17,17 @@ Serialization-related tests require **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`**. The ro
 
 ## Incremental write APIs (serialize builds)
 
-With **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`**, during **`zm::write_blob`** you can mutate **`zm::Array`**, **`zm::String`**, **`zm::HashSet`**, and **`zm::HashMap`** incrementally.
+With **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`**, during **`zm::write_scope`** you can mutate **`zm::Array`**, **`zm::String`**, **`zm::HashSet`**, and **`zm::HashMap`** incrementally.
 
 ### Write path: TLS, pointers, and which API to use
 
-- **`zm::write_blob`** installs a **`detail::BuilderBase`** in **thread-local storage** for the duration of your lambda. **`zm::`** member mutators (**`arr.push_back`**, **`hm.insert`**, **`operator=`** on fields) read that TLS context.
+- **`zm::write_scope`** installs a **`detail::BuilderBase`** in **thread-local storage** for the duration of your lambda. **`zm::`** member mutators (**`arr.push_back`**, **`hm.insert`**, **`operator=`** on fields) read that TLS context.
 - **Raw pointers** into the arena (from **`w.root()`**, **`get()`**, **`allocate`**, etc.) can go stale after any step that **grows** the backing **`std::vector<char>`**; re-derive from **`goffset_t`** / **`w.root()`** / **`builder_base()`** after growth.
 - **Recommended style in app code:** prefer **`zm::BlobWriter<Root>::`** methods (**`w.hashmap_insert(...)`**, **`w.array_push_back(...)`**, **`assign` via `=`** on **`w.root()`**) so the active builder is obvious at the call site. Use **`zm::assign(builder, ...)`** / **`zm::hashmap_insert(builder, ...)`** when you must target an **explicit** **`BuilderBase&`** (nested **`ScopedBuilder`**, tests, or code that cannot rely on TLS alone).
 - **Incremental hash:** **`insert`/`erase`/`clear`** on **`zm::HashMap`** / **`zm::HashSet`** use the chain tables (**amortized O(1)** per op plus occasional **O(n)** rehash when **`live_count >= bucket_count`**). Node storage grows via **`BuilderBase::hash_chain_nodes_array_grow_append_default_*`** in **`ZmeyaBuilderHashChainNodesGrow.inc`** (slab reallocate and per-slot string copy via **`assign_string_std`**, not a full-table **`std::unordered_*`** snapshot). Bulk **`assign(unordered_map, ...)`** remains the right tool when you already have a complete STL map to load at once.
 
 - **`BlobWriter`**: **`array_push_back`**, **`array_pop_back`**, **`array_clear`**, **`array_erase_at`**, **`array_resize`**, **`string_append`**, **`string_clear`**, **`hashset_insert`**, **`hashset_erase`**, **`hashset_clear`**, **`hashset_reserve_nodes`**, **`hashmap_insert`**, **`hashmap_erase`**, **`hashmap_clear`**, **`hashmap_reserve_nodes`**
-- **Member helpers** (same session, TLS from **`write_blob`**): **`Array::push_back`**, **`String::append`** / **`operator+=`**, **`HashSet::insert`** / **`erase`** / **`clear`**, **`HashMap::insert`** / **`erase`** / **`clear`**
+- **Member helpers** (same session, TLS from **`write_scope`**): **`Array::push_back`**, **`String::append`** / **`operator+=`**, **`HashSet::insert`** / **`erase`** / **`clear`**, **`HashMap::insert`** / **`erase`** / **`clear`**
 - **Explicit builder**: **`zm::assign(detail::BuilderBase&, ...)`**, **`zm::hashset_insert(builder, ...)`**, **`zm::hashmap_insert(builder, ...)`**, **`zm::hashset_reserve_nodes(builder, ...)`**, **`zm::hashmap_reserve_nodes(builder, ...)`**, etc.
 
 **`assign_string_std`** / **`assign_string_cstr`** wrap the destination slot with **`ScopedBuilder`** so nested writes see the same builder even when the caller passed an explicit **`BuilderBase&`**.
@@ -79,7 +79,7 @@ ZmeyaBench.exe --benchmark_out=zmeya_bench.json --benchmark_out_format=json
 ZmeyaBench.exe --benchmark_filter=BM_HashMapInt32_
 ```
 
-Use **Release** builds when interpreting timings. **`items_per_second`** counters reflect logical elements processed per **`write_blob`** iteration where applicable.
+Use **Release** builds when interpreting timings. **`items_per_second`** counters reflect logical elements processed per **`write_scope`** iteration where applicable.
 
 Run from `build\Release` (or add to PATH):
 
@@ -120,7 +120,7 @@ Root **`build_debug.cmd`** configures CMake, builds **Debug** `ZmeyaTest`, then 
 
 ### Blob writer growth and raw pointers
 
-Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Treat any raw pointer into the arena (including from **`w.allocate`**, **`w.root()`**, **`get()`**, or element pointers) as **invalid after a growth step** unless you re-derive it from a **`goffset_t`** or call **`w.root()`** / **`builder_base()`** again. **`detail::BuilderBase::arena_byte_offset_of(ptr)`** returns the byte index of **`ptr`** in the arena (for tests and low-level code). **`zm::write_blob`** pre-reserves a fixed default arena size; it does **not** expose a user-controlled initial capacity.
+Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when it grows. Treat any raw pointer into the arena (including from **`w.allocate`**, **`w.root()`**, **`get()`**, or element pointers) as **invalid after a growth step** unless you re-derive it from a **`goffset_t`** or call **`w.root()`** / **`builder_base()`** again. **`detail::BuilderBase::arena_byte_offset_of(ptr)`** returns the byte index of **`ptr`** in the arena (for tests and low-level code). **`zm::write_scope`** pre-reserves a fixed default arena size; it does **not** expose a user-controlled initial capacity.
 
 The builder records self-relative **slot** targets in an **`std::unordered_map<goffset_t, goffset_t>`**; **`finalize`** pads to alignment then **patches** every registered word. **`assign` from empty** STL containers or empty strings **clears** the destination **`zm::`** field when it was previously non-empty.
 
@@ -133,4 +133,4 @@ The builder records self-relative **slot** targets in an **`std::unordered_map<g
 | File | Purpose |
 |------|---------|
 | `README.md` | Library overview and usage |
-| `NEXT_STEPS.md` | **`write_blob`**, TLS, reallocation, incremental APIs, registry / finalize |
+| `NEXT_STEPS.md` | **`write_scope`**, TLS, reallocation, incremental APIs, registry / finalize |

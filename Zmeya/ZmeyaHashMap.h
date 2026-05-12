@@ -33,7 +33,7 @@ Iteration exposes `std::pair<const Key&, const Value&>` so `zm::String` keys are
 
 **Invalidation (same idea as `std::unordered_map`)**
 
-During `write_blob` / `BlobWriter`, do not keep raw pointers or iterators across `hashmap_insert` /
+During `write_scope` / `BlobWriter`, do not keep raw pointers or iterators across `hashmap_insert` /
 `hashmap_erase` / `hashmap_clear` on the same map. Use `w.root()->...` each time. After finalize, the
 blob is read-only and pointers from `const` views are stable for that buffer.
 

@@ -26,7 +26,7 @@ Theta(n) per call, with the same step cap pattern as `HashMap::findImpl`.
 
 **Invalidation (same idea as `std::unordered_set`)**
 
-During `write_blob` / `BlobWriter`, treat references into this set like an unordered container under
+During `write_scope` / `BlobWriter`, treat references into this set like an unordered container under
 mutation: do not keep raw pointers or iterators across `hashset_insert` / `hashset_erase` / `hashset_clear`
 on the same set. Use `w.root()->...` each time. After finalize, the blob is read-only and pointers from
 `const` views are stable for that buffer.

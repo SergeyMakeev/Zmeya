@@ -1,6 +1,6 @@
 # Zmeya write-path evolution: design specification
 
-This document specifies the intended **mutable construction** path for the blob writer (`zm::write_blob` and related APIs): **allocator-backed building**, **finalize-time sealing**, and **binary compatibility** with today's mmap-oriented layout. It is **normative for implementation** unless a section is explicitly labeled non-normative or deferred.
+This document specifies the intended **mutable construction** path for the blob writer (`zm::write_scope` and related APIs): **allocator-backed building**, **finalize-time sealing**, and **binary compatibility** with today's mmap-oriented layout. It is **normative for implementation** unless a section is explicitly labeled non-normative or deferred.
 
 ---
 
@@ -30,7 +30,7 @@ The following choices are fixed for this design; later sections spell out conseq
 
 The current write path is tuned for:
 
-- A single **`write_blob`** session with thread-local **builder context**.
+- A single **`write_scope`** session with thread-local **builder context**.
 - **Bulk assignment** from STL-shaped values into **`zm::`** fields (`operator=` / `assign`).
 - An **append-only** backing **`std::vector<char>`** (`alloc_aligned`).
 - **Self-relative** pointers and arrays in the **final** blob (`Pointer`, `Array`, nested containers).
@@ -53,7 +53,7 @@ That goal stresses the **current** model because:
 
 ### 2.1 Mutable construction domain (inside the write session)
 
-While user code runs inside **`write_blob`** (or the successor API that carries an **explicit writer**), the implementation treats the blob as **under construction**:
+While user code runs inside **`write_scope`** (or the successor API that carries an **explicit writer**), the implementation treats the blob as **under construction**:
 
 - A **writer-owned bump allocator** backs allocations (**Q2** initial policy). Opaque or numeric identities for slots are stable across arena growth when registration (**Q5**, **Q8**) is used.
 - Indirection and non-final bookkeeping live in **parallel metadata** (**Q3**), not as ambiguous tags inside final header words (**Q4**).
@@ -122,7 +122,7 @@ Returns from allocation remain **numeric** from the user's perspective (offsets 
 
 ### 5.1 Root set
 
-The **root type** **`TRoot`** is explicit in **`write_blob<TRoot>`** (or equivalent): the root object location is known (today: offset 0 of the builder arena).
+The **root type** **`TRoot`** is explicit in **`write_scope<TRoot>`** (or equivalent): the root object location is known (today: offset 0 of the builder arena).
 
 ### 5.2 Mechanism (normative)
 
@@ -174,7 +174,7 @@ The sealing step **must** produce a buffer that satisfies **Q10**: **self-relati
 
 **Today:**
 
-- **`zm::write_blob`** installs **TLS**, runs **`BlobWriter`**, **`finalize`** pads and copies **`std::vector<char>`**.
+- **`zm::write_scope`** installs **TLS**, runs **`BlobWriter`**, **`finalize`** pads and copies **`std::vector<char>`**.
 - **`assign`** paths allocate slabs and write **relative** metadata immediately (single-phase from the user's perspective).
 - **`NEXT_STEPS.md`** documents **reallocation** hazards for captured raw pointers.
 

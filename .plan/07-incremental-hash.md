@@ -2,7 +2,7 @@
 
 ## Goal
 
-Expose **std-like** mutation for **`zm::HashSet`** and **`zm::HashMap`** during **`write_blob`**: **insert**, **emplace**, **erase**, **clear**, **find** (read already exists).
+Expose **std-like** mutation for **`zm::HashSet`** and **`zm::HashMap`** during **`write_scope`**: **insert**, **emplace**, **erase**, **clear**, **find** (read already exists).
 
 ## Current state
 

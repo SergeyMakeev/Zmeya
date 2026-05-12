@@ -23,13 +23,13 @@ TEST(ZmeyaTestSuite, IncrementalArray_PushBackMatchesBulkAssign)
         src.push_back(i * 3 - 7);
     }
 
-    zm::BlobBuffer golden = zm::write_blob<IncrementalIntArrayRoot>(
+    zm::BlobBuffer golden = zm::write_scope<IncrementalIntArrayRoot>(
         [&src](zm::BlobWriter<IncrementalIntArrayRoot>& w)
         {
             w.root()->values = src;
         }, 4);
 
-    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalIntArrayRoot>(
+    zm::BlobBuffer built = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalIntArrayRoot>(
         [&src](zm::BlobWriter<IncrementalIntArrayRoot>& w)
         {
             for (int v : src)
@@ -50,7 +50,7 @@ TEST(ZmeyaTestSuite, IncrementalArray_PushBackMatchesBulkAssign)
 // Exercises erase_at, pop_back, resize-with-fill, clear, then repopulate; checks final array contents match the intended sequence.
 TEST(ZmeyaTestSuite, IncrementalArray_EraseResizePopBack)
 {
-    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalIntArrayRoot>(
+    zm::BlobBuffer blob = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalIntArrayRoot>(
         [](zm::BlobWriter<IncrementalIntArrayRoot>& w)
         {
             for (int i = 0; i < 10; ++i)
@@ -82,13 +82,13 @@ struct IncrementalStringRoot
 // Verifies string_append / operator+= under a tiny reserve produce the same C string as a single bulk assign (append path vs golden).
 TEST(ZmeyaTestSuite, IncrementalString_AppendMatchesAssign)
 {
-    zm::BlobBuffer golden = zm::write_blob<IncrementalStringRoot>(
+    zm::BlobBuffer golden = zm::write_scope<IncrementalStringRoot>(
         [](zm::BlobWriter<IncrementalStringRoot>& w)
         {
             w.root()->text = std::string("hello world from zm");
         }, 4);
 
-    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalStringRoot>(
+    zm::BlobBuffer built = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalStringRoot>(
         [](zm::BlobWriter<IncrementalStringRoot>& w)
         {
             w.root()->text = std::string("hello ");
@@ -121,13 +121,13 @@ TEST(ZmeyaTestSuite, IncrementalHashMap_RebuildPathMatchesBulkAssign)
 {
     std::unordered_map<std::string, int32_t> model = {{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}};
 
-    zm::BlobBuffer golden = zm::write_blob<IncrementalHashMapRoot>(
+    zm::BlobBuffer golden = zm::write_scope<IncrementalHashMapRoot>(
         [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             w.root()->map = model;
         }, 4);
 
-    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashMapRoot>(
+    zm::BlobBuffer built = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalHashMapRoot>(
         [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             for (const auto& kv : model)
@@ -144,7 +144,7 @@ TEST(ZmeyaTestSuite, IncrementalHashMap_RebuildPathMatchesBulkAssign)
 // Verifies erase, overwrite of an existing key, and insert of a new key leave the expected final map contents.
 TEST(ZmeyaTestSuite, IncrementalHashMap_EraseInsertOverwrite)
 {
-    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashMapRoot>(
+    zm::BlobBuffer blob = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalHashMapRoot>(
         [](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             w.hashmap_insert(w.root()->map, std::string("x"), 1);
@@ -171,13 +171,13 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_RebuildMatchesBulkAssign)
 {
     std::unordered_set<int32_t> model = {3, 1, 4, 1, 5, 9, 2, 6};
 
-    zm::BlobBuffer golden = zm::write_blob<IncrementalHashSetRoot>(
+    zm::BlobBuffer golden = zm::write_scope<IncrementalHashSetRoot>(
         [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             w.root()->set = model;
         }, 4);
 
-    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashSetRoot>(
+    zm::BlobBuffer built = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalHashSetRoot>(
         [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             for (int v : model)
@@ -204,7 +204,7 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_RebuildMatchesBulkAssign)
 // Verifies erase, clear, then insert leaves exactly the post-clear wave of data in the set.
 TEST(ZmeyaTestSuite, IncrementalHashSet_EraseClear)
 {
-    zm::BlobBuffer blob = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashSetRoot>(
+    zm::BlobBuffer blob = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalHashSetRoot>(
         [](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             w.hashset_insert(w.root()->set, 10);
@@ -225,13 +225,13 @@ TEST(ZmeyaTestSuite, IncrementalHashSet_ReserveNodesMatchesBulkAssign)
 {
     std::unordered_set<int32_t> model = {3, 1, 4, 1, 5, 9, 2, 6};
 
-    zm::BlobBuffer golden = zm::write_blob<IncrementalHashSetRoot>(
+    zm::BlobBuffer golden = zm::write_scope<IncrementalHashSetRoot>(
         [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             w.root()->set = model;
         }, 4);
 
-    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashSetRoot>(
+    zm::BlobBuffer built = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalHashSetRoot>(
         [&model](zm::BlobWriter<IncrementalHashSetRoot>& w)
         {
             w.hashset_reserve_nodes(w.root()->set, model.size());
@@ -261,13 +261,13 @@ TEST(ZmeyaTestSuite, IncrementalHashMap_ReserveNodesMatchesBulkAssign)
 {
     std::unordered_map<std::string, int32_t> model = {{"a", 1}, {"b", 2}, {"c", 3}, {"d", 4}};
 
-    zm::BlobBuffer golden = zm::write_blob<IncrementalHashMapRoot>(
+    zm::BlobBuffer golden = zm::write_scope<IncrementalHashMapRoot>(
         [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             w.root()->map = model;
         }, 4);
 
-    zm::BlobBuffer built = zm::detail::write_blob_with_initial_buffer_bytes<IncrementalHashMapRoot>(
+    zm::BlobBuffer built = zm::detail::write_scope_with_initial_buffer_bytes<IncrementalHashMapRoot>(
         [&model](zm::BlobWriter<IncrementalHashMapRoot>& w)
         {
             w.hashmap_reserve_nodes(w.root()->map, model.size());

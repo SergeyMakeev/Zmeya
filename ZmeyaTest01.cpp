@@ -26,7 +26,7 @@ static void validate(const SimpleTestRoot* root)
 
 TEST(ZmeyaTestSuite, SimpleTest)
 {
-    zm::BlobBuffer bytesCopy = zm::write_blob<SimpleTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_scope<SimpleTestRoot>(
         [](zm::BlobWriter<SimpleTestRoot>& w)
         {
             SimpleTestRoot* root = w.root();
@@ -82,7 +82,7 @@ TEST(ZmeyaTestSuite, SimpleTest2)
         uint32_t v2;
     };
 
-    zm::BlobBuffer blob = zm::write_blob<TestRoot>(
+    zm::BlobBuffer blob = zm::write_scope<TestRoot>(
         [&](zm::BlobWriter<TestRoot>& w)
         {
             TestRoot* root = w.root();

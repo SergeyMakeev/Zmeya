@@ -2,7 +2,7 @@
 
 ## Goal
 
-**Normative:** **`zm::Array`** and **`String`** support **std-like** incremental mutation during **`write_blob`** (**`docs/ZmeyaWritePathDesign.md` Q1**): grow, shrink, append, erase (subset as needed for v1).
+**Normative:** **`zm::Array`** and **`String`** support **std-like** incremental mutation during **`write_scope`** (**`docs/ZmeyaWritePathDesign.md` Q1**): grow, shrink, append, erase (subset as needed for v1).
 
 ## Current constraints
 
@@ -44,7 +44,7 @@ All must:
 ## Tests
 
 1. Build identical logical array via **`assign(vector)`** vs loop **`push_back`** - **same final bytes** after **`finalize`**.
-2. Stress: many **`push_back`** with tiny initial **`write_blob`** reserve - triggers **realloc** + registry correctness (**03**).
+2. Stress: many **`push_back`** with tiny initial **`write_scope`** reserve - triggers **realloc** + registry correctness (**03**).
 
 ## Dependencies
 

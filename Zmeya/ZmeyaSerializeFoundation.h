@@ -82,7 +82,7 @@ template <typename T, int Alignment> class BufferAllocator : public std::allocat
 
 **Owning blob byte buffer**
 
-Same allocator as the write-path arena (`BufferAllocator`). `write_blob` returns this type so the
+Same allocator as the write-path arena (`BufferAllocator`). `write_scope` returns this type so the
 finalized bytes can be moved out without copying the arena into a separate `std::vector<char>`.
 
 */

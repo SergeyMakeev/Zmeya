@@ -11,7 +11,7 @@ Zmeya is not even a serialization library in the usual sense but rather a set of
 # Features
 
 - Cross-platform compatible
-- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::write_blob`** / serialization)
+- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::write_scope`** / serialization)
 - No code generation required: no IDL or metadata, just use your types directly
 - No IDL/codegen macros; small integration macros in `ZmeyaConfig.h` (asserts, allocators, attributes)
 - Heavily optimized for performance
@@ -27,24 +27,24 @@ Zmeya library offering the following memory movable types
 
 ## Mental model
 
-Zmeya types are meant to live in **one contiguous byte range** (memory-mapped file, received packet, heap block, or the **`std::vector<char>`** returned from **`zm::write_blob`**). They use **self-relative** addressing (offsets from each field's address), not raw pointers into arbitrary memory, so there is **no pointer fixup** when you load data.
+Zmeya types are meant to live in **one contiguous byte range** (memory-mapped file, received packet, heap block, or the **`std::vector<char>`** returned from **`zm::write_scope`**). They use **self-relative** addressing (offsets from each field's address), not raw pointers into arbitrary memory, so there is **no pointer fixup** when you load data.
 
 **Read path:** treat the blob as bytes, cast to **`const YourRoot*`** (or offset to your root), then use **`zm::`** fields like ordinary nested data. No separate deserialize step.
 
-**Write path:** **`zm::write_blob<YourRoot>(...)`** runs your lambda while a **blob writer** is active in **thread-local storage**. Inside that lambda, **`zm::`** fields behave like **mutable value-like objects**: assign from **`std::vector`**, **`std::string`**, **`std::unordered_*`**, or assign **`zm::Pointer<T> = T*`** where **`T`** is already allocated in the same blob via **`BlobWriter::allocate`**. The library copies data into the growing buffer and wires relative offsets for you. Prefer **`w.root()`** and **`w.*`** helpers so the builder is explicit at the call site; use **`zm::assign(detail::BuilderBase&, ...)`** when TLS alone is insufficient (see **`AGENTS.md`**). Think of the lambda as a **scoped write** into one blob, not a separate serialization API surface.
+**Write path:** **`zm::write_scope<YourRoot>(...)`** runs your lambda while a **blob writer** is active in **thread-local storage**. Inside that lambda, **`zm::`** fields behave like **mutable value-like objects**: assign from **`std::vector`**, **`std::string`**, **`std::unordered_*`**, or assign **`zm::Pointer<T> = T*`** where **`T`** is already allocated in the same blob via **`BlobWriter::allocate`**. The library copies data into the growing buffer and wires relative offsets for you. Prefer **`w.root()`** and **`w.*`** helpers so the builder is explicit at the call site; use **`zm::assign(detail::BuilderBase&, ...)`** when TLS alone is insufficient (see **`AGENTS.md`**). Think of the lambda as a **scoped write** into one blob, not a separate serialization API surface.
 
-**Threading:** all **`zm::`** mutations for one blob must run on the **same thread** as the **`zm::write_blob`** call (TLS is not shared with worker threads).
+**Threading:** all **`zm::`** mutations for one blob must run on the **same thread** as the **`zm::write_scope`** call (TLS is not shared with worker threads).
 
 ## Creating a blob
 
-1. Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling the translation units that call **`zm::write_blob`** (see root **`CMakeLists.txt`** for tests).
+1. Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling the translation units that call **`zm::write_scope`** (see root **`CMakeLists.txt`** for tests).
 
-2. Call **`zm::write_blob<Root>`** with a lambda taking **`zm::BlobWriter<Root>& w`**. Use **`w.root()`** for the root struct, **`=`** from STL-shaped values into **`zm::`** members, and **`w.allocate<T>()`** when you need extra **trivially copyable** objects in the blob (for example list nodes).
+2. Call **`zm::write_scope<Root>`** with a lambda taking **`zm::BlobWriter<Root>& w`**. Use **`w.root()`** for the root struct, **`=`** from STL-shaped values into **`zm::`** members, and **`w.allocate<T>()`** when you need extra **trivially copyable** objects in the blob (for example list nodes).
 
 3. Optional **second argument:** final alignment for the returned **`std::vector<char>`** (defaults to **4**). The writer pre-reserves a fixed internal starting capacity for the backing buffer; do not cache raw pointers into the arena across growth.
 
 ```cpp
-std::vector<char> blob = zm::write_blob<MyRoot>([](zm::BlobWriter<MyRoot>& w) {
+std::vector<char> blob = zm::write_scope<MyRoot>([](zm::BlobWriter<MyRoot>& w) {
     w.root()->title = std::string("hello");
     w.root()->nums = std::vector<int>{1, 2, 3};
 });

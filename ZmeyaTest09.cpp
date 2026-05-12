@@ -93,7 +93,7 @@ static void generateTestFile(const char* fileName)
 {
     std::vector<std::string> objectNames = {"root", "test1", "floor", "window", "arrow", "door"};
 
-    zm::BlobBuffer bytesCopy = zm::write_blob<SimpleFileTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_scope<SimpleFileTestRoot>(
         [&objectNames](zm::BlobWriter<SimpleFileTestRoot>& w)
         {
             SimpleFileTestRoot* root = w.root();

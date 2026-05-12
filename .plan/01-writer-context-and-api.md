@@ -6,7 +6,7 @@
 
 ## Current state (baseline)
 
-- **`zm::write_blob<TRoot>(fn)`** in **`Zmeya/Zmeya.h`** constructs **`detail::Builder<TRoot>`**, installs **`ScopedBuilder`** which sets **`detail::g_tls_active_builder`**, passes **`BlobWriter<TRoot>`** to **`fn`**, then **`finalize`**.
+- **`zm::write_scope<TRoot>(fn)`** in **`Zmeya/Zmeya.h`** constructs **`detail::Builder<TRoot>`**, installs **`ScopedBuilder`** which sets **`detail::g_tls_active_builder`**, passes **`BlobWriter<TRoot>`** to **`fn`**, then **`finalize`**.
 - **`assign(...)`** and **`deep_copy`** paths call **`detail::get_global_builder()`** and **`assert`** non-null.
 
 ## Target state
@@ -31,14 +31,14 @@ Preferred direction (minimize churn):
 **Preferred long-term (matches Q7 strictly):**
 
 - **`assign`** functions take **`BuilderBase&`** as first parameter **or** take **`BlobWriter&`** and extract implementation pointer.
-- **`operator=`** on **`zm::`** types cannot pass **`BlobWriter`** without storing a back-pointer on each header (rejected: bloated on-wire layout). So **`operator=`** continues to use **TLS or a function-scope builder** unless you introduce a **per-thread current writer** set only inside **`write_blob`** (still TLS, but documented as **implementation detail of the entrypoint**).
+- **`operator=`** on **`zm::`** types cannot pass **`BlobWriter`** without storing a back-pointer on each header (rejected: bloated on-wire layout). So **`operator=`** continues to use **TLS or a function-scope builder** unless you introduce a **per-thread current writer** set only inside **`write_scope`** (still TLS, but documented as **implementation detail of the entrypoint**).
 
-**Clarification for implementers:** Q7 forbids **TLS as the only way** - meaning tests and alternate entrypoints must be able to call **`assign`** with an explicit **`BuilderBase`**. The **`write_blob`** convenience wrapper may still set TLS for **`operator=`** ergonomics if **`operator=`** remains zero-extra-storage.
+**Clarification for implementers:** Q7 forbids **TLS as the only way** - meaning tests and alternate entrypoints must be able to call **`assign`** with an explicit **`BuilderBase`**. The **`write_scope`** convenience wrapper may still set TLS for **`operator=`** ergonomics if **`operator=`** remains zero-extra-storage.
 
 ### Step C: Public API surface
 
 1. Document that **`fn(BlobWriter)`** is the supported handle; **`root()`**, **`allocate()`**, **`contains_pointer()`** stay stable.
-2. Optional: **`write_blob`** overload **`write_blob(fn, writer_options)`** with explicit initial size / alignment only (no API creep).
+2. Optional: **`write_scope`** overload **`write_scope(fn, writer_options)`** with explicit initial size / alignment only (no API creep).
 
 ### Step D: Deprecation / cleanup
 

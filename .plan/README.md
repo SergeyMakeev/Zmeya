@@ -7,7 +7,7 @@ This folder breaks **`docs/ZmeyaWritePathDesign.md`** into executable subplans. 
 | Artifact | Role |
 |----------|------|
 | `docs/ZmeyaWritePathDesign.md` | Normative requirements (registration, explicit writer, two-phase seal, compatibility). |
-| `Zmeya/Zmeya.h` | Current **`BlobWriter`**, **`detail::BuilderBase`**, **`write_blob`**, TLS (**`g_tls_active_builder`**), **`assign`**, **`finalize`**. |
+| `Zmeya/Zmeya.h` | Current **`BlobWriter`**, **`detail::BuilderBase`**, **`write_scope`**, TLS (**`g_tls_active_builder`**), **`assign`**, **`finalize`**. |
 | `NEXT_STEPS.md` | Documented realloc hazards; superseded behaviors should be updated when the new writer lands. |
 
 ## Workstream map
@@ -60,7 +60,7 @@ This folder breaks **`docs/ZmeyaWritePathDesign.md`** into executable subplans. 
 
 ## Definition of done (program-wide)
 
-1. **`write_blob`** (or successor) runs user closure with an **explicit writer**; TLS is not the only discovery path for **`assign`** (**Q7**).
+1. **`write_scope`** (or successor) runs user closure with an **explicit writer**; TLS is not the only discovery path for **`assign`** (**Q7**).
 2. **`vector<char>`** reallocation updates **all** registered slots; documented raw-pointer hazards narrowed to unsupported escape hatches (**Q8**).
 3. **Finalize** implements **two-phase** semantics required by **Q9** (even if phase 1 is memcpy-only until compaction exists).
 4. **Incremental** **`Array`** / **`String`** / hash APIs ship in v1 per **Q1** with tests proving sealed output matches legacy bulk **`assign`** where comparable.

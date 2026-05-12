@@ -41,7 +41,7 @@ static void validate(const StringTestRoot* root)
 
 TEST(ZmeyaTestSuite, StringTest_Debug)
 {
-    zm::write_blob<StringTestRoot>([](zm::BlobWriter<StringTestRoot>& w)
+    zm::write_scope<StringTestRoot>([](zm::BlobWriter<StringTestRoot>& w)
                               {
                                   StringTestRoot* root = w.root();
 
@@ -57,7 +57,7 @@ TEST(ZmeyaTestSuite, StringTest_Debug)
 
 TEST(ZmeyaTestSuite, StringTest)
 {
-    zm::BlobBuffer bytesCopy = zm::write_blob<StringTestRoot>(
+    zm::BlobBuffer bytesCopy = zm::write_scope<StringTestRoot>(
         [](zm::BlobWriter<StringTestRoot>& w)
         {
             StringTestRoot* root = w.root();

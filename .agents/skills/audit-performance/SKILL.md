@@ -30,7 +30,7 @@ Produce a **direct, evidence-based** performance audit: where time and memory go
 
 1. **Scope:** Repo-wide or paths the user names; default is library and test sources. Exclude `extern/`, vendored trees, and build output unless asked.
 2. **Baseline:** Record current **`git rev-parse HEAD`** and short **`git log -1 --oneline`** in a **Last synced to implementation** line near the top of the report.
-3. **Explore:** Map hot paths with search and file reads (`write_blob`, `finalize`, incremental APIs, containers, read-side `find` / iteration). Do **not** invent behavior; cite code.
+3. **Explore:** Map hot paths with search and file reads (`write_scope`, `finalize`, incremental APIs, containers, read-side `find` / iteration). Do **not** invent behavior; cite code.
 4. **Measurements:** If the project ships benchmarks (Zmeya: **`ZmeyaBench`**, enable with **`ZMEYA_BUILD_BENCHMARKS`**, run **`run_perf_tests.cmd`** or equivalent), incorporate **actual numbers** when available (paste summary table or path to saved output). Never substitute invented timings or **x%** claims. If a hot path has **no** benchmark yet, mark the finding **needs measurement** in the issue table and add an explicit line in **Benchmark coverage and gaps** (what to build, input shape, what to compare).
 5. **Apply rubric:** Work through [reference.md](reference.md). Classify each issue: **Critical / Major / Minor** with **status** (open, mitigated, by design, needs measurement).
 6. **Tables:** Include at least an **issue table** (issue, location, status) and a **complexity reference** where it helps (before vs after if the user is mid-refactor).
@@ -91,7 +91,7 @@ Use this structure in the output `.md` file (adapt section titles if the project
 
 ## Project note (Zmeya)
 
-Before recommending API or wire-format changes, read **`AGENTS.md`** for build flags, `write_blob` / TLS behavior, and incremental constraints. For numbers, prefer **`ZmeyaBench`** (**`-DZMEYA_BUILD_BENCHMARKS=ON`**) and **`run_perf_tests.cmd`**; extend **`ZmeyaBench.cpp`** when the audit identifies coverage gaps, and record those proposals in **section 9** of the report.
+Before recommending API or wire-format changes, read **`AGENTS.md`** for build flags, `write_scope` / TLS behavior, and incremental constraints. For numbers, prefer **`ZmeyaBench`** (**`-DZMEYA_BUILD_BENCHMARKS=ON`**) and **`run_perf_tests.cmd`**; extend **`ZmeyaBench.cpp`** when the audit identifies coverage gaps, and record those proposals in **section 9** of the report.
 
 ## Additional rubric
 

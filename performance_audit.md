@@ -118,7 +118,7 @@ Scaling such tests without adjusting N or switching to bulk assign will look lik
 
 ---
 
-## 12. Default write_blob arena reserve
+## 12. Default write_scope arena reserve
 
 **What happens:** The blob buffer starts with a modest default reserve (see `kDefaultWriteBlobArenaReserveBytes` in `Zmeya.h`).
 
@@ -130,7 +130,7 @@ Scaling such tests without adjusting N or switching to bulk assign will look lik
 
 **Problem:** Today incremental hash operations decode the on-wire layout into STL containers and rebuild the dense bucket + item layout every time. That is simple and correct but Theta(n) per mutation.
 
-**Suggested approach:** During `write_blob`, maintain hash tables with **open addressing** (no chaining lists that require stable pointers into separate slabs for every probe step in the way nested arrays do today for "bucket ranges"). Accept **no pointer stability** for entries inside this mutable table: probes are indices into a single flat array of slots (key/value or tombstone markers).
+**Suggested approach:** During `write_scope`, maintain hash tables with **open addressing** (no chaining lists that require stable pointers into separate slabs for every probe step in the way nested arrays do today for "bucket ranges"). Accept **no pointer stability** for entries inside this mutable table: probes are indices into a single flat array of slots (key/value or tombstone markers).
 
 **Sizing:** Keep the open-address table roughly **2-4x** the number of live elements (load factor well below 1) to bound expected probes and simplify insert/delete; trade memory during the build for predictable O(1) amortized insert/erase.
 

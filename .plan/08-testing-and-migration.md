@@ -32,7 +32,7 @@ Provide continuous verification for the write-path rewrite without regressing **
 | File | Action |
 |------|--------|
 | **`NEXT_STEPS.md`** | Replace **TLS-only** and **raw pointer** warnings with **new contract**: explicit writer, **`goffset_t`** targets, when raw pointers are still unsafe. |
-| **`AGENTS.md`** | Mention incremental APIs and **`write_blob`** reserve guidance if still relevant. |
+| **`AGENTS.md`** | Mention incremental APIs and **`write_scope`** reserve guidance if still relevant. |
 | **`README.md`** | Only if user-facing examples need incremental snippets (**keep minimal per repo norms**). |
 
 ## CI expectations

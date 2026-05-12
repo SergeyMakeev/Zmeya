@@ -45,7 +45,7 @@
 ## Deliverables
 
 - **`BuilderBase::finalize`** split into **`finalize_layout`** + **`patch_edges`** or internal steps with clear comments.
-- Tests comparing **old vs new** finalize for identical **`write_blob`** scenarios.
+- Tests comparing **old vs new** finalize for identical **`write_scope`** scenarios.
 
 ## Dependencies
 

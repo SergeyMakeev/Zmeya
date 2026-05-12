@@ -32,7 +32,7 @@ struct HashSetIntRoot
 
 TEST(MemorySafety, ValidateHashSetDeepRoundTrip)
 {
-    zm::BlobBuffer blob = zm::write_blob<HashSetIntRoot>([](zm::BlobWriter<HashSetIntRoot>& w) {
+    zm::BlobBuffer blob = zm::write_scope<HashSetIntRoot>([](zm::BlobWriter<HashSetIntRoot>& w) {
         zm::assign(w.root()->h, std::unordered_set<int>{5, 9, 1});
     });
     const std::byte* bytes = reinterpret_cast<const std::byte*>(blob.data());
@@ -43,7 +43,7 @@ TEST(MemorySafety, ValidateHashSetDeepRoundTrip)
 
 TEST(MemorySafety, ValidateBlobViewShallowTooSmall)
 {
-    zm::BlobBuffer blob = zm::write_blob<HashSetIntRoot>([](zm::BlobWriter<HashSetIntRoot>& w) {
+    zm::BlobBuffer blob = zm::write_scope<HashSetIntRoot>([](zm::BlobWriter<HashSetIntRoot>& w) {
         zm::assign(w.root()->h, std::unordered_set<int>{2});
     });
     const std::byte* bytes = reinterpret_cast<const std::byte*>(blob.data());
@@ -57,7 +57,7 @@ struct IntArrayRoot
 
 TEST(MemorySafety, ArrayTryAtBounds)
 {
-    zm::BlobBuffer blob = zm::write_blob<IntArrayRoot>([](zm::BlobWriter<IntArrayRoot>& w) {
+    zm::BlobBuffer blob = zm::write_scope<IntArrayRoot>([](zm::BlobWriter<IntArrayRoot>& w) {
         zm::assign(w.root()->ints, std::vector<int>{10, 20});
     });
     const IntArrayRoot* root = reinterpret_cast<const IntArrayRoot*>(blob.data());
@@ -73,7 +73,7 @@ struct IntPtrRoot
 
 TEST(MemorySafety, PointerTryGetInBlob)
 {
-    zm::BlobBuffer blob = zm::write_blob<IntPtrRoot>([](zm::BlobWriter<IntPtrRoot>& w) {
+    zm::BlobBuffer blob = zm::write_scope<IntPtrRoot>([](zm::BlobWriter<IntPtrRoot>& w) {
         int* slot = w.allocate<int>();
         *slot = 12345;
         zm::assign(w.root()->p, slot);
