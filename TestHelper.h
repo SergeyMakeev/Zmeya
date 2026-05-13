@@ -1,12 +1,6 @@
 #pragma once
 #include "Zmeya.h"
 #include <utility>
-#include <vector>
-
-namespace utils
-{
-std::vector<char> copyBytes(zm::Span<char> from);
-}
 
 /*
 

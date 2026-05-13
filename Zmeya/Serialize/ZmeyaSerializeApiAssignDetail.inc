@@ -1,6 +1,13 @@
 namespace detail
 {
 
+inline BuilderBase& require_tls_builder() noexcept
+{
+    BuilderBase* b = get_global_builder();
+    ZMEYA_ASSERT(b != nullptr);
+    return *b;
+}
+
 inline size_t string_slot_old_phys_bytes(BuilderBase& builder, const char* old_ptr)
 {
     ZMEYA_ASSERT(old_ptr != nullptr);

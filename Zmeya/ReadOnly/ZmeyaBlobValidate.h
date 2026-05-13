@@ -2,6 +2,7 @@
 
 #include "ZmeyaHashMap.h"
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace zm
@@ -62,6 +63,101 @@ struct BlobLayoutValidator
     template <typename K, typename V> struct is_zm_hashmap<HashMap<K, V>> : std::true_type
     {
     };
+
+    template <typename Table, typename OnLiveNode>
+    static bool hash_chain_graph_validate(const std::byte* blob_begin, size_t blob_size, const Table& table, OnLiveNode&& onLiveNode) noexcept
+    {
+        const uintptr_t b = reinterpret_cast<uintptr_t>(blob_begin);
+        const uintptr_t e = b + blob_size;
+        const uintptr_t th = reinterpret_cast<uintptr_t>(&table);
+        if (th < b || th + sizeof(Table) > e)
+        {
+            return false;
+        }
+        if (!array(blob_begin, blob_size, table.buckets))
+        {
+            return false;
+        }
+        if (!array(blob_begin, blob_size, table.nodes))
+        {
+            return false;
+        }
+        const size_t nodePool = table.nodes.size();
+        if (nodePool >= size_t(ZMEYA_HASH_CHAIN_NIL))
+        {
+            return false;
+        }
+        std::vector<unsigned char> visited;
+        try
+        {
+            visited.assign(nodePool, 0);
+        }
+        catch (...)
+        {
+            return false;
+        }
+        uint32_t chainLive = 0;
+        const size_t numBuckets = table.buckets.size();
+        const auto* pool = table.nodes.getConstData();
+        for (size_t bi = 0; bi < numBuckets; ++bi)
+        {
+            const size_t maxSteps = nodePool + 1;
+            size_t steps = 0;
+            for (uint32_t cur = table.buckets.getConstData()[bi].head; cur != ZMEYA_HASH_CHAIN_NIL; cur = pool[cur].next)
+            {
+                if (++steps > maxSteps)
+                {
+                    return false;
+                }
+                if (size_t(cur) >= nodePool)
+                {
+                    return false;
+                }
+                if (visited[size_t(cur)] != 0)
+                {
+                    return false;
+                }
+                visited[size_t(cur)] = 1;
+                ++chainLive;
+            }
+        }
+        if (chainLive != table.live_count_)
+        {
+            return false;
+        }
+        size_t freeSteps = 0;
+        for (uint32_t cur = table.free_head_; cur != ZMEYA_HASH_CHAIN_NIL; cur = pool[cur].next)
+        {
+            if (++freeSteps > nodePool + 1)
+            {
+                return false;
+            }
+            if (size_t(cur) >= nodePool)
+            {
+                return false;
+            }
+            if (visited[size_t(cur)] == 1)
+            {
+                return false;
+            }
+            if (visited[size_t(cur)] == 2)
+            {
+                return false;
+            }
+            visited[size_t(cur)] = 2;
+        }
+        for (size_t i = 0; i < nodePool; ++i)
+        {
+            if (visited[i] == 1)
+            {
+                if (!std::forward<OnLiveNode>(onLiveNode)(pool[i]))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
   public:
     template <typename T> static bool pointer(const std::byte* blob_begin, size_t blob_size, const Pointer<T>& p) noexcept
@@ -190,194 +286,24 @@ struct BlobLayoutValidator
 
     template <typename Key> static bool hashset(const std::byte* blob_begin, size_t blob_size, const HashSet<Key>& hs) noexcept
     {
-        const uintptr_t b = reinterpret_cast<uintptr_t>(blob_begin);
-        const uintptr_t e = b + blob_size;
-        const uintptr_t th = reinterpret_cast<uintptr_t>(&hs);
-        if (th < b || th + sizeof(HashSet<Key>) > e)
-        {
-            return false;
-        }
-        if (!array(blob_begin, blob_size, hs.buckets))
-        {
-            return false;
-        }
-        if (!array(blob_begin, blob_size, hs.nodes))
-        {
-            return false;
-        }
-        const size_t nodePool = hs.nodes.size();
-        if (nodePool >= size_t(ZMEYA_HASH_CHAIN_NIL))
-        {
-            return false;
-        }
-        std::vector<unsigned char> visited;
-        try
-        {
-            visited.assign(nodePool, 0);
-        }
-        catch (...)
-        {
-            return false;
-        }
-        uint32_t chainLive = 0;
-        const size_t numBuckets = hs.buckets.size();
-        const typename HashSet<Key>::Node* pool = hs.nodes.getConstData();
-        for (size_t bi = 0; bi < numBuckets; ++bi)
-        {
-            const size_t maxSteps = nodePool + 1;
-            size_t steps = 0;
-            for (uint32_t cur = hs.buckets.getConstData()[bi].head; cur != ZMEYA_HASH_CHAIN_NIL; cur = pool[cur].next)
-            {
-                if (++steps > maxSteps)
-                {
-                    return false;
-                }
-                if (size_t(cur) >= nodePool)
-                {
-                    return false;
-                }
-                if (visited[size_t(cur)] != 0)
-                {
-                    return false;
-                }
-                visited[size_t(cur)] = 1;
-                ++chainLive;
-            }
-        }
-        if (chainLive != hs.live_count_)
-        {
-            return false;
-        }
-        size_t freeSteps = 0;
-        for (uint32_t cur = hs.free_head_; cur != ZMEYA_HASH_CHAIN_NIL; cur = pool[cur].next)
-        {
-            if (++freeSteps > nodePool + 1)
-            {
-                return false;
-            }
-            if (size_t(cur) >= nodePool)
-            {
-                return false;
-            }
-            if (visited[size_t(cur)] == 1)
-            {
-                return false;
-            }
-            if (visited[size_t(cur)] == 2)
-            {
-                return false;
-            }
-            visited[size_t(cur)] = 2;
-        }
-        for (size_t i = 0; i < nodePool; ++i)
-        {
-            if (visited[i] == 1)
-            {
-                if (!field_dispatch(blob_begin, blob_size, pool[i].key))
-                {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return hash_chain_graph_validate(
+            blob_begin, blob_size, hs,
+            [blob_begin, blob_size](const typename HashSet<Key>::Node& n) noexcept -> bool {
+                return field_dispatch(blob_begin, blob_size, n.key);
+            });
     }
 
     template <typename Key, typename Value> static bool hashmap(const std::byte* blob_begin, size_t blob_size, const HashMap<Key, Value>& hm) noexcept
     {
-        const uintptr_t b = reinterpret_cast<uintptr_t>(blob_begin);
-        const uintptr_t e = b + blob_size;
-        const uintptr_t th = reinterpret_cast<uintptr_t>(&hm);
-        if (th < b || th + sizeof(HashMap<Key, Value>) > e)
-        {
-            return false;
-        }
-        if (!array(blob_begin, blob_size, hm.buckets))
-        {
-            return false;
-        }
-        if (!array(blob_begin, blob_size, hm.nodes))
-        {
-            return false;
-        }
-        const size_t nodePool = hm.nodes.size();
-        if (nodePool >= size_t(ZMEYA_HASH_CHAIN_NIL))
-        {
-            return false;
-        }
-        std::vector<unsigned char> visited;
-        try
-        {
-            visited.assign(nodePool, 0);
-        }
-        catch (...)
-        {
-            return false;
-        }
-        uint32_t chainLive = 0;
-        const size_t numBuckets = hm.buckets.size();
-        const typename HashMap<Key, Value>::Node* pool = hm.nodes.getConstData();
-        for (size_t bi = 0; bi < numBuckets; ++bi)
-        {
-            const size_t maxSteps = nodePool + 1;
-            size_t steps = 0;
-            for (uint32_t cur = hm.buckets.getConstData()[bi].head; cur != ZMEYA_HASH_CHAIN_NIL; cur = pool[cur].next)
-            {
-                if (++steps > maxSteps)
+        return hash_chain_graph_validate(
+            blob_begin, blob_size, hm,
+            [blob_begin, blob_size](const typename HashMap<Key, Value>::Node& n) noexcept -> bool {
+                if (!field_dispatch(blob_begin, blob_size, n.key))
                 {
                     return false;
                 }
-                if (size_t(cur) >= nodePool)
-                {
-                    return false;
-                }
-                if (visited[size_t(cur)] != 0)
-                {
-                    return false;
-                }
-                visited[size_t(cur)] = 1;
-                ++chainLive;
-            }
-        }
-        if (chainLive != hm.live_count_)
-        {
-            return false;
-        }
-        size_t freeSteps = 0;
-        for (uint32_t cur = hm.free_head_; cur != ZMEYA_HASH_CHAIN_NIL; cur = pool[cur].next)
-        {
-            if (++freeSteps > nodePool + 1)
-            {
-                return false;
-            }
-            if (size_t(cur) >= nodePool)
-            {
-                return false;
-            }
-            if (visited[size_t(cur)] == 1)
-            {
-                return false;
-            }
-            if (visited[size_t(cur)] == 2)
-            {
-                return false;
-            }
-            visited[size_t(cur)] = 2;
-        }
-        for (size_t i = 0; i < nodePool; ++i)
-        {
-            if (visited[i] == 1)
-            {
-                if (!field_dispatch(blob_begin, blob_size, pool[i].key))
-                {
-                    return false;
-                }
-                if (!field_dispatch(blob_begin, blob_size, pool[i].value))
-                {
-                    return false;
-                }
-            }
-        }
-        return true;
+                return field_dispatch(blob_begin, blob_size, n.value);
+            });
     }
 
     template <typename TRoot> static bool shallow_root_in_span(const std::byte* blob_begin, size_t blob_size, const TRoot& root) noexcept

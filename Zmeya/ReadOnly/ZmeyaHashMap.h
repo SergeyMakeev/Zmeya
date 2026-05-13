@@ -234,6 +234,7 @@ template <typename Key, typename Value> class HashMap
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return find(key) != nullptr; }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Non-const accessors below exist only in serialize builds (active write_scope / builder).
     ZMEYA_NODISCARD Value* find(const Key& key) noexcept
     {
         typedef HashKeyAdapterGeneric<Key> Adapter;
@@ -272,6 +273,7 @@ template <typename Key, typename Value> class HashMap
     }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Non-const accessors below exist only in serialize builds (active write_scope / builder).
     ZMEYA_NODISCARD Value* find(const char* key) noexcept
     {
         static_assert(std::is_same<Key, String>::value, "To use this function, the key type must be Zmeya::String");
@@ -334,6 +336,7 @@ template <typename Key, typename Value> class HashMap
     }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Bulk assign from STL exists only in serialize builds (active write_scope / builder).
     template <typename FK, typename FV> HashMap<Key, Value>& operator=(const std::unordered_map<FK, FV>& other)
     {
         assign(*this, other);

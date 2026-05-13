@@ -66,6 +66,7 @@ ZMEYA_NODISCARD inline uintptr_t toAbsoluteAddr(uintptr_t base, roffset_t offset
 }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+// Forward declarations below are serialize-only (strip in deserialize-only builds).
 namespace detail
 {
 class BuilderBase;
@@ -78,6 +79,7 @@ template <typename Key, typename Value> class HashMap;
 template <typename T> class Pointer;
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+// Free assign overload is serialize-only.
 template <typename T> void assign(Pointer<T>& _to, T* from);
 #endif
 

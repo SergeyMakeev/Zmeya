@@ -64,6 +64,7 @@ class String
     }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Members below exist only in serialize builds (active write_scope / builder).
     String& operator=(const std::string& other)
     {
         assign(*this, other);

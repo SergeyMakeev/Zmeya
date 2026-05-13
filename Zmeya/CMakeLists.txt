@@ -22,6 +22,10 @@ set(HEADERS
     Serialize/ZmeyaBuilderBaseArrays.inc
     Serialize/ZmeyaBuilderBaseFinalize.inc
     Serialize/ZmeyaBuilderHashChain.inc
+    Serialize/ZmeyaBuilderHashChainHelpers.inc
+    Serialize/ZmeyaBuilderHashChainRehash.inc
+    Serialize/ZmeyaBuilderHashChainOps.inc
+    Serialize/ZmeyaBuilderHashChainReserve.inc
     Serialize/ZmeyaBuilderHashChainNodesGrow.inc
     Serialize/ZmeyaBuilderAssignImpl.h
     Serialize/ZmeyaBuilderAssignImpl.inc

@@ -92,6 +92,7 @@ template <typename T> class Pointer
     ZMEYA_NODISCARD bool operator!=(std::nullptr_t) const noexcept { return relativeOffset != 0; }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Members below exist only in serialize builds (active write_scope / builder).
     Pointer& operator=(T* from)
     {
         assign(*this, from);

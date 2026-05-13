@@ -60,6 +60,7 @@ template <typename T> class Array
     }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Members below exist only in serialize builds (active write_scope / builder).
 
     ZMEYA_NODISCARD T* get_element_ptr_unsafe_can_be_relocated(const size_t index) noexcept
     {
@@ -94,6 +95,7 @@ template <typename T> class Array
     ZMEYA_NODISCARD bool empty() const noexcept { return size() == 0; }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Members below exist only in serialize builds (active write_scope / builder).
     template <typename U> void push_back(U&& v);
     void pop_back();
     void clear();

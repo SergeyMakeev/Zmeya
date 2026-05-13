@@ -237,6 +237,7 @@ template <typename Key> class HashSet
     ZMEYA_NODISCARD bool contains(const Key& key) const noexcept { return containsImpl<HashKeyAdapterGeneric<Key>, Key>(key); }
 
 #ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT
+    // Bulk assign from STL exists only in serialize builds (active write_scope / builder).
     template <typename F> HashSet<Key>& operator=(const std::unordered_set<F>& other)
     {
         assign(*this, other);

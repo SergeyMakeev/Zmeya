@@ -7,7 +7,7 @@ split across `ZmeyaSerializeApi*.inc` fragments included below.
 
 **Include order (read / debug)**
 
-1. `ZmeyaSerializeApiAssignDetail.inc` -- `assign_pointer`, `assign_string_std` / `assign_string_cstr`, `deep_copy_into_offset`
+1. `ZmeyaSerializeApiAssignDetail.inc` -- `require_tls_builder`, `assign_pointer`, `assign_string_std` / `assign_string_cstr`, `deep_copy_into_offset`
 2. `ZmeyaBuilderHashChainNodesGrow.inc` -- hash chain node slab growth (`hash_chain_nodes_array_grow_*`)
 3. `ZmeyaSerializeApiAssign.inc` -- `assign` overloads into `zm::` fields
 4. `ZmeyaSerializeApiIncremental.inc` -- free `hashmap_insert`, `array_push_back`, etc.
