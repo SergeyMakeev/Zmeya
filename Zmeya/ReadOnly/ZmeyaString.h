@@ -17,6 +17,8 @@ During `write_scope` / `BlobWriter`, do not keep a `const char*` from `c_str()` 
 `operator+=` / `clear` on the same `String`. Use `w.root()->...` each time. After finalize, a `const`
 view over the returned blob is stable for that buffer.
 
+For external bytes, prefer `validate_string_in_blob` and `try_c_str_in_blob` (declared with blob validation) before using `c_str()`.
+
 */
 
 class String

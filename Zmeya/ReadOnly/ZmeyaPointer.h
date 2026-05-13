@@ -24,14 +24,6 @@ template <typename T> class Pointer
   private:
     bool isEqual(const Pointer& other) const noexcept { return get() == other.get(); }
 
-    ZMEYA_NODISCARD T* getUnsafe() const noexcept
-    {
-        uintptr_t self = uintptr_t(this);
-        ZMEYA_ASSERT(relativeOffset != 0);
-        uintptr_t addr = toAbsoluteAddr(self, relativeOffset);
-        return reinterpret_cast<T*>(addr);
-    }
-
   public:
     Pointer() noexcept = default;
 
@@ -42,7 +34,12 @@ template <typename T> class Pointer
         {
             return nullptr;
         }
-        uintptr_t addr = toAbsoluteAddr(self, relativeOffset);
+        uintptr_t addr = 0;
+        if (!detail::self_rel_target_address(self, relativeOffset, &addr))
+        {
+            ZMEYA_HARD_ASSERT(false && "self-relative pointer offset overflow");
+            return nullptr;
+        }
         return reinterpret_cast<T*>(addr);
     }
 
@@ -59,7 +56,11 @@ template <typename T> class Pointer
         {
             return nullptr;
         }
-        const uintptr_t addr = toAbsoluteAddr(self, relativeOffset);
+        uintptr_t addr = 0;
+        if (!detail::self_rel_target_address(self, relativeOffset, &addr))
+        {
+            return nullptr;
+        }
         if (addr < b || addr + sizeof(T) > e)
         {
             return nullptr;
@@ -71,9 +72,17 @@ template <typename T> class Pointer
         return reinterpret_cast<T*>(addr);
     }
 
-    ZMEYA_NODISCARD T* operator->() const noexcept { return getUnsafe(); }
+    ZMEYA_NODISCARD T* operator->() const noexcept
+    {
+        ZMEYA_ASSERT(relativeOffset != 0);
+        return get();
+    }
 
-    ZMEYA_NODISCARD T& operator*() const noexcept { return *(getUnsafe()); }
+    ZMEYA_NODISCARD T& operator*() const noexcept
+    {
+        ZMEYA_ASSERT(relativeOffset != 0);
+        return *get();
+    }
 
     ZMEYA_NODISCARD bool operator==(const Pointer& other) const noexcept { return isEqual(other); }
     ZMEYA_NODISCARD bool operator!=(const Pointer& other) const noexcept { return !isEqual(other); }

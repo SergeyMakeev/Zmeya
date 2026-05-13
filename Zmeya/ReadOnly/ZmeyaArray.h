@@ -44,6 +44,7 @@ template <typename T> class Array
 
     ZMEYA_NODISCARD const T& operator[](const size_t index) const noexcept
     {
+        ZMEYA_ASSERT(index < size());
         const T* data = getConstData();
         return data[index];
     }

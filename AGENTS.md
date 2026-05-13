@@ -124,7 +124,7 @@ Internally, the blob buffer uses `std::vector<char>` and can **reallocate** when
 
 Tests that must force reallocations use **`zmeya_test::write_scope_stressed`** in **`TestHelper.h`**, which forwards to **`zm::detail::write_scope_with_initial_buffer_bytes`** with a caller-chosen starting **`reserve`**. That path is for tests only, not application code.
 
-**`get_relative_offset`** rejects pointers that **`is_stack_pointer`** classifies as stack addresses on **Windows** only; on Linux and macOS **`is_stack_pointer`** always returns false (no portable stack-range hook is wired there yet), so do not assume cross-platform parity for that guard.
+**`get_relative_offset`** rejects pointers that **`is_stack_pointer`** classifies as stack addresses (**Windows**: `GetCurrentThreadStackLimits`; **macOS**: `pthread_get_stackaddr_np` / `pthread_get_stacksize_np`; **Linux glibc**: `pthread_getattr_np` when **`_GNU_SOURCE`** is in effect, which the **`Zmeya`** CMake target defines on Linux). Other environments may still return false here, so treat the guard as best-effort outside those paths.
 
 The builder records self-relative **slot** targets in an **`std::unordered_map<goffset_t, goffset_t>`**; **`finalize`** pads to alignment then **patches** every registered word. **`assign` from empty** STL containers or empty strings **clears** the destination **`zm::`** field when it was previously non-empty.
 
@@ -138,3 +138,7 @@ The builder records self-relative **slot** targets in an **`std::unordered_map<g
 |------|---------|
 | `README.md` | Library overview and usage |
 | `NEXT_STEPS.md` | **`write_scope`**, TLS, reallocation, incremental APIs, registry / finalize |
+
+**Blob validation:** composite `TRoot` structs are only shallow-checked unless you specialize **`zm::blob_root_deep_validate<TRoot>`** (`enabled = true` and `validate` calling **`BlobLayoutValidator::field_dispatch`** on each field) or use a direct **`zm::`** container as the root. Use **`validate_blob_view_strict` / `as_root_blob_strict`** when you want a compile-time guard that deep validation exists. **`try_c_str_in_blob`** and **`zm::detail::self_rel_target_address`** support bounded string reads and checked self-relative math.
+
+**Sanitizers:** configure with **`cmake -DZMEYA_ENABLE_ASAN=ON`** (non-MSVC) to build **`ZmeyaTest`** with AddressSanitizer.

@@ -14,6 +14,8 @@ namespace zm
 Call `validate_blob_view` (or `as_root_blob`) before treating external bytes as `TRoot*`. The read-side
 `zm::` views stay unchecked for performance once you accept the span.
 
+Composite struct roots need either `blob_root_deep_validate<TRoot>` (see below) or `validate_blob_view_strict` / `as_root_blob_strict` after you opt in with a specialization.
+
 `schema_id` is reserved for application-specific versioning; the default validator ignores it.
 
 */
@@ -75,7 +77,11 @@ struct BlobLayoutValidator
         {
             return true;
         }
-        const uintptr_t addr = toAbsoluteAddr(slot, p.relativeOffset);
+        uintptr_t addr = 0;
+        if (!detail::self_rel_target_address(slot, p.relativeOffset, &addr))
+        {
+            return false;
+        }
         if (addr < b || addr + sizeof(T) > e)
         {
             return false;
@@ -101,7 +107,11 @@ struct BlobLayoutValidator
         {
             return true;
         }
-        const uintptr_t addr = toAbsoluteAddr(slot, p.relativeOffset);
+        uintptr_t addr = 0;
+        if (!detail::self_rel_target_address(slot, p.relativeOffset, &addr))
+        {
+            return false;
+        }
         if (addr < b || addr >= e)
         {
             return false;
@@ -153,7 +163,11 @@ struct BlobLayoutValidator
         {
             return false;
         }
-        const uintptr_t dataAddr = toAbsoluteAddr(th, ro);
+        uintptr_t dataAddr = 0;
+        if (!detail::self_rel_target_address(th, ro, &dataAddr))
+        {
+            return false;
+        }
         if (dataAddr < b || (dataAddr % alignof(T)) != 0)
         {
             return false;
@@ -432,6 +446,28 @@ struct BlobLayoutValidator
     }
 };
 
+/*
+
+**Composite `TRoot` deep validation (opt-in)**
+
+`validate_blob_view` only walks nested `zm::` fields when `TRoot` itself is a direct container type.
+For struct roots, specialize `blob_root_deep_validate<TRoot>` with `enabled = true` and implement
+`validate(...)` using `BlobLayoutValidator::field_dispatch` on each embedded field. Untrusted blobs
+with composite roots should use that hook or `validate_blob_view_strict`, which refuses to compile
+unless deep validation is wired or the root is a direct container.
+
+*/
+
+template <typename TRoot, typename = void> struct blob_root_deep_validate
+{
+    static constexpr bool enabled = false;
+    static bool validate(const std::byte* /*blob_begin*/, size_t /*blob_size*/, const TRoot& /*root*/) noexcept { return true; }
+};
+
+template <typename TRoot>
+inline constexpr bool zm_blob_root_validation_complete_v = BlobLayoutValidator::is_direct_zm_container_v<std::remove_cv_t<TRoot>>
+    || blob_root_deep_validate<TRoot>::enabled;
+
 template <typename TRoot>
 ZMEYA_NODISCARD inline BlobViewError validate_blob_view(const std::byte* bytes, size_t byte_count, uint32_t schema_id = 0) noexcept
 {
@@ -459,8 +495,23 @@ ZMEYA_NODISCARD inline BlobViewError validate_blob_view(const std::byte* bytes, 
         {
             return BlobViewError::SpanTooSmall;
         }
+        if constexpr (blob_root_deep_validate<TRoot>::enabled)
+        {
+            if (!blob_root_deep_validate<TRoot>::validate(bytes, byte_count, root))
+            {
+                return BlobViewError::BadNested;
+            }
+        }
     }
     return BlobViewError::Ok;
+}
+
+template <typename TRoot>
+ZMEYA_NODISCARD inline BlobViewError validate_blob_view_strict(const std::byte* bytes, size_t byte_count, uint32_t schema_id = 0) noexcept
+{
+    static_assert(zm_blob_root_validation_complete_v<TRoot>,
+        "validate_blob_view_strict: specialize zm::blob_root_deep_validate<TRoot> (enabled=true and validate()) for composite roots, or use a direct zm container as TRoot");
+    return validate_blob_view<TRoot>(bytes, byte_count, schema_id);
 }
 
 template <typename TRoot>
@@ -500,6 +551,25 @@ template <typename T>
 ZMEYA_NODISCARD inline BlobViewError validate_pointer_in_blob(const std::byte* blob_begin, size_t blob_size, const Pointer<T>& p) noexcept
 {
     return BlobLayoutValidator::pointer(blob_begin, blob_size, p) ? BlobViewError::Ok : BlobViewError::BadNested;
+}
+
+ZMEYA_NODISCARD inline const char* try_c_str_in_blob(const String& s, const std::byte* blob_begin, size_t blob_size) noexcept
+{
+    if (!BlobLayoutValidator::string(blob_begin, blob_size, s))
+    {
+        return nullptr;
+    }
+    return s.c_str();
+}
+
+template <typename TRoot>
+ZMEYA_NODISCARD inline const TRoot* as_root_blob_strict(const std::byte* bytes, size_t byte_count, uint32_t schema_id = 0) noexcept
+{
+    if (validate_blob_view_strict<TRoot>(bytes, byte_count, schema_id) != BlobViewError::Ok)
+    {
+        return nullptr;
+    }
+    return reinterpret_cast<const TRoot*>(bytes);
 }
 
 } // namespace zm

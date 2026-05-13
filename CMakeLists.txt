@@ -7,6 +7,7 @@ set (CMAKE_CXX_STANDARD 17)
 add_definitions(-DZMEYA_ENABLE_SERIALIZE_SUPPORT)
 
 option(ZMEYA_BUILD_BENCHMARKS "Build ZmeyaBench (Google Benchmark via FetchContent at configure time)" OFF)
+option(ZMEYA_ENABLE_ASAN "Build ZmeyaTest with AddressSanitizer (Clang/GCC; not MSVC)" OFF)
 
 set(ZMEYA_SOURCES 
   TestHelper.h
@@ -48,6 +49,11 @@ if(MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(${PROJ_NAME} PRIVATE -Wall -Wextra -pedantic -Werror)
+endif()
+
+if(ZMEYA_ENABLE_ASAN AND NOT MSVC)
+  target_compile_options(${PROJ_NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+  target_link_options(${PROJ_NAME} PRIVATE -fsanitize=address)
 endif()
 
 # force shared crt

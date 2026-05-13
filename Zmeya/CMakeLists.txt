@@ -45,3 +45,10 @@ target_include_directories(Zmeya INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/Serialize"
     )
 target_compile_features(Zmeya INTERFACE cxx_std_17)
+
+find_package(Threads REQUIRED)
+target_link_libraries(Zmeya INTERFACE Threads::Threads)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_compile_definitions(Zmeya INTERFACE _GNU_SOURCE)
+endif()

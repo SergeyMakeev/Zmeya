@@ -7,6 +7,10 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <pthread.h>
+#elif defined(__linux__) && defined(__GLIBC__)
+#include <pthread.h>
 #endif
 
 namespace zm
@@ -161,8 +165,10 @@ inline void set_global_builder(BuilderBase* builder) noexcept { g_tls_active_bui
 **Stack pointer guard**
 
 `get_relative_offset` refuses stack addresses because their absolute location is not stable relative to
-the arena. On non-Windows platforms this check is conservatively disabled (always returns false): there
-is no small, portable stack-range query wired here yet.
+the arena. Windows uses `GetCurrentThreadStackLimits`. macOS uses `pthread_get_stackaddr_np` /
+`pthread_get_stacksize_np`. Linux with glibc uses `pthread_getattr_np` / `pthread_attr_getstack` when
+`__GLIBC__` is defined (the `Zmeya` CMake target defines `_GNU_SOURCE` on Linux so the declaration is
+visible). Other platforms still return false here (no stack match), matching the historical fallback.
 
 */
 
@@ -175,6 +181,27 @@ inline bool is_stack_pointer(const void* ptr)
 
     auto p = reinterpret_cast<uintptr_t>(ptr);
     return p >= reinterpret_cast<uintptr_t>(stack_low) && p < reinterpret_cast<uintptr_t>(stack_high);
+#elif defined(__APPLE__)
+    void* stackaddr = pthread_get_stackaddr_np(pthread_self());
+    const size_t stacksize = pthread_get_stacksize_np(pthread_self());
+    const uintptr_t stack_high = reinterpret_cast<uintptr_t>(stackaddr);
+    const uintptr_t stack_low = (stack_high >= stacksize) ? (stack_high - stacksize) : uintptr_t(0);
+    const uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+    return p >= stack_low && p < stack_high;
+#elif defined(__linux__) && defined(__GLIBC__)
+    pthread_attr_t attr{};
+    if (pthread_getattr_np(pthread_self(), &attr) != 0)
+    {
+        return false;
+    }
+    void* stackaddr = nullptr;
+    size_t stacksize = 0;
+    pthread_attr_getstack(&attr, &stackaddr, &stacksize);
+    pthread_attr_destroy(&attr);
+    const uintptr_t stack_low = reinterpret_cast<uintptr_t>(stackaddr);
+    const uintptr_t stack_high = stack_low + stacksize;
+    const uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+    return p >= stack_low && p < stack_high;
 #else
     (void)ptr;
     return false;
