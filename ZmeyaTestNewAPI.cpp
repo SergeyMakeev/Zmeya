@@ -60,6 +60,19 @@ struct TestRoot
     zm::Array<zm::Array<zm::String>> nestedArray;
 };
 
+struct ArenaRefStressNode
+{
+    int32_t u = 0;
+    int32_t v = 0;
+};
+
+struct ArenaRefStressRoot
+{
+    zm::String churn;
+    zm::Pointer<ArenaRefStressNode> left;
+    zm::Pointer<ArenaRefStressNode> right;
+};
+
 // Verifies operator= from STL strings, vectors, map, and set into a root blob round-trip on read.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
 {
@@ -295,6 +308,87 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_ForcedReallocGoldenMatchesDefaultArena)
         4);
 
     ExpectTestRootLogicalEqual(golden, stressed);
+}
+
+// One captured ArenaRef<TestRoot> must stay valid across many arena reallocations (same logical blob as golden).
+TEST(ZmeyaTestSuite, NewBuilderAPI_CachedRootArenaRefSurvivesStressedReallocMatchesGolden)
+{
+    constexpr size_t kTinyArenaBytes = 32;
+
+    zm::BlobBuffer golden = zm::write_scope<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
+        {
+            FillBasicTestRoot(w.root());
+        });
+
+    zm::BlobBuffer stressed = zmeya_test::write_scope_stressed<TestRoot>(
+        [](zm::BlobWriter<TestRoot>& w)
+        {
+            const zm::ArenaRef<TestRoot> root = w.root();
+            FillBasicTestRoot(root);
+        },
+        kTinyArenaBytes,
+        4);
+
+    ExpectTestRootLogicalEqual(golden, stressed);
+}
+
+// Cached ArenaRef from allocate() plus root ref: interleaved string growth forces realloc; refs must keep resolving.
+TEST(ZmeyaTestSuite, NewBuilderAPI_CachedAllocateArenaRefsSurviveInterleavedArenaGrowth)
+{
+    constexpr size_t kTinyArenaBytes = 16;
+
+    zm::BlobBuffer blob = zmeya_test::write_scope_stressed<ArenaRefStressRoot>(
+        [](zm::BlobWriter<ArenaRefStressRoot>& w)
+        {
+            zm::ArenaRef<ArenaRefStressRoot> root = w.root();
+            zm::ArenaRef<ArenaRefStressNode> L = w.allocate<ArenaRefStressNode>();
+            zm::ArenaRef<ArenaRefStressNode> R = w.allocate<ArenaRefStressNode>();
+            L->u = 111;
+            L->v = 222;
+            R->u = 333;
+            R->v = 444;
+
+            for (int i = 0; i < 500; ++i)
+            {
+                root->churn += "Z";
+            }
+
+            EXPECT_EQ(L->u, 111);
+            EXPECT_EQ(R->v, 444);
+            L->v = 999;
+            R->u = 1000;
+
+            for (int i = 0; i < 300; ++i)
+            {
+                root->churn += "yy";
+            }
+
+            EXPECT_EQ(L->v, 999);
+            EXPECT_EQ(R->u, 1000);
+
+            root->left = L.transient_ptr();
+            root->right = R.transient_ptr();
+
+            for (int i = 0; i < 200; ++i)
+            {
+                root->churn += "pad";
+            }
+
+            EXPECT_EQ(L->u, 111);
+            EXPECT_EQ(R->v, 444);
+        },
+        kTinyArenaBytes,
+        4);
+
+    const ArenaRefStressRoot* rr = reinterpret_cast<const ArenaRefStressRoot*>(blob.data());
+    ASSERT_NE(rr->left.get(), nullptr);
+    ASSERT_NE(rr->right.get(), nullptr);
+    EXPECT_EQ(rr->left->u, 111);
+    EXPECT_EQ(rr->left->v, 999);
+    EXPECT_EQ(rr->right->u, 1000);
+    EXPECT_EQ(rr->right->v, 444);
+    EXPECT_GT(std::strlen(rr->churn.c_str()), 1500u);
 }
 
 // Verifies BlobWriter exposes a live builder_base and that the root pointer lies inside the builder arena.
