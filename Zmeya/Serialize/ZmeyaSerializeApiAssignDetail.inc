@@ -4,7 +4,14 @@ namespace detail
 inline BuilderBase& require_tls_builder() noexcept
 {
     BuilderBase* b = get_global_builder();
-    ZMEYA_ASSERT(b != nullptr);
+    ZMEYA_ASSERT(b != nullptr
+                 && "Zmeya: no active write_scope on this thread (TLS builder is null). Default zm::assign / member mutators "
+                    "require zm::write_scope or a nested detail::ScopedBuilder on this thread.");
+#if defined(_DEBUG) || defined(ZMEYA_DEBUG_TLS_BUILDER_THREAD)
+    ZMEYA_ASSERT(g_tls_active_builder_thread_id == std::this_thread::get_id()
+                 && "Zmeya: TLS builder was installed on a different thread id than the current thread (memory corruption or "
+                    "unsupported TLS misuse).");
+#endif
     return *b;
 }
 

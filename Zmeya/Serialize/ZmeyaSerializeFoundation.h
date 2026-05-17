@@ -2,6 +2,7 @@
 
 #include "ZmeyaHashMap.h"
 #include <limits>
+#include <thread>
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -152,6 +153,20 @@ inline constexpr size_t kDefaultWriteBlobArenaReserveBytes = size_t(64) * 1024;
 
 inline thread_local BuilderBase* g_tls_active_builder = nullptr;
 
+/*
+
+**TLS builder installer thread**
+
+`ScopedBuilder` records which `std::thread::id` installed the current non-null `g_tls_active_builder`.
+`require_tls_builder` can then hard-assert that TLS mutators / default `assign` run on that same thread,
+catching accidental cross-thread use (still distinct from "no active scope", which is null TLS).
+
+Define **`ZMEYA_DEBUG_TLS_BUILDER_THREAD`** to enable the installer-thread assert in **`require_tls_builder`** in non-Debug builds (small per-call cost).
+
+*/
+
+inline thread_local std::thread::id g_tls_active_builder_thread_id{};
+
 #if defined(_DEBUG) || defined(ZMEYA_DEBUG_TLS_BUILDER_STACK)
 inline thread_local int g_tls_builder_stack_depth = 0;
 #endif
@@ -219,11 +234,16 @@ class ScopedBuilder
 #endif
         prev = get_global_builder();
         set_global_builder(builder);
+        g_tls_active_builder_thread_id = std::this_thread::get_id();
     }
 
     ~ScopedBuilder()
     {
         set_global_builder(prev);
+        if (prev == nullptr)
+        {
+            g_tls_active_builder_thread_id = std::thread::id{};
+        }
 #if defined(_DEBUG) || defined(ZMEYA_DEBUG_TLS_BUILDER_STACK)
         --g_tls_builder_stack_depth;
 #endif
