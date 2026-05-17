@@ -149,33 +149,33 @@ static void createChildren(zm::BlobWriter<MMapTestRoot>& w, MMapTestNode* parent
     childPtrs.reserve(count);
     for (size_t i = 0; i < count; i++)
     {
-        MMapTestLeafNode* leaf = w.allocate<MMapTestLeafNode>();
+        zm::ArenaRef<MMapTestLeafNode> leaf = w.allocate<MMapTestLeafNode>();
         leaf->nodeType = NodeType::Leaf;
         leaf->name = std::string("leaf_") + std::to_string(startIndex + i);
         leaf->payload = uint32_t(count + startIndex * 13);
         leaf->parent = parent;
-        childPtrs.push_back(leaf);
+        childPtrs.push_back(leaf.transient_ptr());
     }
     parent->children = childPtrs;
 }
 
-static MMapTestNode* allocateNode1(zm::BlobWriter<MMapTestRoot>& w, MMapTestRoot* root, size_t index)
+static MMapTestNode* allocateNode1(zm::BlobWriter<MMapTestRoot>& w, const zm::ArenaRef<MMapTestRoot>& root_ref, size_t index)
 {
-    MMapTestNode1* node = w.allocate<MMapTestNode1>();
+    zm::ArenaRef<MMapTestNode1> node = w.allocate<MMapTestNode1>();
     node->nodeType = NodeType::NodeType1;
     node->name = std::string("node_") + std::to_string(index);
     node->str1 = std::string(kLongDesc);
     node->idx = uint32_t(index);
-    node->root = root;
+    node->root = root_ref.transient_ptr();
 
     size_t numChildrenNodes = 1 + (index % 6);
-    createChildren(w, node, numChildrenNodes, index);
-    return node;
+    createChildren(w, node.transient_ptr(), numChildrenNodes, index);
+    return node.transient_ptr();
 }
 
 static MMapTestNode* allocateNode2(zm::BlobWriter<MMapTestRoot>& w, size_t index)
 {
-    MMapTestNode2* node = w.allocate<MMapTestNode2>();
+    zm::ArenaRef<MMapTestNode2> node = w.allocate<MMapTestNode2>();
     node->nodeType = NodeType::NodeType2;
     node->name = std::string("item_") + std::to_string(index);
     node->str1 = std::string(kLongDesc);
@@ -184,8 +184,8 @@ static MMapTestNode* allocateNode2(zm::BlobWriter<MMapTestRoot>& w, size_t index
     node->hashSet = hs;
 
     size_t numChildrenNodes = 2;
-    createChildren(w, node, numChildrenNodes, index);
-    return node;
+    createChildren(w, node.transient_ptr(), numChildrenNodes, index);
+    return node.transient_ptr();
 }
 
 static void generateTestFile(const char* fileName)
@@ -194,7 +194,7 @@ static void generateTestFile(const char* fileName)
     zm::BlobBuffer bytes = zmeya_test::write_scope_stressed<MMapTestRoot>(
         [](zm::BlobWriter<MMapTestRoot>& w)
         {
-            MMapTestRoot* root = w.root();
+            zm::ArenaRef<MMapTestRoot> root = w.root();
             root->magic = 0x59454D5A;
             root->desc = std::string(kLongDesc);
 
@@ -218,7 +218,7 @@ static void generateTestFile(const char* fileName)
             }
             root->roots = rootNodes;
 
-            validate(root);
+            validate(root.transient_ptr());
         },
         kStartArenaBytes,
         32);

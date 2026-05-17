@@ -29,7 +29,7 @@ TEST(ZmeyaTestSuite, SimpleTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<SimpleTestRoot>(
         [](zm::BlobWriter<SimpleTestRoot>& w)
         {
-            SimpleTestRoot* root = w.root();
+            zm::ArenaRef<SimpleTestRoot> root = w.root();
             root->a = 13.0f;
             root->b = 1979;
             root->c = 6;
@@ -39,7 +39,7 @@ TEST(ZmeyaTestSuite, SimpleTest)
                 root->arr[i] = uint32_t(i + 3);
             }
 
-            validate(root);
+            validate(root.transient_ptr());
         });
 
     const SimpleTestRoot* rootCopy = (const SimpleTestRoot*)(bytesCopy.data());
@@ -85,7 +85,7 @@ TEST(ZmeyaTestSuite, SimpleTest2)
     zm::BlobBuffer blob = zm::write_scope<TestRoot>(
         [&](zm::BlobWriter<TestRoot>& w)
         {
-            TestRoot* root = w.root();
+            zm::ArenaRef<TestRoot> root = w.root();
             std::vector<TempDesc> tempDescs;
             tempDescs.reserve(names.size());
 

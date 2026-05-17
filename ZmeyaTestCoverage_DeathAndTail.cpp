@@ -50,10 +50,10 @@ TEST(ZmeyaTestSuite, Coverage_P11_SingleRootAllMajorKinds)
             w.hashmap_insert(w.root()->hm, std::string("k"), 3);
             std::vector<std::vector<int32_t>> g = {{1, 2}, {3}};
             w.root()->grid = g;
-            CovPointerChainNode* n = w.allocate<CovPointerChainNode>();
+            zm::ArenaRef<CovPointerChainNode> n = w.allocate<CovPointerChainNode>();
             n->id = 99;
             n->next = nullptr;
-            w.root()->node = n;
+            w.root()->node = n.transient_ptr();
         }, 512, 8);
 
     const CovAllKindsRoot* rr = reinterpret_cast<const CovAllKindsRoot*>(blob.data());

@@ -56,7 +56,7 @@ TEST(ZmeyaTestSuite, IteratorsTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<IteratorsTestRoot>(
         [](zm::BlobWriter<IteratorsTestRoot>& w)
         {
-            IteratorsTestRoot* root = w.root();
+            zm::ArenaRef<IteratorsTestRoot> root = w.root();
 
             std::vector<int> arr_data = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
             root->arr = arr_data;
@@ -67,7 +67,7 @@ TEST(ZmeyaTestSuite, IteratorsTest)
             std::unordered_map<int, int> map_data = {{0, 1}, {3, 2}, {4, 5}};
             root->map = map_data;
 
-            validate(root);
+            validate(root.transient_ptr());
         });
 
     const IteratorsTestRoot* rootCopy = (const IteratorsTestRoot*)(bytesCopy.data());

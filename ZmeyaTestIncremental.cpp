@@ -287,7 +287,7 @@ TEST(ZmeyaTestSuite, Compaction_FinalizeShrinksWorkingBufferAfterStringReplaceme
 {
     auto builder = zm::detail::Builder<IncrementalStringRoot>::create();
     zm::detail::ScopedBuilder scope(builder.get());
-    IncrementalStringRoot* root = builder->getRoot();
+    zm::ArenaRef<IncrementalStringRoot> root = builder->getRoot();
     size_t peak = 0;
     const int kRounds = 120;
     for (int i = 0; i < kRounds; ++i)

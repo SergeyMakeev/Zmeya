@@ -100,7 +100,7 @@ TEST(ZmeyaTestSuite, ArrayTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<ArrayTestRoot>(
         [](zm::BlobWriter<ArrayTestRoot>& w)
         {
-            ArrayTestRoot* root = w.root();
+            zm::ArenaRef<ArrayTestRoot> root = w.root();
 
             std::vector<Payload> vec = {{1.3f, 13}, {2.7f, 27}};
             root->arr1 = vec;
@@ -122,17 +122,17 @@ TEST(ZmeyaTestSuite, ArrayTest)
             vec5.reserve(793);
             for (size_t i = 0; i < 793; i++)
             {
-                Payload* payload = w.allocate<Payload>();
+                zm::ArenaRef<Payload> payload = w.allocate<Payload>();
                 payload->a = 1.3f + float(i) * 0.4f;
                 payload->b = uint32_t(i) + 3;
-                vec5.push_back(payload);
+                vec5.push_back(payload.transient_ptr());
             }
             root->arr5 = vec5;
 
             std::vector<std::vector<uint32_t>> vec6 = {{1, 2}, {2, 7, 11, 9, 141}, {15, 9, 33, 7}};
             root->arr6 = vec6;
 
-            validate(root);
+            validate(root.transient_ptr());
         },
         32 * 1024 * 1024);
 

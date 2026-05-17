@@ -127,10 +127,10 @@ TEST(ZmeyaTestSuite, Coverage_P3_ArrayOfPointersAssign)
             std::vector<CovPointerChainNode*> ptrs;
             for (int i = 0; i < 5; ++i)
             {
-                CovPointerChainNode* n = w.allocate<CovPointerChainNode>();
+                zm::ArenaRef<CovPointerChainNode> n = w.allocate<CovPointerChainNode>();
                 n->id = i * 10;
                 n->next = nullptr;
-                ptrs.push_back(n);
+                ptrs.push_back(n.transient_ptr());
             }
             w.root()->nodes = ptrs;
         }, 256, 4);
@@ -229,8 +229,8 @@ TEST(ZmeyaTestSuite, Coverage_P4_PointerChainThousandNodes)
             zm::goffset_t g[kN];
             for (int i = 0; i < kN; ++i)
             {
-                CovPointerChainNode* p = w.allocate<CovPointerChainNode>();
-                g[i] = bb->arena_byte_offset_of(p);
+                zm::ArenaRef<CovPointerChainNode> p = w.allocate<CovPointerChainNode>();
+                g[i] = bb->arena_byte_offset_of(p.transient_ptr());
                 p->id = i;
                 p->next = nullptr;
             }
@@ -261,18 +261,18 @@ TEST(ZmeyaTestSuite, Coverage_P4_TreeWithParentPointers)
     zm::BlobBuffer blob = zm::write_scope<CovTreeRoot>(
         [](zm::BlobWriter<CovTreeRoot>& w)
         {
-            CovTreeNode* root = w.allocate<CovTreeNode>();
+            zm::ArenaRef<CovTreeNode> root = w.allocate<CovTreeNode>();
             root->value = 1;
             root->parent = nullptr;
-            CovTreeNode* left = w.allocate<CovTreeNode>();
+            zm::ArenaRef<CovTreeNode> left = w.allocate<CovTreeNode>();
             left->value = 2;
-            left->parent = root;
-            CovTreeNode* right = w.allocate<CovTreeNode>();
+            left->parent = root.transient_ptr();
+            zm::ArenaRef<CovTreeNode> right = w.allocate<CovTreeNode>();
             right->value = 3;
-            right->parent = root;
-            std::vector<CovTreeNode*> ch = {left, right};
+            right->parent = root.transient_ptr();
+            std::vector<CovTreeNode*> ch = {left.transient_ptr(), right.transient_ptr()};
             root->children = ch;
-            w.root()->root = root;
+            w.root()->root = root.transient_ptr();
         },
         8);
 
@@ -292,13 +292,13 @@ TEST(ZmeyaTestSuite, Coverage_P4_AllocatePointerAlignment)
     zm::BlobBuffer blob = zmeya_test::write_scope_stressed<CovAllocAlignRoot>(
         [](zm::BlobWriter<CovAllocAlignRoot>& w)
         {
-            double* pd = w.allocate<double>();
+            zm::ArenaRef<double> pd = w.allocate<double>();
             *pd = 3.25;
-            CovAlignedPayload* pp = w.allocate<CovAlignedPayload>();
+            zm::ArenaRef<CovAlignedPayload> pp = w.allocate<CovAlignedPayload>();
             pp->a = 1;
             pp->b = 2;
-            w.root()->pd = pd;
-            w.root()->pp = pp;
+            w.root()->pd = pd.transient_ptr();
+            w.root()->pp = pp.transient_ptr();
         }, 64, 8);
 
     const CovAllocAlignRoot* r = reinterpret_cast<const CovAllocAlignRoot*>(blob.data());

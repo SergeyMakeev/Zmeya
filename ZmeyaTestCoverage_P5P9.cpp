@@ -200,7 +200,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ListChainSmokeTenNodes)
             zm::goffset_t prev_g{};
             for (uint32_t i = 0; i < kN; ++i)
             {
-                Node* node = w.allocate<Node>();
+                zm::ArenaRef<Node> node = w.allocate<Node>();
                 node->payload = 100 + i;
                 node->prev = nullptr;
                 node->next = nullptr;
@@ -208,13 +208,13 @@ TEST(ZmeyaTestSuite, Coverage_P7_ListChainSmokeTenNodes)
                 {
                     Node* prev = reinterpret_cast<Node*>(bb->get_ptr_unsafe_to_store(prev_g));
                     node->prev = prev;
-                    prev->next = node;
+                    prev->next = node.transient_ptr();
                 }
                 else
                 {
-                    w.root()->head = node;
+                    w.root()->head = node.transient_ptr();
                 }
-                prev_g = bb->arena_byte_offset_of(node);
+                prev_g = bb->arena_byte_offset_of(node.transient_ptr());
             }
         },
         8);

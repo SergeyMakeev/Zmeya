@@ -43,9 +43,9 @@ TEST(ZmeyaTestSuite, StringTest_Debug)
 {
     zm::write_scope<StringTestRoot>([](zm::BlobWriter<StringTestRoot>& w)
                               {
-                                  StringTestRoot* root = w.root();
+                                  zm::ArenaRef<StringTestRoot> root = w.root();
 
-                                  EXPECT_TRUE(w.contains_pointer(root));
+                                  EXPECT_TRUE(w.contains_pointer(root.transient_ptr()));
                                   EXPECT_TRUE(w.contains_pointer(&root->strArr1));
 
                                   root->str1 = "test";
@@ -60,7 +60,7 @@ TEST(ZmeyaTestSuite, StringTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<StringTestRoot>(
         [](zm::BlobWriter<StringTestRoot>& w)
         {
-            StringTestRoot* root = w.root();
+            zm::ArenaRef<StringTestRoot> root = w.root();
 
             root->str1 = "Hello World - This is a very long test string. Expected 1000000 instances";
 
@@ -87,7 +87,7 @@ TEST(ZmeyaTestSuite, StringTest)
             std::vector<std::string> arr4(numStrings, "Hello World - This is a very long test string. Expected 1000000 instances");
             root->strArr4 = arr4;
 
-            validate(root);
+            validate(root.transient_ptr());
         },
         1024 * 1024);
 

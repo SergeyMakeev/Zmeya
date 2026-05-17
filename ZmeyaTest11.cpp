@@ -96,7 +96,7 @@ TEST(ZmeyaTestSuite, ReferToTest)
     zm::BlobBuffer bytesCopy = zmeya_test::write_scope_stressed<ReferToTestRoot>(
         [](zm::BlobWriter<ReferToTestRoot>& w)
         {
-            ReferToTestRoot* root = w.root();
+            zm::ArenaRef<ReferToTestRoot> root = w.root();
 
             root->str = std::string("This is supposed to be a long enough string. I think it is long enough now.");
             root->arr = std::vector<int32_t>{1, 2, 5, 8, 13, 99, 7, 160, 293, 890};
@@ -120,7 +120,7 @@ TEST(ZmeyaTestSuite, ReferToTest)
 
             w.root()->nodes = nodeInits;
 
-            validate(w.root());
+            validate(root.transient_ptr());
         },
         128u * 1024u * 1024u,
         4);

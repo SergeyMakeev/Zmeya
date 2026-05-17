@@ -36,21 +36,21 @@ TEST(ZmeyaTestSuite, PointerTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<PointerTestRoot>(
         [](zm::BlobWriter<PointerTestRoot>& w)
         {
-            PointerTestRoot* root = w.root();
+            zm::ArenaRef<PointerTestRoot> root = w.root();
 
-            PointerTestNode* nodeLeft = w.allocate<PointerTestNode>();
-            PointerTestNode* nodeRight = w.allocate<PointerTestNode>();
+            zm::ArenaRef<PointerTestNode> nodeLeft = w.allocate<PointerTestNode>();
+            zm::ArenaRef<PointerTestNode> nodeRight = w.allocate<PointerTestNode>();
 
-            root->left = nodeLeft;
-            root->right = nodeRight;
+            root->left = nodeLeft.transient_ptr();
+            root->right = nodeRight.transient_ptr();
 
             nodeLeft->payload = -13;
-            nodeLeft->other = nodeRight;
+            nodeLeft->other = nodeRight.transient_ptr();
 
             nodeRight->payload = 13;
-            nodeRight->other = nodeLeft;
+            nodeRight->other = nodeLeft.transient_ptr();
 
-            validate(root);
+            validate(root.transient_ptr());
         },
         16);
 

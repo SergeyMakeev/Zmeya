@@ -88,7 +88,7 @@ TEST(ZmeyaTestSuite, HashMapTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<HashMapTestRoot>(
         [](zm::BlobWriter<HashMapTestRoot>& w)
         {
-            HashMapTestRoot* root = w.root();
+            zm::ArenaRef<HashMapTestRoot> root = w.root();
 
             std::unordered_map<int, float> testMap = {{3, 7.0f}, {4, 17.0f}, {9, 79.0f}, {11, 13.0f}, {77, 13.0f}};
             root->hashMap1 = testMap;
@@ -114,7 +114,7 @@ TEST(ZmeyaTestSuite, HashMapTest)
             std::unordered_map<std::string, std::string> strMap6 = {{"5", "five"}, {"7", "seven"}};
             root->strHashMap6 = strMap6;
 
-            validate(root);
+            validate(root.transient_ptr());
         });
 
     const HashMapTestRoot* rootCopy = (const HashMapTestRoot*)(bytesCopy.data());

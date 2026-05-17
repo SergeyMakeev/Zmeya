@@ -105,9 +105,9 @@ TEST(MemorySafety, ArrayTryAtBounds)
 TEST(MemorySafety, PointerTryGetInBlob)
 {
     zm::BlobBuffer blob = zm::write_scope<IntPtrRoot>([](zm::BlobWriter<IntPtrRoot>& w) {
-        int* slot = w.allocate<int>();
+        zm::ArenaRef<int> slot = w.allocate<int>();
         *slot = 12345;
-        zm::assign(w.root()->p, slot);
+        zm::assign(w.root()->p, slot.transient_ptr());
     });
     const IntPtrRoot* root = reinterpret_cast<const IntPtrRoot*>(blob.data());
     const std::byte* b = reinterpret_cast<const std::byte*>(blob.data());

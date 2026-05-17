@@ -71,7 +71,7 @@ TEST(ZmeyaTestSuite, HashSetTest)
     zm::BlobBuffer bytesCopy = zm::write_scope<HashSetTestRoot>(
         [](zm::BlobWriter<HashSetTestRoot>& w)
         {
-            HashSetTestRoot* root = w.root();
+            zm::ArenaRef<HashSetTestRoot> root = w.root();
 
             std::unordered_set<int> testSet1 = {5, 7, 3, 11, 99};
             root->set1 = testSet1;
@@ -85,7 +85,7 @@ TEST(ZmeyaTestSuite, HashSetTest)
             std::unordered_set<std::string> strSet2 = {"five", "six", "seven", "eight", "this-is-a-very-very-long-key-to-test-hasher"};
             root->strSet2 = strSet2;
 
-            validate(root);
+            validate(root.transient_ptr());
         });
 
     const HashSetTestRoot* rootCopy = (const HashSetTestRoot*)(bytesCopy.data());

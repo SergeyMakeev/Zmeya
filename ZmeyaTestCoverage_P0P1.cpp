@@ -314,7 +314,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_DeepCopyBuilderScopedNestedString)
     zm::BlobBuffer blob = zmeya_test::write_scope_stressed<CovDeepCopyRoot>(
         [](zm::BlobWriter<CovDeepCopyRoot>& w)
         {
-            CovDeepCopyRoot* root = w.root();
+            zm::ArenaRef<CovDeepCopyRoot> root = w.root();
             zm::goffset_t go = w.builder_base()->arena_byte_offset_of(&root->s);
             zm::deep_copy<std::string, zm::String>(*w.builder_base(), std::string("nested_value"), go);
         }, 256, 4);
@@ -334,8 +334,8 @@ TEST(ZmeyaTestSuite, Coverage_P0_AllocatePointerGraphManyNodes)
             zm::goffset_t g[kN];
             for (int i = 0; i < kN; ++i)
             {
-                CovPointerChainNode* p = w.allocate<CovPointerChainNode>();
-                g[i] = bb->arena_byte_offset_of(p);
+                zm::ArenaRef<CovPointerChainNode> p = w.allocate<CovPointerChainNode>();
+                g[i] = bb->arena_byte_offset_of(p.transient_ptr());
                 p->id = i;
                 p->next = nullptr;
             }
@@ -367,9 +367,9 @@ TEST(ZmeyaTestSuite, Coverage_P0_ContainsPointerBlobVsStack)
     zm::write_scope<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
-            CovStringRoot* r = w.root();
+            zm::ArenaRef<CovStringRoot> r = w.root();
             int stackVar = 0;
-            EXPECT_TRUE(w.contains_pointer(r));
+            EXPECT_TRUE(w.contains_pointer(r.transient_ptr()));
             EXPECT_FALSE(w.contains_pointer(&stackVar));
         });
 }

@@ -96,7 +96,7 @@ static void generateTestFile(const char* fileName)
     zm::BlobBuffer bytesCopy = zm::write_scope<SimpleFileTestRoot>(
         [&objectNames](zm::BlobWriter<SimpleFileTestRoot>& w)
         {
-            SimpleFileTestRoot* root = w.root();
+            zm::ArenaRef<SimpleFileTestRoot> root = w.root();
             root->magic = 0x59454D5A;
 
             std::vector<ObjectFlat> objs;
@@ -120,7 +120,7 @@ static void generateTestFile(const char* fileName)
         std::unordered_map<std::string, float> hm = {{"1", 1.0f}, {"2", 2.0f}, {"3", 3.0f}};
         root->hashMap = hm;
 
-            validate(root);
+            validate(root.transient_ptr());
         },
         32);
 

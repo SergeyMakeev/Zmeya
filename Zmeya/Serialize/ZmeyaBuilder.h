@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ZmeyaBuilderAssignImpl.h"
+#include "ZmeyaArenaRef.h"
 
 namespace zm
 {

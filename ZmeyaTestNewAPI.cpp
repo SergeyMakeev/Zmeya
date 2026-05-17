@@ -66,7 +66,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BasicTypes)
     zm::BlobBuffer blob = zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
-            TestRoot* root = w.root();
+            zm::ArenaRef<TestRoot> root = w.root();
             std::string srcDesc = "Test description";
             root->description = srcDesc;
 
@@ -113,7 +113,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
     zm::BlobBuffer blob = zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
-            TestRoot* root = w.root();
+            zm::ArenaRef<TestRoot> root = w.root();
             std::vector<std::vector<std::string>> srcNested = {{"a", "b", "c"}, {"x", "y"}, {"hello", "world", "nested", "test"}};
             root->nestedArray = srcNested;
         });
@@ -138,7 +138,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_NestedTypes)
     EXPECT_EQ(fileRoot->nestedArray[2][3], "test");
 }
 
-static void FillBasicTestRoot(TestRoot* root)
+static void FillBasicTestRoot(const zm::ArenaRef<TestRoot>& root)
 {
     root->description = "Test description";
 
@@ -247,7 +247,7 @@ static void ExpectTestRootLogicalEqual(const A& a, const B& b)
 TEST(ZmeyaTestSuite, NewBuilderAPI_ExplicitBuilderAssignOverload)
 {
     std::unique_ptr<zm::detail::Builder<TestRoot>> builder = zm::detail::Builder<TestRoot>::create();
-    TestRoot* root = builder->getRoot();
+    zm::ArenaRef<TestRoot> root = builder->getRoot();
 
     zm::assign(*builder, root->description, std::string("Test description"));
 
@@ -305,6 +305,6 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_BlobWriterBuilderBaseAccessor)
         {
             zm::detail::BuilderBase* bb = w.builder_base();
             EXPECT_NE(bb, nullptr);
-            EXPECT_TRUE(bb->contains_pointer(w.root()));
+            EXPECT_TRUE(bb->contains_pointer(w.root().transient_ptr()));
         });
 }

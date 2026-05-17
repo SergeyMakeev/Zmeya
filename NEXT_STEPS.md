@@ -18,7 +18,7 @@ The backing store is **`std::vector<char>`**, which can reallocate when it grows
 
 **Indices into the arena (`goffset_t`) stay valid across realloc**; self-relative **`roffset_t`** fields written correctly while both sides live in the arena remain coherent when the whole buffer moves together.
 
-**Raw pointers** returned by **`allocate()`**, **`root()`**, addresses of **`zm::*`** objects in the blob, or pointers returned by **`get()`** can become **stale** after a realloc if you cache them across operations that grow the buffer. Call **`writer.root()`** again after growth, resolve through **`writer.builder_base()`** using **`goffset_t`** plus **`get_ptr_unsafe_to_store`**, or otherwise avoid holding **`T*`** across allocator growth.
+**`zm::ArenaRef<T>`** from **`w.root()`** and **`w.allocate<T>()`** re-resolves through the live arena on each **`operator->` / `operator*`** use, so field access stays valid across realloc. Call **`transient_ptr()`** only when you need a raw **`T*`** for **`zm::Pointer`**, **`std::vector<T*>`**, **`contains_pointer`**, or C-style helpers; do not store that raw pointer across growth.
 
 Some unit tests call **`zmeya_test::write_scope_stressed`** (see **`TestHelper.h`**) with a tiny starting arena to force **`std::vector`** reallocations on purpose; it forwards to **`zm::detail::write_scope_with_initial_buffer_bytes`** and is not a supported public workflow for application code.
 

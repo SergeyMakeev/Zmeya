@@ -59,30 +59,30 @@ TEST(ZmeyaTestSuite, ListTest)
         [numNodes](zm::BlobWriter<ListTestRoot>& w)
         {
             zm::detail::BuilderBase* bb = w.builder_base();
-            ListTestRoot* root = w.root();
+            zm::ArenaRef<ListTestRoot> root = w.root();
 
             root->numNodes = numNodes;
             zm::goffset_t prev_g{};
             for (uint32_t i = 0; i < numNodes; i++)
             {
-                ListTestNode* node = w.allocate<ListTestNode>();
+                zm::ArenaRef<ListTestNode> node = w.allocate<ListTestNode>();
                 node->payload = 13 + i;
                 node->prev = nullptr;
                 if (i > 0)
                 {
                     ListTestNode* prevNode = reinterpret_cast<ListTestNode*>(bb->get_ptr_unsafe_to_store(prev_g));
                     node->prev = prevNode;
-                    prevNode->next = node;
+                    prevNode->next = node.transient_ptr();
                 }
                 else
                 {
                     EXPECT_TRUE(w.root()->root == nullptr);
-                    w.root()->root = node;
+                    w.root()->root = node.transient_ptr();
                 }
-                prev_g = bb->arena_byte_offset_of(node);
+                prev_g = bb->arena_byte_offset_of(node.transient_ptr());
             }
 
-            validate(w.root());
+            validate(w.root().transient_ptr());
         });
 
     const ListTestRoot* rootCopy = (const ListTestRoot*)(bytesCopy.data());

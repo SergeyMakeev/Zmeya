@@ -2,7 +2,7 @@
 
 **Blob writing**
 
-User-facing entry is **`zm::write_scope`** and **`BlobWriter`** only. Implementation types live in **`zm::detail`**.
+User-facing entry is **`zm::write_scope`** and **`BlobWriter`** only. **`w.root()`** and **`w.allocate<T>()`** return **`zm::ArenaRef<T>`** (see **`ZmeyaArenaRef.h`**). Implementation types live in **`zm::detail`**.
 
 */
 
@@ -34,10 +34,10 @@ class BlobWriter
     detail::Builder<TRoot>* impl_;
 
   public:
-    ZMEYA_NODISCARD TRoot* root() const noexcept { return impl_->getRoot(); }
+    ZMEYA_NODISCARD ArenaRef<TRoot> root() const noexcept { return impl_->getRoot(); }
 
     template <typename T>
-    ZMEYA_NODISCARD T* allocate() { return impl_->template allocate<T>(); }
+    ZMEYA_NODISCARD ArenaRef<T> allocate() { return detail::allocate_arena_ref<T>(impl_); }
 
     ZMEYA_NODISCARD bool contains_pointer(const void* ptr) const { return impl_->contains_pointer(ptr); }
 

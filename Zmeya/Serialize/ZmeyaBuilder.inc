@@ -15,5 +15,5 @@ template <typename TRoot> class Builder : public BuilderBase
         return res;
     }
 
-    TRoot* getRoot() { return reinterpret_cast<TRoot*>(get_ptr_unsafe_to_store(0)); }
+    ZMEYA_NODISCARD ArenaRef<TRoot> getRoot() noexcept { return ArenaRef<TRoot>(this, goffset_t(0)); }
 };

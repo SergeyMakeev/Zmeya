@@ -11,6 +11,7 @@ set(HEADERS
     ReadOnly/ZmeyaHashMap.h
     ReadOnly/ZmeyaBlobValidate.h
     ReadOnly/ZmeyaStdHash.h
+    Serialize/ZmeyaArenaRef.h
     Serialize/ZmeyaSerializeFoundation.h
     Serialize/ZmeyaBuilderBase.h
     Serialize/ZmeyaBuilderBase.inc
