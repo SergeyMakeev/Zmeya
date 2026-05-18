@@ -21,6 +21,8 @@ The magic constant name is undefined after the function so it cannot leak into T
 
 inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t seed)
 {
+    const unsigned char* bytes = reinterpret_cast<const unsigned char*>(static_cast<const void*>(key));
+
     const uint64_t m = ZMEYA_MURMURHASH_MAGIC64A;
     const int r = 47;
 
@@ -30,7 +32,7 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
     while (off + 8 <= size_t(len))
     {
         uint64_t k = 0;
-        std::memcpy(&k, key + off, sizeof(uint64_t));
+        std::memcpy(&k, bytes + off, sizeof(uint64_t));
         off += 8;
 
         k *= m;
@@ -45,7 +47,7 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
     if (rem != 0)
     {
         alignas(uint64_t) unsigned char tailbuf[8] = {};
-        std::memcpy(tailbuf, key + off, rem);
+        std::memcpy(tailbuf, bytes + off, rem);
         const unsigned char* tail = tailbuf;
 
     switch (rem & 7)
