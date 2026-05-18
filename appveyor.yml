@@ -1,20 +1,16 @@
 version: "{branch}-ci-{build}"
-image: Visual Studio 2017
+image: Visual Studio 2022
 
-build: msvc
+build: off
 platform: x86
-configuration: Debug
 
 install:
-- choco install opencppcoverage codecov
+- choco install opencppcoverage codecov -y
 - set PATH=C:\Program Files\OpenCppCoverage;%PATH%
 
 build_script:
 - git submodule update --init --recursive
-- mkdir build
-- cd build
-- cmake .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-- cd ..
-- cmake --build .\build\ --config Debug
+- cmake -S . -B build -G "Visual Studio 17 2022" -A Win32 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+- cmake --build build --config Debug --parallel
 - OpenCppCoverage.exe --export_type=cobertura:cobertura.xml --sources Zmeya*.* --excluded_sources *googletest* --modules *.exe -- .\build\Debug\ZmeyaTest.exe --gtest_filter=-ZmeyaTestSuite.Coverage_P1_LargeNIncrementalHashMapVsGolden:ZmeyaTestSuite.Coverage_P13_IncrementalHashWallTimeBoundReleaseOnly:ZmeyaTestSuite.ListTest
 - codecov -f cobertura.xml --root %APPVEYOR_BUILD_FOLDER% -t 11f29925-c727-4836-945c-a210c2756e2f
