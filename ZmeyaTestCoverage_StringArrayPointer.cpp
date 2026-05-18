@@ -63,7 +63,7 @@ TEST(ZmeyaTestSuite, Coverage_P2_StringMemberPlusEqualsChain)
         {
             for (int i = 0; i < 200; ++i)
             {
-                w.root()->text += "x";
+                (void)(w.root()->text += "x");
             }
         }, 32, 4);
 
@@ -180,7 +180,7 @@ TEST(ZmeyaTestSuite, Coverage_P3_ArrayResizeLargeFillPattern)
     constexpr size_t kStartArenaBytes = 32u * 1024u * 1024u;
 #endif
     zm::BlobBuffer blob = zmeya_test::write_scope_stressed<CovIntArrayRoot>(
-        [kN](zm::BlobWriter<CovIntArrayRoot>& w)
+        [&](zm::BlobWriter<CovIntArrayRoot>& w)
         {
             w.array_resize(w.root()->values, kN, int32_t(-7));
         },

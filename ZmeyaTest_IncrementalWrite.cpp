@@ -93,7 +93,7 @@ TEST(ZmeyaTestSuite, IncrementalString_AppendMatchesAssign)
         {
             w.root()->text = std::string("hello ");
             w.string_append(w.root()->text, "world ");
-            w.root()->text += "from zm";
+            (void)(w.root()->text += "from zm");
         }, 32, 4);
 
     const IncrementalStringRoot* rg = reinterpret_cast<const IncrementalStringRoot*>(golden.data());

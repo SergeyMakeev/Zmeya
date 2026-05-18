@@ -351,7 +351,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_CachedAllocateArenaRefsSurviveInterleavedAren
 
             for (int i = 0; i < 500; ++i)
             {
-                root->churn += "Z";
+                (void)(root->churn += "Z");
             }
 
             EXPECT_EQ(L->u, 111);
@@ -361,7 +361,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_CachedAllocateArenaRefsSurviveInterleavedAren
 
             for (int i = 0; i < 300; ++i)
             {
-                root->churn += "yy";
+                (void)(root->churn += "yy");
             }
 
             EXPECT_EQ(L->v, 999);
@@ -372,7 +372,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_CachedAllocateArenaRefsSurviveInterleavedAren
 
             for (int i = 0; i < 200; ++i)
             {
-                root->churn += "pad";
+                (void)(root->churn += "pad");
             }
 
             EXPECT_EQ(L->u, 111);
@@ -394,7 +394,7 @@ TEST(ZmeyaTestSuite, NewBuilderAPI_CachedAllocateArenaRefsSurviveInterleavedAren
 // Verifies BlobWriter exposes a live builder_base and that the root pointer lies inside the builder arena.
 TEST(ZmeyaTestSuite, NewBuilderAPI_BlobWriterBuilderBaseAccessor)
 {
-    zm::write_scope<TestRoot>(
+    (void)zm::write_scope<TestRoot>(
         [](zm::BlobWriter<TestRoot>& w)
         {
             zm::detail::BuilderBase* bb = w.builder_base();

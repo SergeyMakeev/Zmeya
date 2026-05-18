@@ -41,7 +41,7 @@ static void validate(const StringTestRoot* root)
 
 TEST(ZmeyaTestSuite, StringTest_Debug)
 {
-    zm::write_scope<StringTestRoot>([](zm::BlobWriter<StringTestRoot>& w)
+    (void)zm::write_scope<StringTestRoot>([](zm::BlobWriter<StringTestRoot>& w)
                               {
                                   zm::ArenaRef<StringTestRoot> root = w.root();
 

@@ -60,7 +60,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_StringClearThenAppendMatchesGolden)
             w.root()->text = std::string("temp");
             w.string_clear(w.root()->text);
             w.string_append(w.root()->text, "after");
-            w.root()->text += "_clear";
+            (void)(w.root()->text += "_clear");
         }, 64, 4);
 
     EXPECT_STREQ(reinterpret_cast<const CovStringRoot*>(golden.data())->text.c_str(),
@@ -75,7 +75,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_EmptyStringThenAppend)
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             w.root()->text = std::string();
-            w.root()->text += "x";
+            (void)(w.root()->text += "x");
         }, 256, 4);
 
     zm::BlobBuffer built = zmeya_test::write_scope_stressed<CovStringRoot>(
@@ -364,7 +364,7 @@ TEST(ZmeyaTestSuite, Coverage_P0_AllocatePointerGraphManyNodes)
 // P0-15: contains_pointer reports blob-owned objects and rejects unrelated stack addresses.
 TEST(ZmeyaTestSuite, Coverage_P0_ContainsPointerBlobVsStack)
 {
-    zm::write_scope<CovStringRoot>(
+    (void)zm::write_scope<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             zm::ArenaRef<CovStringRoot> r = w.root();

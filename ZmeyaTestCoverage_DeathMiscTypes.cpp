@@ -9,19 +9,37 @@ TEST(ZmeyaDeathTestSuite, Coverage_P10_AssignStringOutsideWriteBlobAborts)
 }
 #endif
 
+namespace
+{
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull"
+#endif
+void death_string_append_nullptr()
+{
+    (void)zm::write_scope<CovStringRoot>(
+        [](zm::BlobWriter<CovStringRoot>& w)
+        {
+            w.string_append(w.root()->text, nullptr);
+        });
+}
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+} // namespace
+
 // P10-02: string_append with a null suffix pointer aborts before strlen runs on invalid memory.
 #if GTEST_HAS_DEATH_TEST
 TEST(ZmeyaDeathTestSuite, Coverage_P10_StringAppendNullptrAborts)
 {
-    EXPECT_DEATH(
-        {
-            (void)zm::write_scope<CovStringRoot>(
-                [](zm::BlobWriter<CovStringRoot>& w)
-                {
-                    w.string_append(w.root()->text, nullptr);
-                });
-        },
-        ".*");
+    EXPECT_DEATH({ death_string_append_nullptr(); }, ".*");
 }
 #endif
 
