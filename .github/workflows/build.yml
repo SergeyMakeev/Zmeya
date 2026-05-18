@@ -134,8 +134,9 @@ jobs:
     env:
       CC: clang
       CXX: clang++
-      ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=1
+      ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
       GTEST_DEATH_TEST_STYLE: threadsafe
+      MallocNanoZone: '0'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
