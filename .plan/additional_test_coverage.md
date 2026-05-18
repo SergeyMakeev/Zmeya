@@ -2,7 +2,7 @@
 
 This document lists **planned** tests (not implemented here). Each item is meant to catch regressions, edge cases, or undefined behavior around **blob construction**, **incremental mutation**, **compaction/finalize**, and **read-side layout**.
 
-**How to use:** pick items by priority (P0 first), implement in `ZmeyaTestIncremental.cpp` / `ZmeyaTestNewAPI.cpp` or a new focused file, keep **golden vs incremental** or **byte-for-byte** comparisons where cheap.
+**How to use:** pick items by priority (P0 first), implement in `ZmeyaTest_IncrementalWrite.cpp` / `ZmeyaTest_BuilderAPI.cpp` or a new focused file, keep **golden vs incremental** or **byte-for-byte** comparisons where cheap.
 
 **Conventions in this file:** *golden* means bulk `operator=` / single assign from STL model; *incremental* means `BlobWriter` APIs or repeated small mutations.
 
@@ -111,7 +111,7 @@ This document lists **planned** tests (not implemented here). Each item is meant
 |----|----------------|-------------|----------------------|
 | P7-01 | Reduce node count variant of ReferToTest | Faster Debug CI with 100 nodes same validation pattern. | Parameterized gtest `INSTANTIATE_TEST_SUITE_P` or constant kNodes. |
 | P7-02 | Single-node ReferTo | Minimal deep copy of all field kinds. | One node with string, array, hashset, hashmap. |
-| P7-03 | ListTest smaller Debug variant | `ZmeyaTest04` is heavy; optional quick smoke list size 10 in Debug. | `ifdef _DEBUG` smaller N. |
+| P7-03 | ListTest smaller Debug variant | `ZmeyaTest_List.cpp` is heavy; optional quick smoke list size 10 in Debug. | `ifdef _DEBUG` smaller N. |
 
 ---
 

@@ -48,7 +48,7 @@ TEST(ZmeyaTestSuite, Coverage_P5_WriteBlobVectorMatchesFinalizeSize)
     EXPECT_EQ(viaVec.size(), span.size);
 }
 
-// P6-01: Memory-map path on Windows (and buffer read on other hosts) accepts non-default finalize alignment (16).
+// P6-01: Memory-map read path (Windows MapViewOfFile; POSIX mmap when available; fread fallback otherwise) with finalize alignment 16.
 TEST(ZmeyaTestSuite, Coverage_P6_MmapMiniRootAlignment16)
 {
     const char* fileName = "coverage_mmap_mini.zm";
@@ -66,33 +66,12 @@ TEST(ZmeyaTestSuite, Coverage_P6_MmapMiniRootAlignment16)
     ASSERT_EQ(fwrite(bytes.data(), bytes.size(), 1, out), size_t(1));
     fclose(out);
 
-#if defined(_WIN32)
-    HANDLE hFile = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    ASSERT_TRUE(hFile != INVALID_HANDLE_VALUE);
-    LARGE_INTEGER sz;
-    ASSERT_TRUE(GetFileSizeEx(hFile, &sz));
-    HANDLE hMap = CreateFileMapping(hFile, 0, PAGE_READONLY | SEC_COMMIT, sz.HighPart, sz.LowPart, 0);
-    ASSERT_TRUE(hMap != NULL);
-    const CovMmapMiniRoot* mapped = reinterpret_cast<const CovMmapMiniRoot*>(MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, size_t(sz.QuadPart)));
-    ASSERT_TRUE(mapped != nullptr);
-    EXPECT_EQ(mapped->magic, 0x11223344u);
-    EXPECT_EQ(mapped->tag, std::string("mmap_align16"));
-    UnmapViewOfFile(mapped);
-    CloseHandle(hMap);
-    CloseHandle(hFile);
-#else
-    FILE* in = fopen(fileName, "rb");
-    ASSERT_TRUE(in != nullptr);
-    fseek(in, 0L, SEEK_END);
-    long n = ftell(in);
-    fseek(in, 0L, SEEK_SET);
-    std::vector<char> buf(size_t(n));
-    ASSERT_EQ(fread(buf.data(), size_t(n), 1, in), size_t(1));
-    fclose(in);
-    const CovMmapMiniRoot* mapped = reinterpret_cast<const CovMmapMiniRoot*>(buf.data());
-    EXPECT_EQ(mapped->magic, 0x11223344u);
-    EXPECT_EQ(mapped->tag, std::string("mmap_align16"));
-#endif
+    zmeya_test::MappedReadOnlyFile mapped;
+    ASSERT_TRUE(mapped.try_open(fileName));
+    ASSERT_EQ(mapped.size(), bytes.size());
+    const CovMmapMiniRoot* rr = reinterpret_cast<const CovMmapMiniRoot*>(mapped.data());
+    EXPECT_EQ(rr->magic, 0x11223344u);
+    EXPECT_EQ(rr->tag, std::string("mmap_align16"));
     remove(fileName);
 }
 

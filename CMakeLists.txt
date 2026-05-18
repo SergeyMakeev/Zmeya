@@ -12,25 +12,25 @@ option(ZMEYA_ENABLE_ASAN "Build ZmeyaTest with AddressSanitizer (Clang/GCC; not 
 set(ZMEYA_SOURCES 
   TestHelper.h
   TestHelper.cpp
-  ZmeyaTestNewAPI.cpp
-  ZmeyaTestMemorySafety.cpp
-  ZmeyaTestIncremental.cpp
   ZmeyaTestCoverageCommon.h
-  ZmeyaTestCoverage_P0P1.cpp
-  ZmeyaTestCoverage_P2P4.cpp
-  ZmeyaTestCoverage_P5P9.cpp
-  ZmeyaTestCoverage_DeathAndTail.cpp
-  ZmeyaTest01.cpp
-  ZmeyaTest02.cpp
-  ZmeyaTest03.cpp
-  ZmeyaTest04.cpp
-  ZmeyaTest05.cpp
-  ZmeyaTest06.cpp
-  ZmeyaTest07.cpp
-  ZmeyaTest08.cpp
-  ZmeyaTest09.cpp
-  ZmeyaTest10.cpp
-  ZmeyaTest11.cpp
+  ZmeyaTestCoverage_DeathMiscTypes.cpp
+  ZmeyaTestCoverage_FinalizeFileIterate.cpp
+  ZmeyaTestCoverage_IncrementalGolden.cpp
+  ZmeyaTestCoverage_StringArrayPointer.cpp
+  ZmeyaTest_Array.cpp
+  ZmeyaTest_BuilderAPI.cpp
+  ZmeyaTest_FileRoundTrip.cpp
+  ZmeyaTest_HashMap.cpp
+  ZmeyaTest_HashSet.cpp
+  ZmeyaTest_IncrementalWrite.cpp
+  ZmeyaTest_Iterators.cpp
+  ZmeyaTest_List.cpp
+  ZmeyaTest_MemorySafety.cpp
+  ZmeyaTest_MMap.cpp
+  ZmeyaTest_Pointer.cpp
+  ZmeyaTest_ReferTo.cpp
+  ZmeyaTest_SimplePOD.cpp
+  ZmeyaTest_String.cpp
 )
 
 add_executable(${PROJ_NAME} ${ZMEYA_SOURCES})
@@ -82,6 +82,5 @@ if(ZMEYA_BUILD_BENCHMARKS)
         target_compile_options(ZmeyaBench PRIVATE -Wall -Wextra -pedantic)
     endif()
 endif()
-
 
 

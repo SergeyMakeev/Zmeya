@@ -7,10 +7,10 @@ Root structs and helpers used by split ZmeyaTestCoverage_*.cpp translation units
 
 **Where tests live (P-number index)**
 
-`ZmeyaTestCoverage_P0P1.cpp`: P0 string/array/hash incremental stress vs golden; P1 hash set/map behavior.
-`ZmeyaTestCoverage_P2P4.cpp`: P2 string edge cases and comparisons; P3 arrays and nested arrays; P4 pointers and graphs.
-`ZmeyaTestCoverage_P5P9.cpp`: P5 finalize alignment and write_scope sizing; P6 mmap/file IO; P7 smaller graph reads; P8 iterators and find; P9 BlobWriter builder_base smoke.
-`ZmeyaTestCoverage_DeathAndTail.cpp`: P10+ death tests and tail coverage items.
+`ZmeyaTestCoverage_IncrementalGolden.cpp`: P0 string/array/hash incremental stress vs golden; P1 hash set/map behavior.
+`ZmeyaTestCoverage_StringArrayPointer.cpp`: P2 string edge cases and comparisons; P3 arrays and nested arrays; P4 pointers and graphs.
+`ZmeyaTestCoverage_FinalizeFileIterate.cpp`: P5 finalize alignment and write_scope sizing; P6 mmap/file IO; P7 smaller graph reads; P8 iterators and find; P9 BlobWriter builder_base smoke.
+`ZmeyaTestCoverage_DeathMiscTypes.cpp`: P10 death tests; P11+ mixed roots, determinism, timing guard, Pair/enum coverage.
 */
 
 #include "TestHelper.h"

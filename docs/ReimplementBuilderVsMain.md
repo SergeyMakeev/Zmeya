@@ -36,7 +36,7 @@ Technical layout, CMake, and on-disk hash encoding are summarized briefly at the
 - You fill fields; for **`zm::`** containers you usually call **`blobBuilder->copyTo(...)`** or **`resizeArray`** + **`copyTo`** on slices.
 - You **`finalize()`** into **`zm::Span<char>`**, then copy bytes out (tests use a helper like **`utils::copyBytes`**).
 
-**Minimal POD-style root (from `ZmeyaTest01` on `main`):**
+**Minimal POD-style root (from `ZmeyaTest_SimplePOD.cpp` on `main`):**
 
 ```cpp
 std::vector<char> bytesCopy;
@@ -67,7 +67,7 @@ const SimpleTestRoot* rootCopy = reinterpret_cast<const SimpleTestRoot*>(bytesCo
 - **`zm::`** fields often accept **STL-shaped values via `operator=`** (e.g. **`root->arr1 = std::vector<...>`**) or **`zm::assign`** when you need an explicit builder.
 - Return type is **`zm::BlobBuffer`** (aligned **`std::vector<char>`**-like); you **move** it out, no separate **`Span`** + manual copy unless you want one.
 
-**Same logical test (aligned with current `ZmeyaTest01`):**
+**Same logical test (aligned with current `ZmeyaTest_SimplePOD.cpp`):**
 
 ```cpp
 zm::BlobBuffer bytesCopy = zm::write_scope<SimpleTestRoot>(
@@ -99,16 +99,16 @@ const SimpleTestRoot* rootCopy = reinterpret_cast<const SimpleTestRoot*>(bytesCo
 3. For each **`zm::`** member, you **do not** usually write `root->field = std::vector<...>`; you call **`blobBuilder->copyTo(root->field, stlSource)`** (or **`resizeArray`** then **`copyTo`** on nested arrays).
 4. For **`zm::Pointer`**, you **`allocate` child objects**, then **`blobBuilder->assignTo(root->ptr, childPtr)`** (or **`operator=`** from **`BlobPtr`** where supported).
 
-**Arrays of aggregates** often use a **temporary STL model** (`std::vector<YourPOD>`), then **`copyTo`**, or use **`resizeArray`** + per-element **`copyTo`** on sub-arrays (see `main` **`ZmeyaTest03`**).
+**Arrays of aggregates** often use a **temporary STL model** (`std::vector<YourPOD>`), then **`copyTo`**, or use **`resizeArray`** + per-element **`copyTo`** on sub-arrays (see `main` **`ZmeyaTest_Array.cpp`**).
 
 ### After (`reimplement_builder`)
 
 1. Define the struct the same way.
 2. Inside **`write_scope`**, bind the root with an explicit **`zm::ArenaRef<Root>`** (example: **`zm::ArenaRef<ArrayTestRoot> root = w.root();`**).
-3. Prefer **value-like assignment**: **`root->names = std::vector<std::string>{...}`**, **`root->items = std::vector<...>`**, **`root->map = std::unordered_map<...>`** when **`operator=`** is wired for your element type (often via a **template `operator=`** on the element struct that forwards to **`zm::`** members, as in **`ZmeyaTest01`** **`Desc`** + **`root->arr = tempDescs`**).
+3. Prefer **value-like assignment**: **`root->names = std::vector<std::string>{...}`**, **`root->items = std::vector<...>`**, **`root->map = std::unordered_map<...>`** when **`operator=`** is wired for your element type (often via a **template `operator=`** on the element struct that forwards to **`zm::`** members, as in **`ZmeyaTest_SimplePOD.cpp`** **`Desc`** + **`root->arr = tempDescs`**).
 4. For **`zm::Pointer`**, use **`zm::ArenaRef<T> node = w.allocate<T>();`**, fill **`node->...`**, then **`root->ptr = node.transient_ptr()`** (or push **`node.transient_ptr()`** into **`std::vector<T*>`** for **`Array<Pointer<T>>`** bulk assign).
 
-**Arrays example (current `ZmeyaTest03` style):** bulk assign from **`std::vector`** / nested vectors in one expression where possible:
+**Arrays example (current `ZmeyaTest_Array.cpp` style):** bulk assign from **`std::vector`** / nested vectors in one expression where possible:
 
 ```cpp
 zm::BlobBuffer bytesCopy = zm::write_scope<ArrayTestRoot>([](zm::BlobWriter<ArrayTestRoot>& w) {
@@ -127,7 +127,7 @@ zm::BlobBuffer bytesCopy = zm::write_scope<ArrayTestRoot>([](zm::BlobWriter<Arra
 });
 ```
 
-Helpers that fill a root can take **`const zm::ArenaRef<TestRoot>&`** so call sites pass **`w.root()`** without converting to raw **`TestRoot*`** first (see **`ZmeyaTestNewAPI.cpp`** **`FillBasicTestRoot`**).
+Helpers that fill a root can take **`const zm::ArenaRef<TestRoot>&`** so call sites pass **`w.root()`** without converting to raw **`TestRoot*`** first (see **`ZmeyaTest_BuilderAPI.cpp`** **`FillBasicTestRoot`**).
 
 **Authoring ergonomics:** the branch pushes you toward **"build STL-side, assign once"** for complex graphs, matching many game tools. **`main`** pushes you toward **"call `copyTo` / `resizeArray` with the builder in hand"**.
 

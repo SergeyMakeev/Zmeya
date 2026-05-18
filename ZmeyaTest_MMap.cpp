@@ -3,16 +3,9 @@
 #include "gtest/gtest.h"
 
 #include <cstdio>
-#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <Windows.h>
-#endif
 
 /*
 
@@ -236,38 +229,8 @@ TEST(ZmeyaTestSuite, MMapTest)
     const char* fileName = "mmaptest.zm";
     generateTestFile(fileName);
 
-#if defined(_WIN32)
-    HANDLE hFile = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    ASSERT_TRUE(hFile != INVALID_HANDLE_VALUE);
-
-    LARGE_INTEGER fileSizeInBytes;
-    BOOL res = GetFileSizeEx(hFile, &fileSizeInBytes);
-    ASSERT_TRUE(res);
-
-    HANDLE hMapping =
-        CreateFileMapping(hFile, 0, PAGE_READONLY | SEC_COMMIT, fileSizeInBytes.HighPart, fileSizeInBytes.LowPart, 0);
-    ASSERT_TRUE(hMapping != NULL);
-
-    const MMapTestRoot* fileRoot =
-        (const MMapTestRoot*)MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, size_t(fileSizeInBytes.QuadPart));
-    ASSERT_TRUE(fileRoot != nullptr);
-
+    zmeya_test::MappedReadOnlyFile mapped;
+    ASSERT_TRUE(mapped.try_open(fileName));
+    const MMapTestRoot* fileRoot = reinterpret_cast<const MMapTestRoot*>(mapped.data());
     validate(fileRoot);
-
-    UnmapViewOfFile(fileRoot);
-    CloseHandle(hMapping);
-    CloseHandle(hFile);
-#else
-    FILE* file = fopen(fileName, "rb");
-    ASSERT_TRUE(file != nullptr);
-    fseek(file, 0L, SEEK_END);
-    long fileSize = ftell(file);
-    fseek(file, 0L, SEEK_SET);
-    std::vector<char> buffer(size_t(fileSize));
-    ASSERT_EQ(fread(buffer.data(), size_t(fileSize), 1, file), size_t(1));
-    fclose(file);
-
-    const MMapTestRoot* fileRoot = reinterpret_cast<const MMapTestRoot*>(buffer.data());
-    validate(fileRoot);
-#endif
 }

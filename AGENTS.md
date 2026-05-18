@@ -8,7 +8,10 @@ This file is for humans and coding agents so the next session does not rediscove
 |------|------|
 | `Zmeya/Zmeya.h` | Header-only library (deserialize always; **`zm::write_scope`** needs `ZMEYA_ENABLE_SERIALIZE_SUPPORT`) |
 | `Zmeya/CMakeLists.txt` | INTERFACE target **`Zmeya`** (include dir + C++17) |
-| Root `CMakeLists.txt` | Executable **`ZmeyaTest`** (all **`ZmeyaTest*.cpp`**, **`ZmeyaTestCoverage_*.cpp`**, **`ZmeyaTestIncremental.cpp`**, plus **`TestHelper`**) |
+| Root `CMakeLists.txt` | Executable **`ZmeyaTest`** (**`ZmeyaTest_*.cpp`**, **`ZmeyaTestCoverage_*.cpp`**, plus **`TestHelper`**) |
+| `TestHelper.h` / `TestHelper.cpp` | **`write_scope_stressed`**, **`MappedReadOnlyFile`** (portable read-only mmap for tests) |
+| `ZmeyaTest_*.cpp` (root) | Feature tests: **`SimplePOD`**, **`Pointer`**, **`Array`**, **`List`**, **`String`**, **`HashSet`**, **`HashMap`**, **`Iterators`**, **`FileRoundTrip`**, **`MMap`**, **`ReferTo`**, **`BuilderAPI`**, **`MemorySafety`**, **`IncrementalWrite`** |
+| `ZmeyaTestCoverage_*.cpp` | Golden/stress coverage (see **`ZmeyaTestCoverageCommon.h`** header comment for P-index to file map) |
 | `ZmeyaBench.cpp` | Optional **`ZmeyaBench`** executable (Google Benchmark microbenchmarks; enable with **`ZMEYA_BUILD_BENCHMARKS`**) |
 | `ZmeyaBenchSupport.cpp` | **`zm::onAssertionFailed`** stub for **`ZmeyaBench`** (tests implement assertions elsewhere; see **`ZmeyaConfig.h`**) |
 | `extern/googletest` | GoogleTest / gtest_main (pulled as submodule or vendored per your checkout) |
@@ -110,7 +113,7 @@ cd build && ctest --output-on-failure
 
 Some tests write files next to the **current working directory** (e.g. `test.zm`, `mmaptest.zm`). Run **`ZmeyaTest`** from a writable directory if needed.
 
-`ZmeyaTest10` uses memory-mapped files on **Windows**; on other platforms it reads the file into a buffer and validates the same layout.
+`ZmeyaTest_MMap.cpp` (`MMapTest`) maps the blob read-only via **`zmeya_test::MappedReadOnlyFile`** in **`TestHelper`**: **Windows** uses **`MapViewOfFile`**; **Linux / macOS / typical BSD** use **`mmap`** when `<sys/mman.h>` is available; otherwise the helper falls back to a single **`fread`** into a buffer so the same layout checks still run.
 
 ### Windows build scripts
 
@@ -130,7 +133,7 @@ The builder records self-relative **slot** targets in an **`std::unordered_map<g
 
 ### Debug vs Release
 
-**`ZmeyaTest04` (`ListTest`)** uses many more nodes in Release than in Debug; the test links nodes using **`goffset_t`** so it does not cache stale **`T*`** across reallocations.
+**`ZmeyaTest_List.cpp` (`ListTest`)** uses many more nodes in Release than in Debug; the test links nodes using **`goffset_t`** so it does not cache stale **`T*`** across reallocations.
 
 ## Documentation
 

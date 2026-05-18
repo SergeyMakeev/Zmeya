@@ -50,7 +50,7 @@ Mutate backing **`Array`** segments and bucket arrays in place; update registrat
 ## Deliverables
 
 - Public methods on **`HashMap`/`HashSet`** under **`#ifdef ZMEYA_ENABLE_SERIALIZE_SUPPORT`** (mirror **`Array`** pattern).
-- Tests in **`ZmeyaTestNewAPI.cpp`** or new file **`ZmeyaTestIncrementalHash.cpp`**.
+- Tests in **`ZmeyaTest_BuilderAPI.cpp`** or new file **`ZmeyaTestIncrementalHash.cpp`**.
 
 ## Risks
 
