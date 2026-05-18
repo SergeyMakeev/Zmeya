@@ -13,7 +13,7 @@ BlobBuffer write_scope_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBy
 }
 
 template <typename TRoot, typename Fn>
-BlobBuffer write_scope(Fn&& fn, size_t finalizeAlignment);
+BlobBuffer write_scope(Fn&& fn, size_t finalizeAlignment = 4);
 
 template <typename TRoot>
 class BlobWriter
@@ -86,7 +86,7 @@ Returns **`zm::BlobBuffer`** (same backing allocator as the arena) by **moving**
 */
 
 template <typename TRoot, typename Fn>
-ZMEYA_NODISCARD inline BlobBuffer write_scope(Fn&& fn, size_t finalizeAlignment = 4)
+ZMEYA_NODISCARD inline BlobBuffer write_scope(Fn&& fn, size_t finalizeAlignment)
 {
     return detail::write_scope_with_initial_buffer_bytes<TRoot>(std::forward<Fn>(fn), detail::kDefaultWriteBlobArenaReserveBytes, finalizeAlignment);
 }

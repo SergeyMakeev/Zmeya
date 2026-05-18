@@ -13,7 +13,7 @@ build_script:
 - git submodule update --init --recursive
 - mkdir build
 - cd build
-- cmake ..
+- cmake .. -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 - cd ..
 - cmake --build .\build\ --config Debug
 - OpenCppCoverage.exe --export_type=cobertura:cobertura.xml --sources Zmeya*.* --excluded_sources *googletest* --modules *.exe -- .\build\Debug\ZmeyaTest.exe --gtest_filter=-ZmeyaTestSuite.Coverage_P1_LargeNIncrementalHashMapVsGolden:ZmeyaTestSuite.Coverage_P13_IncrementalHashWallTimeBoundReleaseOnly:ZmeyaTestSuite.ListTest
