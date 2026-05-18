@@ -11,9 +11,9 @@ Zmeya is not even a serialization library in the usual sense but rather a set of
 # Features
 
 - Cross-platform compatible
-- Single header library (~550 lines of code for deserialization and extra 750 lines of code with serialization support enabled)
+- Single header library (read path is always available; define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** for **`zm::write_scope`** / serialization)
 - No code generation required: no IDL or metadata, just use your types directly
-- No macros
+- No IDL/codegen macros; small integration macros in `ZmeyaConfig.h` (asserts, allocators, attributes)
 - Heavily optimized for performance
 - No dependencies
 - Zmeya pointers are always 32-bits (configurable) regardless of the target platform pointer size
@@ -24,6 +24,32 @@ Zmeya library offering the following memory movable types
 - `String`
 - `HashSet<Key>`
 - `HashMap<Key, Value>`
+
+## Mental model
+
+Zmeya types are meant to live in **one contiguous byte range** (memory-mapped file, received packet, heap block, or the **`std::vector<char>`** returned from **`zm::write_scope`**). They use **self-relative** addressing (offsets from each field's address), not raw pointers into arbitrary memory, so there is **no pointer fixup** when you load data.
+
+**Read path:** treat the blob as bytes, cast to **`const YourRoot*`** (or offset to your root), then use **`zm::`** fields like ordinary nested data. No separate deserialize step.
+
+**Write path:** **`zm::write_scope<YourRoot>(...)`** runs your lambda while a **blob writer** is active in **thread-local storage**. Inside that lambda, **`zm::`** fields behave like **mutable value-like objects**: assign from **`std::vector`**, **`std::string`**, **`std::unordered_*`**, or assign **`zm::Pointer<T> = T*`** where **`T`** is already allocated in the same blob via **`BlobWriter::allocate`**. **`w.root()`** and **`w.allocate<T>()`** return **`zm::ArenaRef<T>`** (builder + byte offset): use **`root->field`** so each access re-resolves through the live arena; call **`transient_ptr()`** only when you need a raw **`T*`** for **`zm::Pointer`**, **`std::vector<T*>`**, or similar, and do not keep that raw pointer across growth. The library copies data into the growing buffer and wires relative offsets for you. Prefer **`w.*`** helpers so the builder is explicit at the call site; use **`zm::assign(detail::BuilderBase&, ...)`** when TLS alone is insufficient (see **`AGENTS.md`**). Think of the lambda as a **scoped write** into one blob, not a separate serialization API surface.
+
+**Threading:** all **`zm::`** mutations for one blob must run on the **same thread** as the **`zm::write_scope`** call (TLS is not shared with worker threads).
+
+## Creating a blob
+
+1. Define **`ZMEYA_ENABLE_SERIALIZE_SUPPORT`** when compiling the translation units that call **`zm::write_scope`** (see root **`CMakeLists.txt`** for tests).
+
+2. Call **`zm::write_scope<Root>`** with a lambda taking **`zm::BlobWriter<Root>& w`**. Use **`w.root()`** (**`zm::ArenaRef<Root>`**) for the root struct, **`=`** from STL-shaped values into **`zm::`** members, and **`w.allocate<T>()`** when you need extra **trivially copyable** objects in the blob (for example list nodes). Use **`transient_ptr()`** when an API requires a raw **`T*`**.
+
+3. Optional **second argument:** final alignment for the returned **`std::vector<char>`** (defaults to **4**). The writer pre-reserves a fixed internal starting capacity for the backing buffer; do not cache raw **`T*`** from **`transient_ptr()`** across growth.
+
+```cpp
+std::vector<char> blob = zm::write_scope<MyRoot>([](zm::BlobWriter<MyRoot>& w) {
+    zm::ArenaRef<MyRoot> r = w.root();
+    r->title = std::string("hello");
+    r->nums = std::vector<int>{1, 2, 3};
+});
+```
 
 # Usage
 
@@ -128,8 +154,10 @@ i.e.
 etc...
 
 The only requirement is that we have to have all the data tightly packed in a single memory region or binary blob.
-Zmeya provides a convenient mechanism to build such a binary blob called `zm::BlobBuilder`.
-Blob builder is capable of convert all the standard STL containers to appropriate Zmeya movable containers. Blob builder also provides a mechanism to convert all the inner types (e.g., `std::vector<std::string>`) to Zmeya compatible type. And by default, Zmeya offers convertors/template specializations for all commonly used cases.
+
+See **Mental model** and **Creating a blob** above for the write path. **`zm::BlobWriter`** also exposes **`contains_pointer()`** for debugging (see **`Zmeya/Zmeya.h`**).
+
+See **`NEXT_STEPS.md`** for growth/reallocation notes and follow-up work.
 
 # References
 

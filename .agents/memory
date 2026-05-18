@@ -1,0 +1,11 @@
+# Agent memory (Zmeya)
+
+## GitHub: use `gh` only
+
+For anything on GitHub (pull requests, checks, CI runs, logs, issues, releases, repo metadata), use the **GitHub CLI** (`gh`) via the shell.
+
+- **Do:** `gh pr …`, `gh run …`, `gh issue …`, `gh release …`, and other `gh` subcommands; use `gh api …` only when no higher-level subcommand exists (still the `gh` binary, not a custom HTTP client).
+- **Do not:** hand-rolled GitHub HTTP (curl, Invoke-RestMethod, fetch MCP to github.com, Python requests, etc.), scraping the web UI, or emulating another OS/environment just to inspect CI when `gh run view … --log-failed` (or similar `gh` commands) can supply logs.
+- **Assume:** `gh` is installed and on **PATH**; do not spend turns trying to discover its install path.
+
+If `gh` is missing or unauthenticated, say so and ask the user to install or run `gh auth login` instead of switching to indirect methods.
