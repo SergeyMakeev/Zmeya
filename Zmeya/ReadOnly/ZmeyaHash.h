@@ -41,9 +41,14 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
         h *= m;
     }
 
-    const unsigned char* tail = reinterpret_cast<const unsigned char*>(key + off);
+    const size_t rem = size_t(len) - off;
+    if (rem != 0)
+    {
+        alignas(uint64_t) unsigned char tailbuf[8] = {};
+        std::memcpy(tailbuf, key + off, rem);
+        const unsigned char* tail = tailbuf;
 
-    switch (len & 7)
+    switch (rem & 7)
     {
     case 7:
         h ^= (uint64_t)((uint64_t)tail[6] << (uint64_t)48);
@@ -66,7 +71,8 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
     case 1:
         h ^= (uint64_t)((uint64_t)tail[0]);
         h *= m;
-    };
+    }
+    }
 
     h ^= h >> r;
     h *= m;

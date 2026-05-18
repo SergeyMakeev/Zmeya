@@ -131,7 +131,7 @@ static void generateTestFile(const char* fileName)
 
     FILE* file = fopen(fileName, "wb");
     ASSERT_TRUE(file != nullptr);
-    fwrite(bytesCopy.data(), bytesCopy.size(), 1, file);
+    ASSERT_EQ(fwrite(bytesCopy.data(), bytesCopy.size(), 1, file), 1u);
     fclose(file);
 }
 
@@ -148,7 +148,7 @@ TEST(ZmeyaTestSuite, SimpleFileTest)
     long fileSize = ftell(file);
     fseek(file, 0L, SEEK_SET);
     content.resize(size_t(fileSize));
-    fread(content.data(), size_t(fileSize), 1, file);
+    ASSERT_EQ(fread(content.data(), size_t(fileSize), 1, file), 1u);
     fclose(file);
 
     const SimpleFileTestRoot* fileRoot = (const SimpleFileTestRoot*)(content.data());
