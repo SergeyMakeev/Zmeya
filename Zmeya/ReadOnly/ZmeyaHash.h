@@ -21,6 +21,12 @@ The magic constant name is undefined after the function so it cannot leak into T
 
 inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t seed)
 {
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#pragma GCC diagnostic ignored "-Wstringop-overread"
+#endif
     const unsigned char* bytes = reinterpret_cast<const unsigned char*>(static_cast<const void*>(key));
 
     const uint64_t m = ZMEYA_MURMURHASH_MAGIC64A;
@@ -80,6 +86,9 @@ inline uint64_t murmur_hash_process64a(const char* key, uint32_t len, uint64_t s
     h *= m;
     h ^= h >> r;
     return h;
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 }
 
 #undef ZMEYA_MURMURHASH_MAGIC64A
