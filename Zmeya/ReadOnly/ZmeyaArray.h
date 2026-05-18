@@ -108,11 +108,11 @@ template <typename T> class Array
         return *this;
     }
 
-    template <typename T, typename F> friend void assign(Array<T>& to, const std::vector<F>& from);
+    template <typename Te, typename F> friend void assign(Array<Te>& to, const std::vector<F>& from);
     template <typename Key, typename F> friend void assign(HashSet<Key>& to, const std::unordered_set<F>& from);
     template <typename Key, typename Value, typename FK, typename FV>
     friend void assign(HashMap<Key, Value>& to, const std::unordered_map<FK, FV>& from);
-    template <typename T> friend void assign(Array<zm::Pointer<T>>& to, const std::vector<T*>& from);
+    template <typename U> friend void assign(Array<zm::Pointer<U>>& to, const std::vector<U*>& from);
 #endif
 
     friend class detail::BuilderBase;

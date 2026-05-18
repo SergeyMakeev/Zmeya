@@ -31,7 +31,7 @@
         ZMEYA_ASSERT((uintptr_t(&data[allocOffset]) & (alignment - 1)) == 0);
 
         // check that global offset fit
-        ZMEYA_ASSERT((allocOffset >= 0 && allocOffset < std::numeric_limits<goffset_t>::max()) && "Offset is too big, more that 2GB?");
+        ZMEYA_ASSERT(allocOffset < size_t(std::numeric_limits<goffset_t>::max()) && "Offset is too big, more that 2GB?");
         return goffset_t(allocOffset);
     }
 

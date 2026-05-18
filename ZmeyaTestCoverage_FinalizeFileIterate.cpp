@@ -113,7 +113,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ReferToShapedSmallNodeCount)
 
     constexpr size_t kNodes = 100;
     zm::BlobBuffer blob = zm::write_scope<CoverageReferMultiRoot>(
-        [&proto, kNodes](zm::BlobWriter<CoverageReferMultiRoot>& w)
+        [&](zm::BlobWriter<CoverageReferMultiRoot>& w)
         {
             std::vector<CoverageReferNodeInit> inits(kNodes, proto);
             w.root()->nodes = inits;
@@ -172,7 +172,7 @@ TEST(ZmeyaTestSuite, Coverage_P7_ListChainSmokeTenNodes)
 
     constexpr uint32_t kN = 10;
     zm::BlobBuffer blob = zm::write_scope<Root>(
-        [kN](zm::BlobWriter<Root>& w)
+        [&](zm::BlobWriter<Root>& w)
         {
             zm::detail::BuilderBase* bb = w.builder_base();
             w.root()->numNodes = kN;
@@ -277,7 +277,7 @@ TEST(ZmeyaTestSuite, Coverage_P8_HashMapFindWithDefault)
 // P9-04: BlobWriter exposes a non-null builder_base during write_scope (already covered elsewhere; repeated for backlog traceability).
 TEST(ZmeyaTestSuite, Coverage_P9_BlobWriterBuilderBaseNonNull)
 {
-    zm::write_scope<CovStringRoot>(
+    (void)zm::write_scope<CovStringRoot>(
         [](zm::BlobWriter<CovStringRoot>& w)
         {
             EXPECT_NE(w.builder_base(), nullptr);

@@ -11,4 +11,7 @@ namespace detail
 #include "ZmeyaBuilderHashChain.inc"
 
 } // namespace detail
+
+#include "ZmeyaSerializeApiAssignDetail.inc"
+
 } // namespace zm

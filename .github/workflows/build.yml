@@ -37,7 +37,7 @@ jobs:
           sudo apt-get install -y cmake ninja-build g++ clang
 
       - name: Configure
-        run: cmake -S "${{ github.workspace }}" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S "${{ github.workspace }}" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build
         run: cmake --build build --parallel
@@ -62,7 +62,7 @@ jobs:
         run: brew install ninja
 
       - name: Configure
-        run: cmake -S "${{ github.workspace }}" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S "${{ github.workspace }}" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build
         run: cmake --build build --parallel
@@ -85,7 +85,7 @@ jobs:
           submodules: recursive
 
       - name: Configure
-        run: cmake -S "${{ github.workspace }}" -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }}
+        run: cmake -S "${{ github.workspace }}" -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }} -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Build
         run: cmake --build build --config Release --parallel

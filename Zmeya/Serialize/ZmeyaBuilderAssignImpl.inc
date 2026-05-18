@@ -93,7 +93,7 @@ template <typename T, typename F> void BuilderBase::impl_assign_array_vector(zm:
     for (size_t i = 0; i < from.size(); ++i)
     {
         zm::goffset_t elementOffset = zm::goffset_t(arrayDataOffset + i * sizeOfT);
-        zm::deep_copy<F, T>(*this, from[i], elementOffset);
+        deep_copy_into_offset<F, T>(*this, from[i], elementOffset);
     }
     array_slab_phys_bytes_[to_offset] = from.size() * sizeOfT;
 }

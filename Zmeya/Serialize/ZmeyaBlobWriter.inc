@@ -9,7 +9,7 @@ User-facing entry is **`zm::write_scope`** and **`BlobWriter`** only. **`w.root(
 namespace detail
 {
 template <typename TRoot, typename Fn>
-BlobBuffer write_scope_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment = 4);
+BlobBuffer write_scope_with_initial_buffer_bytes(Fn&& fn, size_t initialBufferBytes, size_t finalizeAlignment);
 }
 
 template <typename TRoot, typename Fn>

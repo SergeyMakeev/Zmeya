@@ -3,7 +3,7 @@
         ZMEYA_ASSERT(contains_pointer(ptr));
         offset_t allocOffset = offset_t(uintptr_t(ptr) - uintptr_t(data.data()));
         // check that global offset fit
-        ZMEYA_ASSERT((allocOffset >= 0 && allocOffset < std::numeric_limits<goffset_t>::max()) && "Offset is too big, more that 2GB?");
+        ZMEYA_ASSERT(allocOffset < offset_t(std::numeric_limits<goffset_t>::max()) && "Offset is too big, more that 2GB?");
         return goffset_t(allocOffset);
     }
 

@@ -15,7 +15,7 @@ TEST(ZmeyaDeathTestSuite, Coverage_P10_StringAppendNullptrAborts)
 {
     EXPECT_DEATH(
         {
-            zm::write_scope<CovStringRoot>(
+            (void)zm::write_scope<CovStringRoot>(
                 [](zm::BlobWriter<CovStringRoot>& w)
                 {
                     w.string_append(w.root()->text, nullptr);
