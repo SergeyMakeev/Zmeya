@@ -3,12 +3,15 @@
 #include "gtest/gtest.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
-#include <dbghelp.h>
 #include <iostream>
 #include <memory>
 #include <unordered_map>
 #include <vector>
+
+#if defined(_WIN32)
+#include <dbghelp.h>
 #include <windows.h>
 
 #pragma comment(lib, "dbghelp.lib")
@@ -33,13 +36,16 @@ void PrintStackTrace()
 
     free(symbol);
 }
+#endif
 
 namespace zm
 {
 void onAssertionFailed(const char* expression, const char* srcFile, unsigned int srcLine)
 {
     printf("Assertion failed: %s, file: %s, line: %u\n", expression, srcFile, srcLine);
+#if defined(_WIN32)
     PrintStackTrace();
+#endif
     std::abort();
 }
 } // namespace zm
